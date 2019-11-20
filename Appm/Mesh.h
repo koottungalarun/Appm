@@ -35,15 +35,19 @@ public:
 
 	void createIncidenceMaps();
 
+	const int getNumberOfVertices() const;
+
+protected:
+	std::vector<Vertex*> vertexList;
+	std::vector<Edge*> edgeList;
+	std::vector<Face*> faceList;
+	Eigen::Matrix3Xd vertexCoordinates;
+
 
 private:
 	std::string meshPrefix = "mesh";
 
-	std::vector<Vertex*> vertexList;
-	std::vector<Edge*> edgeList;
-	std::vector<Face*> faceList;
 
-	Eigen::Matrix3Xd vertexCoordinates;
 
 	bool isConnected(const Vertex * A, const Vertex * B) const;
 	bool isConnected(const std::vector<Edge*> & faceEdges);

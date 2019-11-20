@@ -17,6 +17,7 @@ public:
 
 	Vertex * getVertexA();
 	Vertex * getVertexB();
+	const Eigen::Vector3d getDirection() const;
 
 	bool isAdjacient(const Vertex * A, const Vertex * B) const;
 	bool isAdjacient(const Vertex * A, const Vertex * B);
@@ -30,6 +31,14 @@ public:
 
 	Vertex * getOppositeVertex(const Vertex * v);
 	bool hasVertex(const Vertex * v);
+	bool isBoundary() const;
+
+	const Eigen::Vector3d getHalfwayPosition() const;
+
+	Vertex * getCoincidentVertex(const Edge * other) const;
+	bool hasCoincidentVertex(const Edge * other) const;
+
+	int getIncidence(const Vertex * v) const;
 
 
 private:

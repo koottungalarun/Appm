@@ -4,16 +4,43 @@
 
 Mesh::Mesh()
 {
+	std::cout << "Call to Mesh()" << std::endl;
 }
 
 Mesh::Mesh(const std::string & meshPrefix)
 {
+	std::cout << "Call to Mesh(string)" << std::endl;
 	this->meshPrefix = meshPrefix;
 }
 
 
 Mesh::~Mesh()
 {
+	std::cout << "Call to ~Mesh()" << std::endl;
+	if (vertexList.size() > 0) {
+		for (auto v : vertexList) {
+			delete v;
+		}
+		vertexList.resize(0);
+	}
+	if (edgeList.size() > 0) {
+		for (auto e : edgeList) {
+			delete e;
+		}
+		edgeList.resize(0);
+	}
+	if (faceList.size() > 0) {
+		for (auto f : faceList) {
+			delete f;
+		}
+		faceList.resize(0);
+	}
+	//if (cellList.size() > 0) {
+	//	for (auto c : cellList) {
+	//		delete c;
+	//	}
+	//	cellList.resize(0);
+	//}
 }
 
 void Mesh::writeToFile()
@@ -122,6 +149,11 @@ void Mesh::createIncidenceMaps()
 	create_edge2vertex_map();
 	create_face2edge_map();
 	create_cell2face_map();
+}
+
+const int Mesh::getNumberOfVertices() const
+{
+	return vertexList.size();
 }
 
 bool Mesh::isConnected(const Vertex * A, const Vertex * B) const

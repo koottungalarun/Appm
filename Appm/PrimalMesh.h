@@ -12,8 +12,13 @@ public:
 	PrimalMesh(const std::string & meshPrefix);
 	~PrimalMesh();
 
-private:
 	void init();
+
+private:
+	void init_hexagon();
+	void refineMesh(const int nRefinements);
+	Eigen::Matrix3Xi refine_triangles();
+	Eigen::Matrix3Xi refine_triangles_specialCorners();
 
 };
 

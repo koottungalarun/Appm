@@ -59,3 +59,19 @@ Edge * Vertex::getAdjacientEdge(const Vertex * other)
 	}
 	return nullptr;
 }
+
+std::vector<Edge*> Vertex::getEdges()
+{
+	return adjacientEdges;
+}
+
+std::ostream & operator<<(std::ostream & os, const Vertex & obj)
+{
+	os << "Vertex idx: " << obj.getIndex() << "; ";
+	os << "edges = {";
+	for (auto e : obj.adjacientEdges) {
+		os << e->getIndex() << ",";
+	}
+	os << "}";
+	return os;
+}

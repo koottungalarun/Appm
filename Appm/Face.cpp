@@ -12,6 +12,19 @@ Face::Face(std::vector<Edge*> faceEdges)
 	for (auto edge : edgeList) {
 		edge->setAdjacient(this);
 	}
+
+	if (edgeList.size() == 3) {
+		center = getCircumCenter();
+	}
+	else {
+		// arithmetic mean of face vertices
+		center = Eigen::Vector3d::Zero();
+		std::vector<Vertex*> vertexList = getVertexList();
+		for (auto v : vertexList) {
+			center += v->getPosition();
+		}
+		center /= vertexList.size();
+	}
 }
 
 
@@ -86,6 +99,55 @@ bool Face::hasFaceEdges(const std::vector<Edge*> faceEdges) const
 const int Face::getOrientation(const Edge * edge)
 {
 	return 0;
+}
+
+bool Face::isBoundary() const
+{
+	for (auto edge : edgeList) {
+		if (edge->isBoundary()) {
+			return true;
+		}
+	}
+	return false;
+}
+
+const Eigen::Vector3d Face::getCenter() const
+{
+	return center;
+}
+
+const Eigen::Vector3d Face::getCircumCenter() const
+{
+	assert(edgeList.size() == 3);
+	const std::vector<Vertex*> vertexList = getVertexList();
+
+	// Definition of circumcenter: http://mathworld.wolfram.com/Circumcircle.html
+	double z = 0;
+	Eigen::MatrixXd D(3, 4);
+	for (int i = 0; i < 3; i++) {
+		const Eigen::Vector3d pos = vertexList[i]->getPosition();
+		D(i, 0) = pow(pos(0), 2) + pow(pos(1), 2);
+		D(i, 1) = pos(0);
+		D(i, 2) = pos(1);
+		D(i, 3) = 1.0;
+		z += pos(2);
+	}
+	z /= 3;
+
+	Eigen::Matrix3d Bx, By;
+	Bx.col(0) = D.col(0);
+	Bx.col(1) = D.col(2);
+	Bx.col(2) = D.col(3);
+
+	By.col(0) = D.col(0);
+	By.col(1) = D.col(1);
+	By.col(2) = D.col(3);
+	
+	const double a = D.rightCols(3).determinant();
+	assert(abs(a) > 0);
+	const double bx = Bx.determinant();
+	const double by = By.determinant();
+	return Eigen::Vector3d(bx / (2*a), by / (2*a), z);
 }
 
 std::ostream & operator<<(std::ostream & os, const Face & obj)

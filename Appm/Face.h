@@ -20,7 +20,16 @@ public:
 
 	const int getOrientation(const Edge * edge);
 
+	bool isBoundary() const;
+
+	const Eigen::Vector3d getCenter() const;
+	const int getArea() const;
+
 private:
 	std::vector<Edge*> edgeList;
+	Eigen::Vector3d center;
+	double area;
+
+	const Eigen::Vector3d getCircumCenter() const;
 };
 

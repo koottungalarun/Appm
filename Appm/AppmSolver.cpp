@@ -14,7 +14,8 @@ AppmSolver::~AppmSolver()
 void AppmSolver::run()
 {
 	primalMesh = PrimalMesh();
-	dualMesh = DualMesh(primalMesh);
+	primalMesh.init();
+	//dualMesh = DualMesh(primalMesh);
 
 	writeMesh();
 }
@@ -23,5 +24,5 @@ void AppmSolver::writeMesh()
 {
 	primalMesh.writeToFile();
 	primalMesh.writeXdmf();
-	dualMesh.writeToFile();
+	//dualMesh.writeToFile();
 }
