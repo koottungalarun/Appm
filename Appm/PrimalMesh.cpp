@@ -23,13 +23,16 @@ PrimalMesh::~PrimalMesh()
 void PrimalMesh::init()
 {
 	init_hexagon();
-	const int nRefinements = 2;
-	const int nOuterMeshLayers = 2;
+	const int nRefinements = 0;
+	const int nOuterMeshLayers = 0;
 	if (nOuterMeshLayers > 0) {
 		assert(nRefinements > 1);
 	}
 	refineMesh(nRefinements);
 	outerMeshExtrude(nOuterMeshLayers);
+
+	const int nLayers = 1;
+	extrudeMesh(Eigen::Vector3d(0, 0, 1), nLayers);
 }
 
 
@@ -262,7 +265,6 @@ void PrimalMesh::outerMeshExtrude()
 		for (auto edge : vertexEdges) {
 			if ((edge->getIndex() < nEdges) && edge->isBoundary()) {
 				boundaryEdgeList.push_back(edge);
-				std::cout << "idxE = " << edge->getIndex() << std::endl;
 			}
 		}
 		assert(boundaryEdgeList.size() == 2);
@@ -289,6 +291,60 @@ void PrimalMesh::outerMeshExtrude()
 		Vertex * C = getVertex(f2v_vertices(2, i));
 		addFace({ addEdge(A, B), addEdge(B, C), addEdge(C, A) });
 	}
+}
+
+void PrimalMesh::extrudeMesh(const Eigen::Vector3d & extrudeDirection, const int nLayers)
+{
+	assert(extrudeDirection.norm() > 0);
+	assert(extrudeDirection(2) > 0);
+
+	const int nVertices_2d = vertexList.size();
+	const int nEdges_2d = edgeList.size();
+	const int nFaces_2d = faceList.size();
+
+	// Create vertices
+	for (int layer = 1; layer <= nLayers; layer++) {
+		for (int i = 0; i < nVertices_2d; i++) {
+			Eigen::Vector3d pos = vertexList[i]->getPosition() + layer * ((1./nLayers) * extrudeDirection);
+			addVertex(pos);
+		}
+	}
+	
+	// Create faces 
+	for (int layer = 1; layer <= nLayers; layer++) {
+		// Create faces parallel to initial mesh
+		for (int j = 0; j < nFaces_2d; j++) {
+			const Face * face = faceList[j];
+			std::vector<Edge*> faceEdges = face->getEdgeList();
+			std::vector<Edge*> newFaceEdges;
+			for (int k = 0; k < faceEdges.size(); k++) {
+				Edge * refEdge = faceEdges[k];
+
+				Vertex * A = refEdge->getVertexA();
+				Vertex * B = refEdge->getVertexB();
+				Vertex * Anew = getVertex(A->getIndex() + layer * nVertices_2d);
+				Vertex * Bnew = getVertex(B->getIndex() + layer * nVertices_2d);
+				Edge * e = addEdge(Anew, Bnew);
+				newFaceEdges.push_back(e);
+			}
+			addFace(newFaceEdges);
+		}
+	}
+	for (int layer = 1; layer <= nLayers; layer++) {
+		// Create faces parallel to extrude direction
+		for (int i = 0; i < nEdges_2d; i++) {
+			Edge * refEdge = edgeList[i];
+			Vertex * Aref = refEdge->getVertexA();
+			Vertex * Bref = refEdge->getVertexB();
+
+			Vertex * A0 = getVertex(Aref->getIndex() + (layer - 1)* nVertices_2d);
+			Vertex * A1 = getVertex(Aref->getIndex() + layer * nVertices_2d);
+			Vertex * B0 = getVertex(Bref->getIndex() + (layer - 1) * nVertices_2d);
+			Vertex * B1 = getVertex(Bref->getIndex() + layer * nVertices_2d);
+			addFace({ addEdge(A0, B0), addEdge(B0, B1), addEdge(B1, A1), addEdge(A1, A0) });
+		}
+	}
+
 }
 
 Eigen::Matrix3Xi PrimalMesh::refine_triangles()
@@ -524,4 +580,17 @@ Eigen::Matrix3Xi PrimalMesh::refine_triangles_specialCorners()
 	f2v.conservativeResize(3, fidx);
 	assert((f2v.array() >= 0).all());
 	return f2v; 
+}
+
+void PrimalMesh::test_quadFace()
+{
+	Vertex * A = addVertex(Eigen::Vector3d(0, 0, 0));
+	Vertex * B = addVertex(Eigen::Vector3d(1, 0, 0));
+	Vertex * C = addVertex(Eigen::Vector3d(1, 1, 0));
+	Vertex * D = addVertex(Eigen::Vector3d(0, 1, 0));
+	Edge * edge0 = addEdge(A, B);
+	Edge * edge1 = addEdge(B, C);
+	Edge * edge2 = addEdge(C, D);
+	Edge * edge3 = addEdge(D, A);
+	addFace({ edge0, edge1, edge2, edge3 });
 }

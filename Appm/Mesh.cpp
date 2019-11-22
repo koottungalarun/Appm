@@ -73,12 +73,15 @@ void Mesh::writeToFile()
 	Eigen::sparseMatrixToFile(cell2faceMap, this->meshPrefix + "-c2f.dat");
 
 	const int nFaces = faceList.size();
-	Eigen::Matrix3Xi f2v(3, nFaces);
+	Eigen::MatrixXi f2v(3, nFaces);
 	for (int j = 0; j < nFaces; j++) {
 		const Face * face = faceList[j];
 		std::vector<Vertex*> faceVertices = face->getVertexList();
-		assert(faceVertices.size() == 3);
-		for (int k = 0; k < 3; k++) {
+		const int nFaceVertices = faceVertices.size();
+		if (nFaceVertices > f2v.rows()) {
+			f2v.conservativeResize(nFaceVertices, f2v.cols());
+		}
+		for (int k = 0; k < nFaceVertices; k++) {
 			f2v(k, j) = faceVertices[k]->getIndex();
 		}
 	}
@@ -277,23 +280,31 @@ void Mesh::writeXdmf_surface()
 	grid->addChild(topology);
 
 	const int nFaces = faceList.size();
-	Eigen::MatrixXd face2vertex(nFaces, 4);
+	std::vector<int> f2v;
 	for (int i = 0; i < nFaces; i++) {
-		Eigen::VectorXd temp(4);
-		temp(0) = 4;
-		Face * face = faceList[i];
+		const Face * face = faceList[i];
 		std::vector<Vertex*> faceVertices = face->getVertexList();
 		const int nFaceVertices = faceVertices.size();
-		assert(nFaceVertices == 3);
-		for (int j = 0; j < faceVertices.size(); j++) {
-			temp(j + 1) = faceVertices[j]->getIndex();
+
+		int faceType = 0;
+		switch (nFaceVertices) {
+		case 3: faceType = 4; break;
+		case 4: faceType = 5; break;
+		default: faceType = 3; break;
 		}
-		face2vertex.row(i) = temp;
+		f2v.push_back(faceType);
+		for (int j = 0; j < faceVertices.size(); j++) {
+			f2v.push_back(faceVertices[j]->getIndex());
+		}
 	}
-	body << face2vertex;
-	
+	for (int i = 0; i < f2v.size(); i++) {
+		body << f2v[i] << " ";
+		if ((i+1) % 10 == 0) {
+			body << std::endl;
+		}
+	}
 	ss = std::stringstream();
-	ss << "<DataItem Dimensions=\"" << face2vertex.array().size() << "\" DataType=\"Int\" Format=\"XML\">";
+	ss << "<DataItem Dimensions=\"" << f2v.size() << "\" DataType=\"Int\" Format=\"XML\">";
 
 	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
 	topology->addChild(dataItem);

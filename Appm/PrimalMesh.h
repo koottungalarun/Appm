@@ -19,8 +19,11 @@ private:
 	void refineMesh(const int nRefinements);
 	void outerMeshExtrude(const int nLayers);
 	void outerMeshExtrude();
+	void extrudeMesh(const Eigen::Vector3d & extrudeDirection, const int nLayers);
+
 	Eigen::Matrix3Xi refine_triangles();
 	Eigen::Matrix3Xi refine_triangles_specialCorners();
 
+	void test_quadFace();
 };
 
