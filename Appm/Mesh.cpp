@@ -61,13 +61,29 @@ void Mesh::writeToFile()
 		positions.col(i) = vertexList[i]->getPosition();
 	}
 	file = std::ofstream(this->meshPrefix + "-vertices.dat");
-	file << positions << std::endl;
+	file << positions.transpose() << std::endl;
+
+	file = std::ofstream(this->meshPrefix + "-coords.dat");
+	file << vertexCoordinates.transpose() << std::endl;
 
 	// Create incidence maps and write them to file
 	createIncidenceMaps();
 	Eigen::sparseMatrixToFile(edge2vertexMap, this->meshPrefix + "-e2v.dat");
 	Eigen::sparseMatrixToFile(face2edgeMap, this->meshPrefix + "-f2e.dat");
 	Eigen::sparseMatrixToFile(cell2faceMap, this->meshPrefix + "-c2f.dat");
+
+	const int nFaces = faceList.size();
+	Eigen::Matrix3Xi f2v(3, nFaces);
+	for (int j = 0; j < nFaces; j++) {
+		const Face * face = faceList[j];
+		std::vector<Vertex*> faceVertices = face->getVertexList();
+		assert(faceVertices.size() == 3);
+		for (int k = 0; k < 3; k++) {
+			f2v(k, j) = faceVertices[k]->getIndex();
+		}
+	}
+	file = std::ofstream(this->meshPrefix + "-f2v.dat");
+	file << f2v.transpose() << std::endl;
 
 
 

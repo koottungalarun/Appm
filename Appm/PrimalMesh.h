@@ -17,6 +17,8 @@ public:
 private:
 	void init_hexagon();
 	void refineMesh(const int nRefinements);
+	void outerMeshExtrude(const int nLayers);
+	void outerMeshExtrude();
 	Eigen::Matrix3Xi refine_triangles();
 	Eigen::Matrix3Xi refine_triangles_specialCorners();
 

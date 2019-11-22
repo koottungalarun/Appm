@@ -16,7 +16,9 @@ public:
 	~Edge();
 
 	Vertex * getVertexA();
+	const Vertex * getVertexA() const;
 	Vertex * getVertexB();
+	const Vertex * getVertexB() const;
 	const Eigen::Vector3d getDirection() const;
 
 	bool isAdjacient(const Vertex * A, const Vertex * B) const;
@@ -39,6 +41,7 @@ public:
 	bool hasCoincidentVertex(const Edge * other) const;
 
 	int getIncidence(const Vertex * v) const;
+	const std::vector<Face*> getFaceList() const;
 
 
 private:

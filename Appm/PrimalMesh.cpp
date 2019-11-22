@@ -24,7 +24,12 @@ void PrimalMesh::init()
 {
 	init_hexagon();
 	const int nRefinements = 2;
+	const int nOuterMeshLayers = 2;
+	if (nOuterMeshLayers > 0) {
+		assert(nRefinements > 1);
+	}
 	refineMesh(nRefinements);
+	outerMeshExtrude(nOuterMeshLayers);
 }
 
 
@@ -68,8 +73,8 @@ void PrimalMesh::refineMesh(const int nRefinements)
 		else {
 			f2v = refine_triangles_specialCorners();
 		}
-		std::cout << "f2v: " << std::endl;
-		std::cout << f2v.transpose() << std::endl;
+		//std::cout << "f2v: " << std::endl;
+		//std::cout << f2v.transpose() << std::endl;
 		assert((f2v.array() >= 0).all());
 
 		std::ofstream file;
@@ -82,7 +87,7 @@ void PrimalMesh::refineMesh(const int nRefinements)
 		file = std::ofstream(ss.str());
 		file << f2v.transpose() << std::endl;
 
-		if (level == 1) { break; }
+		//if (level == 1) { break; }
 
 		// clear mesh elements
 		for (auto v : vertexList) {
@@ -130,6 +135,160 @@ void PrimalMesh::refineMesh(const int nRefinements)
 		}
 	}
 
+}
+
+void PrimalMesh::outerMeshExtrude(const int nLayers)
+{
+	for (int layer = 0; layer < nLayers; layer++) {
+		outerMeshExtrude();
+	}
+}
+
+void PrimalMesh::outerMeshExtrude()
+{
+	const int nVertices = vertexList.size();
+	assert(nVertices == vertexCoordinates.cols());
+
+	const int nEdges = edgeList.size();
+
+	Eigen::SparseVector<int> boundaryVertices(nVertices);
+	Eigen::SparseVector<int> boundaryEdges(nEdges);
+	Eigen::SparseVector<int> boundaryEdgeVertexIdx(nEdges);
+
+	// get boundary vertices and boundary edges
+	for (int i = 0; i < nEdges; i++) {
+		Edge * edge = edgeList[i];
+		if (edge->isBoundary()) {
+			boundaryEdges.coeffRef(i) = 1;
+			const int idxA = edge->getVertexA()->getIndex();
+			const int idxB = edge->getVertexB()->getIndex();
+			boundaryVertices.coeffRef(idxA) = 1;
+			boundaryVertices.coeffRef(idxB) = 1;
+		}
+	}
+
+	// create outer vertices for each boundary edge
+	const int nnzE = boundaryEdges.nonZeros();
+	Eigen::Matrix3Xd boundaryEdgeVertexCoord(3, nnzE);
+	const int offset_E = vertexCoordinates.cols();
+	int idx = 0;
+	for (int i = 0; i < nnzE; i++) {
+		const int idxE = boundaryEdges.innerIndexPtr()[i];
+		const Edge * edge = edgeList[idxE];
+		assert(edge != nullptr);
+		//const std::vector<Face*> edgeFaces = edge->getFaceList();
+		//assert(edgeFaces.size() == 1);
+		//const Face * face = edgeFaces[0];
+		//assert(face != nullptr);
+		//const std::vector<Vertex*> faceVertices = face->getVertexList();
+		//assert(faceVertices.size() == 3);
+		//const Vertex * A = edge->getVertexA();
+		//const Vertex * B = edge->getVertexB();
+		//Vertex * C = nullptr;
+		//for (int j = 0; j < 3; j++) {
+		//	if (faceVertices[j] != A && faceVertices[j] != B) {
+		//		C = faceVertices[j];
+		//		break;
+		//	}
+		//}
+		//assert(C != nullptr);
+		//const Eigen::Vector3d posC = C->getPosition();
+		Eigen::Vector3d pos = edge->getHalfwayPosition();
+		pos *= 1.25;
+		boundaryEdgeVertexCoord.col(idx++) = pos;
+		boundaryEdgeVertexIdx.coeffRef(edge->getIndex()) = i + offset_E;
+
+		const Vertex * V = addVertex(pos);
+		assert(V->getIndex() == i + offset_E);
+	}
+	assert(idx == nnzE);
+	vertexCoordinates.conservativeResize(3, offset_E + nnzE);
+	vertexCoordinates.rightCols(nnzE) = boundaryEdgeVertexCoord;
+
+	// create outer vertices for each boundary vertex
+	const int nnzV = boundaryVertices.nonZeros();
+	Eigen::SparseVector<int> boundaryVertexVertexIdx(nVertices);
+	Eigen::Matrix3Xd boundaryVertexVertexCoord(3, nnzV);
+	const int offset_V = vertexCoordinates.cols();
+	idx = 0;
+	for (int i = 0; i < nnzV; i++) {
+		const int idxV = boundaryVertices.innerIndexPtr()[i];
+		boundaryVertexVertexIdx.coeffRef(idxV) = i + offset_V;
+		const Vertex * vertex = getVertex(idxV);
+		Eigen::Vector3d pos = vertex->getPosition();
+		pos *= 1.5;
+		boundaryVertexVertexCoord.col(idx++) = pos;
+
+		const Vertex * V = addVertex(pos);
+		assert(V->getIndex() == i + offset_V);
+	}
+	assert(idx == nnzV);
+	vertexCoordinates.conservativeResize(3, offset_V + nnzV);
+	vertexCoordinates.rightCols(nnzV) = boundaryVertexVertexCoord;
+
+	// create faces at boundary edge
+	Eigen::Matrix3Xi f2v_edges(3, 2*nnzE);
+	f2v_edges.array() = -1;
+	idx = 0;
+	for (int i = 0; i < nnzE; i++) {
+		const int idxE = boundaryEdges.innerIndexPtr()[i];
+		Edge * edge = edgeList[idxE];
+		const int idxC = boundaryEdgeVertexIdx.coeff(edge->getIndex());
+		Vertex * C1 = getVertex(idxC);
+		assert(C1 != nullptr);
+		Vertex * A = edge->getVertexA();
+		Vertex * B = edge->getVertexB();
+		f2v_edges.col(idx++) = Eigen::Vector3i(A->getIndex(), B->getIndex(), C1->getIndex());
+	
+		const int idxA1 = boundaryVertexVertexIdx.coeff(A->getIndex());
+		const int idxB1 = boundaryVertexVertexIdx.coeff(B->getIndex());
+		Vertex * A1 = getVertex(idxA1);
+		Vertex * B1 = getVertex(idxB1);
+		f2v_edges.col(idx++) = Eigen::Vector3i(A1->getIndex(), B1->getIndex(), C1->getIndex());
+	}
+	assert(f2v_edges.cols() == idx);
+
+	// create faces at boundary vertices
+	Eigen::Matrix3Xi f2v_vertices(3, 2*nnzV);
+	f2v_vertices.array() = -1;
+	idx = 0;
+	for (int i = 0; i < nnzV; i++) {
+		const int idxV = boundaryVertices.innerIndexPtr()[i];
+		Vertex * bV = getVertex(idxV);
+
+		// get adjacient boundary edges
+		std::vector<Edge*> vertexEdges = bV->getEdges();
+		std::vector<Edge*> boundaryEdgeList;
+		for (auto edge : vertexEdges) {
+			if ((edge->getIndex() < nEdges) && edge->isBoundary()) {
+				boundaryEdgeList.push_back(edge);
+				std::cout << "idxE = " << edge->getIndex() << std::endl;
+			}
+		}
+		assert(boundaryEdgeList.size() == 2);
+
+		Vertex * C1 = getVertex(boundaryEdgeVertexIdx.coeff(boundaryEdgeList[0]->getIndex()));
+		Vertex * D1 = getVertex(boundaryEdgeVertexIdx.coeff(boundaryEdgeList[1]->getIndex()));
+		Vertex * B1 = getVertex(boundaryVertexVertexIdx.coeff(bV->getIndex()));
+
+		f2v_vertices.col(idx++) = Eigen::Vector3i(bV->getIndex(), C1->getIndex(), D1->getIndex());
+		f2v_vertices.col(idx++) = Eigen::Vector3i(B1->getIndex(), C1->getIndex(), D1->getIndex());
+	}
+	assert(f2v_vertices.cols() == idx);
+
+	// add faces
+	for (int i = 0; i < f2v_edges.cols(); i++) {
+		Vertex * A = getVertex(f2v_edges(0, i));
+		Vertex * B = getVertex(f2v_edges(1, i));
+		Vertex * C = getVertex(f2v_edges(2, i));
+		addFace({ addEdge(A, B), addEdge(B, C), addEdge(C, A) });
+	}
+	for (int i = 0; i < f2v_vertices.cols(); i++) {
+		Vertex * A = getVertex(f2v_vertices(0, i));
+		Vertex * B = getVertex(f2v_vertices(1, i));
+		Vertex * C = getVertex(f2v_vertices(2, i));
+		addFace({ addEdge(A, B), addEdge(B, C), addEdge(C, A) });
+	}
 }
 
 Eigen::Matrix3Xi PrimalMesh::refine_triangles()
@@ -235,7 +394,10 @@ Eigen::Matrix3Xi PrimalMesh::refine_triangles_specialCorners()
 		const Eigen::Vector3d edgeVector = edge->getDirection();
 
 		if (specialEdges(i)) {
-			const Eigen::Vector3d pos = A + 0.5 * edgeVector;
+			Eigen::Vector3d pos = A + 0.5 * edgeVector;
+			if (edge->isBoundary()) {
+				pos /= pos.norm();
+			}
 			edgeInnerCoords.col(idx) = pos;
 			edge2innerVertices(0, i) = nVertices + idx++;
 		}

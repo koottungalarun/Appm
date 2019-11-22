@@ -32,9 +32,19 @@ Vertex * Edge::getVertexA()
 	return A;
 }
 
+const Vertex * Edge::getVertexA() const
+{
+	return A;
+}
+
 Vertex * Edge::getVertexB()
 {
 	assert(B != nullptr);
+	return B;
+}
+
+const Vertex * Edge::getVertexB() const
+{
 	return B;
 }
 
@@ -146,6 +156,11 @@ int Edge::getIncidence(const Vertex * v) const
 	assert(v != nullptr);
 	assert(v == A || v == B);
 	return (v == A) ? 1 : -1;
+}
+
+const std::vector<Face*> Edge::getFaceList() const
+{
+	return faceList;
 }
 
 std::ostream & operator<<(std::ostream & os, const Edge & obj)
