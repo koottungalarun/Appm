@@ -97,14 +97,14 @@ Face * Edge::getConnectedFace(const std::vector<Edge*>& faceEdges) const
 	return nullptr;
 }
 
-Vertex * Edge::getOppositeVertex(const Vertex * v)
+Vertex * Edge::getOppositeVertex(const Vertex * v) const
 {
 	assert(v != nullptr);
 	assert(hasVertex(v));
 	return (v == A) ? B : A;
 }
 
-bool Edge::hasVertex(const Vertex * v)
+bool Edge::hasVertex(const Vertex * v) const
 {
 	assert(v != nullptr);
 	return v == A || v == B;

@@ -120,6 +120,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="AppmSolver.h" />
+    <ClInclude Include="Cell.h" />
     <ClInclude Include="DualMesh.h" />
     <ClInclude Include="Edge.h" />
     <ClInclude Include="EigenAuxiliaries.h" />
@@ -128,11 +129,13 @@
     <ClInclude Include="Main.h" />
     <ClInclude Include="Mesh.h" />
     <ClInclude Include="PrimalMesh.h" />
+    <ClInclude Include="TriPrism.h" />
     <ClInclude Include="Vertex.h" />
     <ClInclude Include="XmlElement.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AppmSolver.cpp" />
+    <ClCompile Include="Cell.cpp" />
     <ClCompile Include="DualMesh.cpp" />
     <ClCompile Include="Edge.cpp" />
     <ClCompile Include="Face.cpp" />
@@ -140,6 +143,7 @@
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Mesh.cpp" />
     <ClCompile Include="PrimalMesh.cpp" />
+    <ClCompile Include="TriPrism.cpp" />
     <ClCompile Include="Vertex.cpp" />
     <ClCompile Include="XmlElement.cpp" />
   </ItemGroup>

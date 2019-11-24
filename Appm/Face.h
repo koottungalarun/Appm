@@ -2,19 +2,24 @@
 #include "GeometryItem.h"
 #include "Edge.h"
 class Edge;
+#include "Cell.h"
+class Cell;
 
 class Face :
 	public GeometryItem
 {
 public:
 	Face();
-	Face(std::vector<Edge*> faceEdges);
+	Face(const std::vector<Edge*> & faceEdges);
+	//Face(const std::vector<Vertex*> faceVertices);
 	~Face();
 
 	std::vector<Edge*> getEdgeList() const;
 	std::vector<Vertex*> getVertexList() const;
+	std::vector<Cell*> getCellList() const;
 
 	bool hasFaceEdges(const std::vector<Edge*> faceEdges) const;
+	
 
 	friend std::ostream & operator<<(std::ostream & os, const Face & obj);
 
@@ -25,10 +30,23 @@ public:
 	const Eigen::Vector3d getCenter() const;
 	const int getArea() const;
 
+	bool hasCommonCell(const Face * other) const;
+	Cell * getCommonCell(const Face * other) const;
+
+	void setAdjacient(Cell * cell);
+
+	const Eigen::Vector3d getNormal() const;
+
 private:
 	std::vector<Edge*> edgeList;
+	std::vector<Vertex*> vertexList;
+	std::vector<Cell*> cellList;
+
 	Eigen::Vector3d center;
-	double area;
+	Eigen::Vector3d faceNormal;
+	double area = 0;
+
+	void init();
 
 	const Eigen::Vector3d getCircumCenter() const;
 };

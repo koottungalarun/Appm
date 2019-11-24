@@ -31,8 +31,8 @@ public:
 
 	friend std::ostream & operator<<(std::ostream & os, const Edge & obj);
 
-	Vertex * getOppositeVertex(const Vertex * v);
-	bool hasVertex(const Vertex * v);
+	Vertex * getOppositeVertex(const Vertex * v) const;
+	bool hasVertex(const Vertex * v) const;
 	bool isBoundary() const;
 
 	const Eigen::Vector3d getHalfwayPosition() const;

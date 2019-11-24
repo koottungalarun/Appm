@@ -50,6 +50,8 @@ void Mesh::writeToFile()
 	std::cout << "Vertices: " << vertexList.size() << std::endl;
 	std::cout << "Edges:    " << edgeList.size() << std::endl;
 	std::cout << "Faces:    " << faceList.size() << std::endl;
+	std::cout << "Cells:    " << cellList.size() << std::endl;
+
 	std::ofstream file;
 
 	const int nVertices = vertexList.size();
@@ -141,8 +143,98 @@ Face * Mesh::addFace(const std::vector<Edge*> & faceEdges)
 	}
 	else {
 		Face * face = getFace(faceEdges);
+		return face;
 	}
 	return nullptr;
+}
+//Face * Mesh::addFace(const std::vector<Vertex*> & faceVertices)
+//{
+//	assert(faceVertices.size() >= 3);
+//	std::vector<Edge*> faceEdges;
+//	const int nVertices = faceVertices.size();
+//	for (int i = 0; i < nVertices; i++) {
+//		Vertex * A = faceVertices[i];
+//		Vertex * B = faceVertices[(i + 1) % nVertices];
+//		Edge * edge = getEdge(A, B);
+//		assert(edge != nullptr);
+//		faceEdges.push_back(edge);
+//	}
+//	if (!isConnected(faceEdges)) {
+//		Face * face = new Face(faceVertices);
+//		face->setIndex(faceList.size());
+//		faceList.push_back(face);
+//		return face;
+//	}
+//	else {
+//		Face * face = getFace(faceEdges);
+//		return face;
+//	}
+//	return nullptr;
+//}
+
+
+
+TriPrism * Mesh::addTriPrism(const std::vector<Face*>& sideFaces, Face * bottomFace, Face * topFace)
+{
+	for (auto f : sideFaces) {
+		assert(f != nullptr);
+	}
+	assert(bottomFace != nullptr);
+	assert(topFace != nullptr);
+
+	std::vector<Face*> cellFaces;
+	for (auto f : sideFaces) {
+		cellFaces.push_back(f);
+	}
+	cellFaces.push_back(bottomFace);
+	cellFaces.push_back(topFace);
+
+	if (!isConnected(cellFaces)) {
+		const int idx = cellList.size();
+		TriPrism * prism = new TriPrism(cellFaces);
+		prism->setIndex(idx);
+		cellList.push_back(prism);
+		return prism;
+	}
+	else {
+		Cell * cell = getCell(cellFaces);
+		assert(cell != nullptr);
+		return static_cast<TriPrism*>(cell);
+	}
+	return nullptr;
+}
+
+Cell * Mesh::addCell(const std::vector<Face*>& cellFaces)
+{
+	assert(cellFaces.size() >= 4);
+	assert(false);
+	if (!isConnected(cellFaces)) {
+		const int idx = cellList.size();
+		Cell * cell = new Cell(cellFaces);
+		cell->setIndex(idx);
+		cellList.push_back(cell);
+		return cell;
+	}
+	else {
+		Cell * cell = getCell(cellFaces);
+		assert(cell != nullptr);
+		return cell;
+	}
+	return nullptr;
+}
+
+Cell * Mesh::getCell(const std::vector<Face*>& cellFaces)
+{
+	assert(cellFaces.size() >= 2);
+	const Face * face0 = cellFaces[0];
+	const Face * face1 = cellFaces[1];
+	assert(face0 != face1);
+	assert(face0->hasCommonCell(face1));
+	Cell * cell = face0->getCommonCell(face1);
+	for (auto face : cellFaces) {
+		assert(cell->hasFace(face));
+	}
+	return cell;
 }
 
 Vertex * Mesh::getVertex(const int index)
@@ -153,6 +245,20 @@ Vertex * Mesh::getVertex(const int index)
 	assert(vertex != nullptr);
 	assert(vertex->getIndex() == index);
 	return vertex;
+}
+
+Edge * Mesh::getEdge(const int index)
+{
+	assert(index >= 0);
+	assert(index < edgeList.size());
+	return edgeList[index];
+}
+
+Face * Mesh::getFace(const int index)
+{
+	assert(index >= 0);
+	assert(index < faceList.size());
+	return faceList[index];
 }
 
 Face * Mesh::getFace(const std::vector<Edge*>& faceEdges)
@@ -180,7 +286,7 @@ bool Mesh::isConnected(const Vertex * A, const Vertex * B) const
 	return (A->isAdjacientTo(B) && B->isAdjacientTo(A));
 }
 
-bool Mesh::isConnected(const std::vector<Edge*> & faceEdges) 
+bool Mesh::isConnected(const std::vector<Edge*> & faceEdges) const
 {
 	bool isAlreadyDefinedFace = true;
 	for (auto edge : faceEdges) {
@@ -192,7 +298,16 @@ bool Mesh::isConnected(const std::vector<Edge*> & faceEdges)
 	return isAlreadyDefinedFace;
 }
 
-Edge * Mesh::getEdge(Vertex * A, Vertex * B) const
+bool Mesh::isConnected(const std::vector<Face*> & cellFaces) const
+{
+	bool isAlreadyDefined = true;
+	for (auto face : cellFaces) {
+		isAlreadyDefined &= face->hasCommonCell(face);
+	}
+	return isAlreadyDefined;
+}
+
+Edge * Mesh::getEdge(Vertex * A, Vertex * B)
 {
 	assert(A != nullptr);
 	assert(B != nullptr);
@@ -257,6 +372,23 @@ void Mesh::create_face2edge_map()
 
 void Mesh::create_cell2face_map()
 {
+	const int nFaces = faceList.size();
+	const int nCells = cellList.size();
+	this->cell2faceMap = Eigen::SparseMatrix<int>(nCells, nFaces);
+	typedef Eigen::Triplet<int> T;
+	std::vector<T> triplets;
+	for (int i = 0; i < nCells; i++) {
+		auto cell = cellList[i];
+		const int idxC = cell->getIndex();
+		const std::vector<Face*> cellFaces = cell->getFaceList();
+		for (auto face : cellFaces) {
+			auto idxF = face->getIndex();
+			const int orientation = cell->getOrientation(face);
+			triplets.push_back(T(idxC, idxF, orientation));
+		}
+	}
+	cell2faceMap.setFromTriplets(triplets.begin(), triplets.end());
+	cell2faceMap.makeCompressed();
 }
 
 void Mesh::writeXdmf_surface()
@@ -327,4 +459,66 @@ void Mesh::writeXdmf_surface()
 
 void Mesh::writeXdmf_volume()
 {
+	std::stringstream ss;
+	std::stringstream body;
+	XmlElement * dataItem;
+
+	std::string filename = "appm-" + this->meshPrefix + "-volume.xdmf";
+	std::cout << "Write XDMF file: " << filename << std::endl;
+
+	XmlElement root("<Xdmf Version=\"3.0\" xmlns:xi=\"[http://www.w3.org/2001/XInclude]\">", "</Xdmf>");
+	XmlElement * domain = new XmlElement("<Domain>", "</Domain>");
+	root.addChild(domain);
+
+	XmlElement * grid = new XmlElement("<Grid Name=\"Appm cells\">", "</Grid>");
+	domain->addChild(grid);
+
+	ss << "<Topology TopologyType=\"Mixed\">";
+	XmlElement * topology = new XmlElement(ss.str(), "</Topology>");
+	grid->addChild(topology);
+	
+	std::vector<int> data;
+	const int nCells = cellList.size();
+	for (int i = 0; i < nCells; i++) {
+		const Cell * cell = cellList[i];
+		data.push_back(16); // polygon type
+		const std::vector<Face*> cellFaces = cell->getFaceList();
+		const int nCellFaces = cellFaces.size();
+		data.push_back(nCellFaces); // number of faces
+		for (int j = 0; j < nCellFaces; j++) {
+			const Face * face = cellFaces[j];
+			const std::vector<Vertex*> faceVertices = face->getVertexList();
+			const int nFaceVertices = faceVertices.size();
+			data.push_back(nFaceVertices); // number of vertices
+			for (auto vertex : faceVertices) {
+				data.push_back(vertex->getIndex());
+			}
+		}
+	}
+	for (int i = 0; i < data.size(); i++) {
+		body << data[i] << " ";
+		if ((i + 1) % 10 == 0) {
+			body << std::endl;
+		}
+	}
+	ss = std::stringstream();
+	ss << "<DataItem Dimensions=\"" << data.size() << "\" DataType=\"Int\" Format=\"XML\">";
+
+	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
+	topology->addChild(dataItem);
+
+	XmlElement * geometry = new XmlElement("<Geometry GeometryType=\"XYZ\">", "</Geometry>");
+	grid->addChild(geometry);
+	ss = std::stringstream();
+	ss << "<DataItem Dimensions=\"" << vertexCoordinates.cols() << " " << 3 << "\" DataType=\"Float\" Precision=\"8\" Format=\"XML\">";
+	body = std::stringstream();
+	body << vertexCoordinates.transpose();
+	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
+	geometry->addChild(dataItem);
+
+
+	std::ofstream file(filename);
+	file << "<?xml version=\"1.0\" ?>" << std::endl;
+	file << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << std::endl;
+	file << root << std::endl;
 }

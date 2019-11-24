@@ -6,12 +6,54 @@ Face::Face()
 {
 }
 
-Face::Face(std::vector<Edge*> faceEdges)
+//Face::Face(const std::vector<Vertex*> faceVertices)
+//{
+//	const int nVertices = faceVertices.size();
+//	assert(nVertices >= 3);
+//	this->vertexList = faceVertices;
+//	edgeList = std::vector<Edge*>();
+//	for (int i = 0; i < nVertices; i++) {
+//		Vertex * A = faceVertices[i];
+//		assert(A != nullptr);
+//		Vertex * B = faceVertices[(i + 1) % nVertices];
+//		assert(B != nullptr);
+//		Edge * edge = A->getAdjacientEdge(B);
+//		assert(edge != nullptr);
+//		edgeList.push_back(edge);
+//	}
+//
+//	init();
+//}
+
+Face::Face(const std::vector<Edge*> & faceEdges)
 {
+	for (auto edge : faceEdges) {
+		assert(edge != nullptr);
+	}
 	this->edgeList = faceEdges;
 	for (auto edge : edgeList) {
 		edge->setAdjacient(this);
 	}
+
+	// Determine face vertices:
+	//     e0       e1      e2 
+	// A ------ B ----- C ------ ...
+	vertexList = std::vector<Vertex*>();
+	Vertex * V = edgeList[0]->getVertexA();
+	for (auto edge : edgeList) {
+		vertexList.push_back(V);
+		V = edge->getOppositeVertex(V);
+	}
+	assert(vertexList.size() == edgeList.size());
+	// Check if vertices are unique
+	std::vector<int> vertexIdx;
+	std::vector<int>::iterator it;
+	for (auto v : vertexList) {
+		vertexIdx.push_back(v->getIndex());
+	}
+	std::sort(vertexIdx.begin(), vertexIdx.end());
+	it = std::unique(vertexIdx.begin(), vertexIdx.end());
+	assert(it == vertexIdx.end());
 
 	if (edgeList.size() == 3) {
 		center = getCircumCenter();
@@ -25,6 +67,14 @@ Face::Face(std::vector<Edge*> faceEdges)
 		}
 		center /= vertexList.size();
 	}
+
+	// Determine face normal from face center and vector of first edge
+	const Eigen::Vector3d posA = edgeList[0]->getVertexA()->getPosition();
+	const Eigen::Vector3d posB = edgeList[0]->getVertexB()->getPosition();
+	const Eigen::Vector3d a = (posA - center).normalized();
+	const Eigen::Vector3d b = (posB - center).normalized();
+	faceNormal = (a.cross(b)).normalized();
+	assert(faceNormal.norm() > 0);	
 }
 
 
@@ -39,29 +89,36 @@ std::vector<Edge*> Face::getEdgeList() const
 
 std::vector<Vertex*> Face::getVertexList() const
 {
-	std::vector<Vertex*> faceVertices;
+	assert(vertexList.size() > 0);
+	return vertexList;
+	//std::vector<Vertex*> faceVertices;
 
-	Edge * e = edgeList[0];
-	Vertex * v = e->getVertexB();
+	//Edge * e = edgeList[0];
+	//Vertex * v = e->getVertexB();
 
-	const int nEdges = edgeList.size();
-	for (int i = 0; i < nEdges; i++) {
-		faceVertices.push_back(v);
-		Vertex * otherVertex = e->getOppositeVertex(v);
-		assert(otherVertex != nullptr);
-		Edge * otherEdge = nullptr;
-		for (auto edge : edgeList) {
-			if (edge != e && edge->hasVertex(otherVertex)) {
-				otherEdge = edge;
-			}
-		}
-		assert(otherEdge != nullptr);
-		e = otherEdge;
-		v = otherVertex;
-	}
+	//const int nEdges = edgeList.size();
+	//for (int i = 0; i < nEdges; i++) {
+	//	faceVertices.push_back(v);
+	//	Vertex * otherVertex = e->getOppositeVertex(v);
+	//	assert(otherVertex != nullptr);
+	//	Edge * otherEdge = nullptr;
+	//	for (auto edge : edgeList) {
+	//		if (edge != e && edge->hasVertex(otherVertex)) {
+	//			otherEdge = edge;
+	//		}
+	//	}
+	//	assert(otherEdge != nullptr);
+	//	e = otherEdge;
+	//	v = otherVertex;
+	//}
 
-	assert(faceVertices.size() == edgeList.size());
-	return faceVertices;
+	//assert(faceVertices.size() == edgeList.size());
+	//return faceVertices;
+}
+
+std::vector<Cell*> Face::getCellList() const
+{
+	return cellList;
 }
 
 bool Face::hasFaceEdges(const std::vector<Edge*> faceEdges) const
@@ -98,7 +155,24 @@ bool Face::hasFaceEdges(const std::vector<Edge*> faceEdges) const
 
 const int Face::getOrientation(const Edge * edge)
 {
-	return 0;
+	assert(edge != nullptr);
+	// check if edge is in edgeList of this face
+	bool isMember = false;
+	for (auto e : edgeList) {
+		isMember |= (edge == e);
+	}
+	assert(isMember);
+
+	// check if (a x b) is parallel or anti-parallel with face normal
+	const Eigen::Vector3d posA = edge->getVertexA()->getPosition();
+	const Eigen::Vector3d posB = edge->getVertexB()->getPosition();
+	const Eigen::Vector3d a = (posA - center).normalized();
+	const Eigen::Vector3d b = (posB - center).normalized();
+	const Eigen::Vector3d n = (a.cross(b)).normalized();
+	const double dotProduct = faceNormal.dot(n);
+	assert(dotProduct != 0);	
+	const int orientation = (dotProduct > 0) ? 1 : -1;
+	return orientation;
 }
 
 bool Face::isBoundary() const
@@ -114,6 +188,81 @@ bool Face::isBoundary() const
 const Eigen::Vector3d Face::getCenter() const
 {
 	return center;
+}
+
+const int Face::getArea() const
+{
+	return area;
+}
+
+bool Face::hasCommonCell(const Face * other) const
+{
+	std::vector<int> thisCellIdx;
+	for (auto cell : cellList) {
+		thisCellIdx.push_back(cell->getIndex());
+	}
+	std::vector<int> otherCellIdx;
+	for (auto cell : other->cellList) {
+		otherCellIdx.push_back(cell->getIndex());
+	}
+	std::vector<int> result(thisCellIdx.size());
+	std::vector<int>::iterator it;
+	it = std::set_intersection(thisCellIdx.begin(), thisCellIdx.end(), otherCellIdx.begin(), otherCellIdx.end(), result.begin());
+
+	return std::distance(result.begin(), it) > 0;
+}
+
+Cell * Face::getCommonCell(const Face * other) const
+{
+	assert(hasCommonCell(other));
+	std::vector<int> thisCellIdx;
+	for (auto cell : cellList) {
+		thisCellIdx.push_back(cell->getIndex());
+	}
+	std::vector<int> otherCellIdx;
+	for (auto cell : other->cellList) {
+		otherCellIdx.push_back(cell->getIndex());
+	}
+	std::vector<int> result(thisCellIdx.size());
+	std::vector<int>::iterator it;
+	it = std::set_intersection(thisCellIdx.begin(), thisCellIdx.end(), otherCellIdx.begin(), otherCellIdx.end(), result.begin());
+	const int dist = std::distance(result.begin(), it);
+	assert(dist > 0);
+	assert(dist == 1);
+	const int cellIdx = result[0];
+	Cell * cell = nullptr;
+	for (auto c : cellList) {
+		if (c->getIndex() == cellIdx) {
+			return c;
+		}
+	}
+	assert(cell != nullptr);
+	return cell;
+}
+
+void Face::setAdjacient(Cell * cell)
+{
+	assert(cell != nullptr);
+	this->cellList.push_back(cell);
+}
+
+const Eigen::Vector3d Face::getNormal() const
+{
+	return faceNormal;
+}
+
+void Face::init()
+{
+	if (vertexList.size() == 3) {
+		center = getCircumCenter();
+	}
+	else {
+		center = Eigen::Vector3d(0, 0, 0);
+		for (auto v : vertexList) {
+			center += v->getPosition();
+		}
+		center /= vertexList.size();
+	}
 }
 
 const Eigen::Vector3d Face::getCircumCenter() const
