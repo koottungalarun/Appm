@@ -9,7 +9,9 @@ class DualMesh :
 public:
 	DualMesh();
 	DualMesh(const std::string & meshPrefix);
-	DualMesh(const PrimalMesh & primal);
 	~DualMesh();
+
+	void init_dualMesh(const PrimalMesh & primal);
+private:
 };
 

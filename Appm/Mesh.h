@@ -41,10 +41,16 @@ public:
 	Edge * getEdge(const int index);
 	Face * getFace(const int index);
 	Face * getFace(const std::vector<Edge*> & faceEdges);
+	Cell * getCell(const int index) const;
 
 	void createIncidenceMaps();
 
 	const int getNumberOfVertices() const;
+
+	const std::vector<Cell*> getCells() const;
+	const std::vector<Face*> getFaces() const;
+
+	void check() const;
 
 protected:
 	std::vector<Vertex*> vertexList;

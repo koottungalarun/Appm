@@ -4,19 +4,19 @@
 
 Mesh::Mesh()
 {
-	std::cout << "Call to Mesh()" << std::endl;
+	//std::cout << "Call to Mesh()" << std::endl;
 }
 
 Mesh::Mesh(const std::string & meshPrefix)
 {
-	std::cout << "Call to Mesh(string)" << std::endl;
+	//std::cout << "Call to Mesh(string)" << std::endl;
 	this->meshPrefix = meshPrefix;
 }
 
 
 Mesh::~Mesh()
 {
-	std::cout << "Call to ~Mesh()" << std::endl;
+	//std::cout << "Call to ~Mesh()" << std::endl;
 	if (vertexList.size() > 0) {
 		for (auto v : vertexList) {
 			delete v;
@@ -90,7 +90,34 @@ void Mesh::writeToFile()
 	file = std::ofstream(this->meshPrefix + "-f2v.dat");
 	file << f2v.transpose() << std::endl;
 
+	file = std::ofstream(this->meshPrefix + "-faceCenter.dat");
+	Eigen::Matrix3Xd fc(3, nFaces);
+	for (int i = 0; i < nFaces; i++) {
+		fc.col(i) = getFace(i)->getCenter();
+	}
+	file << fc.transpose() << std::endl;
 
+	file = std::ofstream(this->meshPrefix + "-faceNormal.dat");
+	Eigen::Matrix3Xd fn(3, nFaces);
+	for (int i = 0; i < nFaces; i++) {
+		fn.col(i) = getFace(i)->getNormal();
+	}
+	file << fn.transpose() << std::endl;
+
+	file = std::ofstream(this->meshPrefix + "-faceBoundary.dat");
+	Eigen::VectorXi faceBoundary(nFaces);
+	for (int i = 0; i < nFaces; i++) {
+		faceBoundary(i) = getFace(i)->isBoundary();
+	}
+	file << faceBoundary << std::endl;
+
+	file = std::ofstream(this->meshPrefix + "-cellCenter.dat");
+	const int nCells = cellList.size();
+	Eigen::Matrix3Xd cellCenters(3, nCells);
+	for (int i = 0; i < nCells; i++) {
+		cellCenters.col(i) = getCell(i)->getCenter();
+	}
+	file << cellCenters.transpose() << std::endl;
 
 	//for (auto v : vertexList) {
 	//	std::cout << v->getIndex() << ": " << v->getPosition().transpose() << std::endl;
@@ -268,6 +295,13 @@ Face * Mesh::getFace(const std::vector<Edge*>& faceEdges)
 	return faceEdges[0]->getConnectedFace(faceEdges);
 }
 
+Cell * Mesh::getCell(const int index) const
+{
+	assert(index >= 0);
+	assert(index < cellList.size());
+	return cellList[index];
+}
+
 void Mesh::createIncidenceMaps()
 {
 	create_vertexCoordinates();
@@ -279,6 +313,64 @@ void Mesh::createIncidenceMaps()
 const int Mesh::getNumberOfVertices() const
 {
 	return vertexList.size();
+}
+
+const std::vector<Cell*> Mesh::getCells() const
+{
+	return cellList;
+}
+
+const std::vector<Face*> Mesh::getFaces() const
+{
+	return faceList;
+}
+
+void Mesh::check() const
+{
+	//for (auto cell : cellList) {
+	//	std::cout << "Cell idx " << cell->getIndex() << std::endl;
+	//	const std::vector<Face*> cellFaces = cell->getFaceList();
+	//	for (auto face : cellFaces) {
+	//		std::cout << "Face " << face->getIndex() << "; ";
+	//		std::cout << "orientation = " << cell->getOrientation(face);
+	//		std::cout << std::endl;
+	//	}
+	//}
+
+	if (cellList.size() > 0) {
+		// face is either a boundary face, or it has two adjacient cells; orientation +/-1.
+		for (auto face : faceList) {
+			std::vector<Cell*> faceCells = face->getCellList();
+			if (face->isBoundary()) {
+				assert(faceCells.size() == 1);
+			}
+			else {
+				assert(faceCells.size() == 2);
+				const Cell * cell0 = faceCells[0];
+				const Cell * cell1 = faceCells[1];
+				std::vector<int> orientations = { cell0->getOrientation(face), cell1->getOrientation(face) };
+				int sumOrientations = 0;
+				for (auto value : orientations) {
+					sumOrientations += value;
+				}
+				if (sumOrientations != 0) {
+					std::cout << "Face idx " << face->getIndex() << " has wrong set of orientation: "  << orientations[0] << ", " << orientations[1] << std::endl;
+					std::cout << "face normal:  " << face->getNormal().transpose() << std::endl;
+					std::cout << "face center:  " << face->getCenter().transpose() << std::endl;
+					std::cout << "cell0 center: " << cell0->getCenter().transpose() << std::endl;
+					std::cout << "cell1 center: " << cell1->getCenter().transpose() << std::endl;
+					std::cout << "(c0 - fc):    " << (cell0->getCenter() - face->getCenter()).transpose() << std::endl;
+					std::cout << "(c1 - fc):    " << (cell1->getCenter() - face->getCenter()).transpose() << std::endl;
+					std::cout << "(c0 - fc).fn:    " << (cell0->getCenter() - face->getCenter()).dot(face->getNormal()) << std::endl;
+					std::cout << "(c1 - fc).fn:    " << (cell1->getCenter() - face->getCenter()).dot(face->getNormal()) << std::endl;
+
+				}
+
+				assert(orientations[0] + orientations[1] == 0);
+			}
+		}
+	}
+
 }
 
 bool Mesh::isConnected(const Vertex * A, const Vertex * B) const
@@ -389,6 +481,24 @@ void Mesh::create_cell2face_map()
 	}
 	cell2faceMap.setFromTriplets(triplets.begin(), triplets.end());
 	cell2faceMap.makeCompressed();
+
+	// Check cell-to-face map
+	// Each face has either one adjacient cell (boundary face), or 
+	// it has two adjacient cells (non-boundary face = inner face). 
+	// Moreover, because of positive/negative orientations, 
+	// a colwise sum of the matrix elements yields +/-1 (boundary) or 0 (non-boundary).
+	Eigen::VectorXi colwiseSum = cell2faceMap.transpose() * Eigen::VectorXi::Ones(nCells);
+	Eigen::VectorXi isBoundaryFace(nFaces);
+	for (int i = 0; i < nFaces; i++) {
+		isBoundaryFace(i) = getFace(i)->isBoundary();
+	}
+	assert(colwiseSum.size() == nFaces);
+	Eigen::VectorXi notBoundaryFace = isBoundaryFace.array() - 1;
+	assert((colwiseSum.cwiseProduct(notBoundaryFace).array() == 0).all());
+	Eigen::VectorXi temp = colwiseSum.cwiseAbs().cwiseProduct(isBoundaryFace);
+	assert((temp.array() >= 0).all());
+	assert((temp.array() <= 1).all());
+	assert(temp.sum() == isBoundaryFace.sum());
 }
 
 void Mesh::writeXdmf_surface()

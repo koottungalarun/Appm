@@ -18,9 +18,11 @@ public:
 	bool hasFace(const Face * face) const;
 	const int getOrientation(const Face * face) const;
 
+	const Eigen::Vector3d & getCenter() const;
+
+private:
 	double volume = 0;
 	Eigen::Vector3d center;
-private:
 	std::vector<Face*> faceList;
 };
 

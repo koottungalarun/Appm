@@ -5,19 +5,19 @@
 PrimalMesh::PrimalMesh() :
 	PrimalMesh("primal")
 {
-	std::cout << "Call to PrimalMesh()" << std::endl;
+	//std::cout << "Call to PrimalMesh()" << std::endl;
 }
 
 PrimalMesh::PrimalMesh(const std::string & meshPrefix)
 	: Mesh(meshPrefix)
 {
-	std::cout << "Call to PrimalMesh(string)" << std::endl;
+	//std::cout << "Call to PrimalMesh(string)" << std::endl;
 }
 
 
 PrimalMesh::~PrimalMesh()
 {
-	std::cout << "Call to ~PrimalMesh()" << std::endl;
+	//std::cout << "Call to ~PrimalMesh()" << std::endl;
 }
 
 void PrimalMesh::init()
@@ -31,7 +31,7 @@ void PrimalMesh::init()
 	refineMesh(nRefinements);
 	outerMeshExtrude(nOuterMeshLayers);
 
-	const int nLayers = 5;
+	const int nLayers = 1;
 	extrudeMesh(nLayers);
 }
 
@@ -129,6 +129,11 @@ void PrimalMesh::refineMesh(const int nRefinements)
 				Edge * edge = addEdge(A, B);
 				faceEdges.push_back(edge);
 			}
+			//std::cout << "face idx: " << i << std::endl;
+			//std::cout << "Edges: ";
+			//for (auto edge : faceEdges) {
+			//	std::cout << *edge << std::endl;
+			//}
 			Face * face = addFace(faceEdges);
 			//Vertex * A = getVertex(triangleIdx(0));
 			//Vertex * B = getVertex(triangleIdx(1));
@@ -302,6 +307,9 @@ void PrimalMesh::outerMeshExtrude()
 
 void PrimalMesh::extrudeMesh(const int nLayers)
 {
+	if (nLayers <= 0) {
+		return;
+	}
 	std::cout << "Extrude mesh with " << nLayers << " layers" << std::endl;
 	const Eigen::Vector3d z_unit(0, 0, 1);
 	const int nVertices_2d = vertexList.size();
@@ -360,7 +368,12 @@ void PrimalMesh::extrudeMesh(const int nLayers)
 				Face * sideFace = addFace({bottomEdge, sideEdgeB, topEdge, sideEdgeA});
 				sideFaces.push_back(sideFace);
 			}
+			//std::cout << "bottom edges: " << std::endl;
+			//for (auto edge : bottomEdges) {
+			//	std::cout << *edge << std::endl;
+			//}
 			Face * bottomFace = addFace(bottomEdges);
+			//std::cout << "bottom face center: " << bottomFace->getCenter().transpose() << std::endl;
 			Face * topFace = addFace(topEdges);
 
 			assert(bottomFace != nullptr);

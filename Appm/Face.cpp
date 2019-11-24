@@ -39,7 +39,9 @@ Face::Face(const std::vector<Edge*> & faceEdges)
 	//     e0       e1      e2 
 	// A ------ B ----- C ------ ...
 	vertexList = std::vector<Vertex*>();
-	Vertex * V = edgeList[0]->getVertexA();
+	// TODO: Choose initial vector appropriately
+	//Vertex * V = edgeList[0]->getVertexA();
+	Vertex * V = edgeList.front()->getCoincidentVertex(edgeList.back());
 	for (auto edge : edgeList) {
 		vertexList.push_back(V);
 		V = edge->getOppositeVertex(V);
@@ -66,6 +68,19 @@ Face::Face(const std::vector<Edge*> & faceEdges)
 			center += v->getPosition();
 		}
 		center /= vertexList.size();
+
+		//std::cout << "face vertices and face center";
+		//for (auto vertex : vertexList) {
+		//	std::cout << vertex->getIndex() << ",";
+		//}
+		//std::cout << std::endl;
+		//Eigen::Matrix3Xd M(3, vertexList.size() + 1);
+		//for (int i = 0; i < vertexList.size(); i++) {
+		//	M.col(i) = vertexList[i]->getPosition();
+		//}
+		//M.col(vertexList.size()) = center;
+		//std::cout << M << std::endl;
+		
 	}
 
 	// Determine face normal from face center and vector of first edge
@@ -177,12 +192,17 @@ const int Face::getOrientation(const Edge * edge)
 
 bool Face::isBoundary() const
 {
-	for (auto edge : edgeList) {
-		if (edge->isBoundary()) {
-			return true;
-		}
+	if (cellList.size() > 0) {
+		return cellList.size() == 1;
 	}
-	return false;
+	else {
+		for (auto edge : edgeList) {
+			if (edge->isBoundary()) {
+				return true;
+			}
+		}
+		return false;
+	}
 }
 
 const Eigen::Vector3d Face::getCenter() const
@@ -294,9 +314,9 @@ const Eigen::Vector3d Face::getCircumCenter() const
 	
 	const double a = D.rightCols(3).determinant();
 	assert(abs(a) > 0);
-	const double bx = Bx.determinant();
-	const double by = By.determinant();
-	return Eigen::Vector3d(bx / (2*a), by / (2*a), z);
+	const double bx = -1 * Bx.determinant();
+	const double by =      By.determinant();
+	return Eigen::Vector3d(-bx / (2*a), -by / (2*a), z);
 }
 
 std::ostream & operator<<(std::ostream & os, const Face & obj)
