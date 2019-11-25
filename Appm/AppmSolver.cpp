@@ -18,13 +18,14 @@ void AppmSolver::run()
 	primalMesh.init();
 	primalMesh.writeToFile();
 	primalMesh.writeXdmf();
+
 	primalMesh.check();
 
 	std::cout << "Init dual mesh" << std::endl;
 	dualMesh = DualMesh();
 	dualMesh.init_dualMesh(primalMesh);
 	dualMesh.writeToFile();
-
+	dualMesh.writeXdmf();
 
 //	writeMesh();
 }

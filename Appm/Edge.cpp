@@ -112,7 +112,17 @@ bool Edge::hasVertex(const Vertex * v) const
 
 bool Edge::isBoundary() const
 {
-	return faceList.size() == 1;
+	if (faceList.size() <= 1) {
+		return true;
+	}
+	else {
+		for (auto face : faceList) {
+			if (face->isBoundary()) {
+				return true;
+			}
+		}
+		return false;
+	}
 }
 
 const Eigen::Vector3d Edge::getHalfwayPosition() const

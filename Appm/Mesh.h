@@ -37,15 +37,17 @@ public:
 	Cell * addCell(const std::vector<Face*> & cellFaces);
 	Cell * getCell(const std::vector<Face*> & cellFaces);
 
-	Vertex * getVertex(const int index);
-	Edge * getEdge(const int index);
-	Face * getFace(const int index);
+	Vertex * getVertex(const int index) const;
+	Edge * getEdge(const int index) const;
+	Face * getFace(const int index) const;
 	Face * getFace(const std::vector<Edge*> & faceEdges);
 	Cell * getCell(const int index) const;
 
 	void createIncidenceMaps();
 
 	const int getNumberOfVertices() const;
+	const int getNumberOfEdges() const;
+	const int getNumberOfFaces() const;
 
 	const std::vector<Cell*> getCells() const;
 	const std::vector<Face*> getFaces() const;
@@ -58,6 +60,8 @@ protected:
 	std::vector<Face*> faceList;
 	std::vector<Cell*> cellList;
 	Eigen::Matrix3Xd vertexCoordinates;
+
+	std::vector<Edge*> makeContinuousLoop(std::vector<Edge*> edges);
 
 
 private:

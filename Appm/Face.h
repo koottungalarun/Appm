@@ -26,6 +26,7 @@ public:
 	const int getOrientation(const Edge * edge);
 
 	bool isBoundary() const;
+	bool hasBoundaryEdges() const;
 
 	const Eigen::Vector3d getCenter() const;
 	const int getArea() const;

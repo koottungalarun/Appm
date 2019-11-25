@@ -28,10 +28,12 @@ void PrimalMesh::init()
 	if (nOuterMeshLayers > 0) {
 		assert(nRefinements > 1);
 	}
+	assert(getNumberOfVertices() > 0);
 	refineMesh(nRefinements);
-	outerMeshExtrude(nOuterMeshLayers);
 
-	const int nLayers = 1;
+	outerMeshExtrude(nOuterMeshLayers);
+	
+	const int nLayers = 2;
 	extrudeMesh(nLayers);
 }
 
@@ -58,6 +60,18 @@ void PrimalMesh::init_hexagon()
 		Face * face = addFace(faceEdges);
 		//Face * face = addFace({origin, A, B});
 	}
+}
+
+void PrimalMesh::init_triangle()
+{
+	assert(false);
+	//Vertex * origin = addVertex(Eigen::Vector3d(0, 0, 0));
+	//Vertex * A = addVertex(Eigen::Vector3d(1, 0, 0));
+	//Vertex * B = addVertex(Eigen::Vector3d(0.5, 1, 0));
+	//Edge * edge0 = addEdge(origin, A);
+	//Edge * edge1 = addEdge(A, B);
+	//Edge * edge2 = addEdge(origin, B);
+	//addFace({ edge0, edge1, edge2 });
 }
 
 void PrimalMesh::refineMesh(const int nRefinements)
@@ -532,19 +546,21 @@ Eigen::Matrix3Xi PrimalMesh::refine_triangles_specialCorners()
 	for (int i = 0; i < nFaces; i++) {
 		const Face * face = faceList[i];
 		const std::vector<Edge*> faceEdges = face->getEdgeList();
-		if (face->isBoundary()) {
+		if (face->hasBoundaryEdges()) {
 			// ... boundary face ...
 			// find local index of not-special edge
-			int idx = 0;
-			for (idx = 0; idx < 3; idx++) {
+			int idx_notSpecialEdge = -1;
+			for (int idx = 0; idx < 3; idx++) {
 				if (specialEdges(faceEdges[idx]->getIndex()) == 0) {
+					idx_notSpecialEdge = idx;
 					break;
 				}
 			}
+			assert(idx_notSpecialEdge >= 0);
 			// edge0 is not a special edge, but edge1 and edge2 are a special edge
-			const Edge * edge0 = faceEdges[idx];
-			const Edge * edge1 = faceEdges[(idx + 1) % 3];
-			const Edge * edge2 = faceEdges[(idx + 2) % 3];
+			const Edge * edge0 = faceEdges[idx_notSpecialEdge];
+			const Edge * edge1 = faceEdges[(idx_notSpecialEdge + 1) % 3];
+			const Edge * edge2 = faceEdges[(idx_notSpecialEdge + 2) % 3];
 			assert(specialEdges(edge0->getIndex()) == 0);
 			assert(specialEdges(edge1->getIndex()) == 1);
 			assert(specialEdges(edge2->getIndex()) == 1);

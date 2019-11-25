@@ -60,9 +60,19 @@ Edge * Vertex::getAdjacientEdge(const Vertex * other)
 	return nullptr;
 }
 
-std::vector<Edge*> Vertex::getEdges()
+std::vector<Edge*> Vertex::getEdges() const
 {
 	return adjacientEdges;
+}
+
+bool Vertex::isBoundary() const
+{
+	for (auto edge : adjacientEdges) {
+		if (edge->isBoundary()) {
+			return true;
+		}
+	}
+	return false;
 }
 
 std::ostream & operator<<(std::ostream & os, const Vertex & obj)

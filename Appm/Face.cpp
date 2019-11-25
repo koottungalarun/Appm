@@ -192,17 +192,34 @@ const int Face::getOrientation(const Edge * edge)
 
 bool Face::isBoundary() const
 {
-	if (cellList.size() > 0) {
+	if (cellList.size() == 0) { // in 2D
+		return false; 
+	}
+	else { // in 3D
 		return cellList.size() == 1;
 	}
-	else {
-		for (auto edge : edgeList) {
-			if (edge->isBoundary()) {
-				return true;
-			}
+
+	//if (cellList.size() > 0) {
+	//	return cellList.size() == 1;
+	//}
+	//else {
+	//	for (auto edge : edgeList) {
+	//		if (edge->isBoundary()) {
+	//			return true;
+	//		}
+	//	}
+	//	return false;
+	//}
+}
+
+bool Face::hasBoundaryEdges() const
+{
+	for (auto edge : edgeList) {
+		if (edge->isBoundary()) {
+			return true;
 		}
-		return false;
 	}
+	return false;
 }
 
 const Eigen::Vector3d Face::getCenter() const

@@ -234,7 +234,6 @@ TriPrism * Mesh::addTriPrism(const std::vector<Face*>& sideFaces, Face * bottomF
 Cell * Mesh::addCell(const std::vector<Face*>& cellFaces)
 {
 	assert(cellFaces.size() >= 4);
-	assert(false);
 	if (!isConnected(cellFaces)) {
 		const int idx = cellList.size();
 		Cell * cell = new Cell(cellFaces);
@@ -264,7 +263,7 @@ Cell * Mesh::getCell(const std::vector<Face*>& cellFaces)
 	return cell;
 }
 
-Vertex * Mesh::getVertex(const int index)
+Vertex * Mesh::getVertex(const int index) const
 {
 	assert(index >= 0);
 	assert(index < vertexList.size());
@@ -274,14 +273,14 @@ Vertex * Mesh::getVertex(const int index)
 	return vertex;
 }
 
-Edge * Mesh::getEdge(const int index)
+Edge * Mesh::getEdge(const int index) const
 {
 	assert(index >= 0);
 	assert(index < edgeList.size());
 	return edgeList[index];
 }
 
-Face * Mesh::getFace(const int index)
+Face * Mesh::getFace(const int index) const
 {
 	assert(index >= 0);
 	assert(index < faceList.size());
@@ -313,6 +312,16 @@ void Mesh::createIncidenceMaps()
 const int Mesh::getNumberOfVertices() const
 {
 	return vertexList.size();
+}
+
+const int Mesh::getNumberOfEdges() const
+{
+	return edgeList.size();
+}
+
+const int Mesh::getNumberOfFaces() const
+{
+	return faceList.size();
 }
 
 const std::vector<Cell*> Mesh::getCells() const
@@ -371,6 +380,37 @@ void Mesh::check() const
 		}
 	}
 
+}
+
+std::vector<Edge*> Mesh::makeContinuousLoop(std::vector<Edge*> edges)
+{
+	std::vector<Edge*> loop;
+	std::vector<Edge*>::iterator it;
+	Edge * edge = edges[0];
+	Vertex * V = edge->getVertexB();
+	const int nEdges = edges.size();
+
+	for (int i = 0; i < nEdges; i++) {
+		// add edge to new list
+		loop.push_back(edge);
+		// remove edge from old list
+		for (it = edges.begin(); it != edges.end(); it++) {
+			if (*it == edge) { break; }
+		}
+		edges.erase(it);
+		// update vertex that is searched 
+		V = edge->getOppositeVertex(V);
+		// find edge that has this vertex
+		for (it = edges.begin(); it != edges.end(); it++) {
+			edge = *it;
+			if (edge->hasVertex(V)) {
+				break;
+			}
+		}
+	}
+	assert(edges.size() == 0);
+	assert(loop.size() == nEdges);
+	return loop;
 }
 
 bool Mesh::isConnected(const Vertex * A, const Vertex * B) const
@@ -487,18 +527,18 @@ void Mesh::create_cell2face_map()
 	// it has two adjacient cells (non-boundary face = inner face). 
 	// Moreover, because of positive/negative orientations, 
 	// a colwise sum of the matrix elements yields +/-1 (boundary) or 0 (non-boundary).
-	Eigen::VectorXi colwiseSum = cell2faceMap.transpose() * Eigen::VectorXi::Ones(nCells);
-	Eigen::VectorXi isBoundaryFace(nFaces);
-	for (int i = 0; i < nFaces; i++) {
-		isBoundaryFace(i) = getFace(i)->isBoundary();
-	}
-	assert(colwiseSum.size() == nFaces);
-	Eigen::VectorXi notBoundaryFace = isBoundaryFace.array() - 1;
-	assert((colwiseSum.cwiseProduct(notBoundaryFace).array() == 0).all());
-	Eigen::VectorXi temp = colwiseSum.cwiseAbs().cwiseProduct(isBoundaryFace);
-	assert((temp.array() >= 0).all());
-	assert((temp.array() <= 1).all());
-	assert(temp.sum() == isBoundaryFace.sum());
+	//Eigen::VectorXi colwiseSum = cell2faceMap.transpose() * Eigen::VectorXi::Ones(nCells);
+	//Eigen::VectorXi isBoundaryFace(nFaces);
+	//for (int i = 0; i < nFaces; i++) {
+	//	isBoundaryFace(i) = getFace(i)->isBoundary();
+	//}
+	//assert(colwiseSum.size() == nFaces);
+	//Eigen::VectorXi notBoundaryFace = isBoundaryFace.array() - 1;
+	//assert((colwiseSum.cwiseProduct(notBoundaryFace).array() == 0).all());
+	//Eigen::VectorXi temp = colwiseSum.cwiseAbs().cwiseProduct(isBoundaryFace);
+	//assert((temp.array() >= 0).all());
+	//assert((temp.array() <= 1).all());
+	//assert(temp.sum() == isBoundaryFace.sum());
 }
 
 void Mesh::writeXdmf_surface()

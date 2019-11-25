@@ -20,9 +20,11 @@ public:
 	bool isAdjacientTo(const Vertex * other) const;
 	Edge * getAdjacientEdge(const Vertex * other);
 
-	std::vector<Edge*> getEdges();
+	std::vector<Edge*> getEdges() const;
 
 	friend std::ostream & operator<<(std::ostream & os, const Vertex & obj);
+
+	bool isBoundary() const;
 
 private:
 	Eigen::Vector3d position;
