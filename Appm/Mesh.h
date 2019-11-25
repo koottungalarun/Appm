@@ -54,6 +54,9 @@ public:
 
 	void check() const;
 
+	const Eigen::SparseMatrix<int> & get_f2eMap() const;
+	const Eigen::SparseMatrix<int> & get_e2vMap() const;
+
 protected:
 	std::vector<Vertex*> vertexList;
 	std::vector<Edge*> edgeList;
@@ -62,6 +65,10 @@ protected:
 	Eigen::Matrix3Xd vertexCoordinates;
 
 	std::vector<Edge*> makeContinuousLoop(std::vector<Edge*> edges);
+
+	Eigen::SparseMatrix<int> edge2vertexMap;
+	Eigen::SparseMatrix<int> face2edgeMap;
+	Eigen::SparseMatrix<int> cell2faceMap;
 
 
 private:
@@ -78,10 +85,6 @@ private:
 	void create_edge2vertex_map();
 	void create_face2edge_map();
 	void create_cell2face_map();
-
-	Eigen::SparseMatrix<int> edge2vertexMap;
-	Eigen::SparseMatrix<int> face2edgeMap;
-	Eigen::SparseMatrix<int> cell2faceMap;
 
 	void writeXdmf_surface();
 	void writeXdmf_volume();

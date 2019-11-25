@@ -288,6 +288,12 @@ const Eigen::Vector3d Face::getNormal() const
 	return faceNormal;
 }
 
+void Face::setNormal(const Eigen::Vector3d & fn)
+{
+	assert(fn.norm() > 0);
+	this->faceNormal = fn;
+}
+
 void Face::init()
 {
 	if (vertexList.size() == 3) {

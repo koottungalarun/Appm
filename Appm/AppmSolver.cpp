@@ -27,6 +27,7 @@ void AppmSolver::run()
 	dualMesh.writeToFile();
 	dualMesh.writeXdmf();
 
+
 //	writeMesh();
 }
 

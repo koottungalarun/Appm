@@ -37,6 +37,7 @@ public:
 	void setAdjacient(Cell * cell);
 
 	const Eigen::Vector3d getNormal() const;
+	void setNormal(const Eigen::Vector3d & fn);
 
 private:
 	std::vector<Edge*> edgeList;

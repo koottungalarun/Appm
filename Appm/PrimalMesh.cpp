@@ -23,8 +23,8 @@ PrimalMesh::~PrimalMesh()
 void PrimalMesh::init()
 {
 	init_hexagon();
-	const int nRefinements = 0;
-	const int nOuterMeshLayers = 0;
+	const int nRefinements = 2;
+	const int nOuterMeshLayers = 1;
 	if (nOuterMeshLayers > 0) {
 		assert(nRefinements > 1);
 	}
@@ -32,8 +32,8 @@ void PrimalMesh::init()
 	refineMesh(nRefinements);
 
 	outerMeshExtrude(nOuterMeshLayers);
-	
-	const int nLayers = 2;
+
+	const int nLayers = 5;
 	extrudeMesh(nLayers);
 }
 
@@ -329,6 +329,10 @@ void PrimalMesh::extrudeMesh(const int nLayers)
 	const int nVertices_2d = vertexList.size();
 	const int nEdges_2d = edgeList.size();
 	const int nFaces_2d = faceList.size();
+
+	// Reserve memory
+	cellList.reserve(nFaces_2d * nLayers);
+
 
 	// Create vertices
 	for (int layer = 1; layer <= nLayers; layer++) {

@@ -112,6 +112,8 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal)
 	// Define dual faces around primal edges
 	for (int i = 0; i < nPrimalEdges; i++) {
 		const Edge * primalEdge = primal.getEdge(i);
+		std::vector<Edge*> dualEdges;
+
 		if (primalEdge->isBoundary()) {
 			// get adjacient primal boundary faces connect their face centers
 			const std::vector<Face*> primalEdgeFaces = primalEdge->getFaceList();
@@ -128,14 +130,14 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal)
 			assert(idxB >= 0);
 			Vertex * A = getVertex(idxA);
 			Vertex * B = getVertex(idxB);
-			std::vector<Edge*> dualEdges;
+
 
 			// Check if the faces have collinear face normals; 
 			// if yes, connect face centers.
 			// if not, connect face centers with primal edge center
 			const Eigen::Vector3d fn0 = primalBoundaryFaces[0]->getNormal();
 			const Eigen::Vector3d fn1 = primalBoundaryFaces[1]->getNormal();
-			if (fn0.cross(fn1).norm() < 4 * std::numeric_limits<double>::epsilon()) {
+			if (fn0.cross(fn1).norm() < 100 * std::numeric_limits<double>::epsilon()) {
 				Edge * dualEdge = addEdge(A, B);
 				dualEdges.push_back(dualEdge);
 			}
@@ -161,12 +163,9 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal)
 			//	std::cout << *edge << std::endl;
 			//}
 			// sort list of edges such that it forms a continuous loop
-			std::vector<Edge*> dualEdgesLoop = makeContinuousLoop(dualEdges);
-			addFace(dualEdgesLoop);
 		}
 		else {
 			const std::vector<Face*> primalEdgeFaces = primalEdge->getFaceList();
-			std::vector<Edge*> dualEdges;
 			for (auto primalFace : primalEdgeFaces) {
 				const int pFidx = primalFace->getIndex();
 				dualEdges.push_back(getEdge(pFidx));
@@ -176,17 +175,26 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal)
 			//	std::cout << edge->getIndex() << ",";
 			//}
 			//std::cout << "}" << std::endl;
-			std::vector<Edge*> dualEdgesLoop = makeContinuousLoop(dualEdges);
-			addFace(dualEdgesLoop);
+		} // end if (primalEdge->isBoundary())
+		std::vector<Edge*> dualEdgesLoop = makeContinuousLoop(dualEdges);
+		Face * dualFace = addFace(dualEdgesLoop);
+
+		// Check orientation of dual face normal and primal edge; if necessary, flip dual normal
+		Eigen::Vector3d fn = dualFace->getNormal();
+		const Eigen::Vector3d primalEdgeDir = primalEdge->getDirection();
+		if (fn.dot(primalEdgeDir) < 0) {
+			dualFace->setNormal(-1 * fn);
 		}
+
 	}
 
 	// add dual cells
+	std::cout << "Add dual cells" << std::endl;
 	for (int i = 0; i < nPrimalVertices; i++) {
 		const Vertex * primalVertex = primal.getVertex(i);
-		std::cout << "Create dual cell at primal vertex (idx = " << primalVertex->getIndex() << ")" << std::endl;
+		//std::cout << "Create dual cell at primal vertex (idx = " << primalVertex->getIndex() << ")" << std::endl;
 		Vertex * dualVertex = getVertex(primalVertexToDualVertex.coeffRef(primalVertex->getIndex()));
-		std::cout << "(= dual vertex " << dualVertex->getIndex() << ")" << std::endl;
+		//std::cout << "(= dual vertex " << dualVertex->getIndex() << ")" << std::endl;
 
 		const std::vector<Edge*> primalVertexEdges = primalVertex->getEdges();
 		bool hasPrimalBoundaryEdges = false;
@@ -223,7 +231,7 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal)
 						// otherwise, get two edges (each of them connecting edge center and a face center)
 						const Eigen::Vector3d fn0 = primalBoundaryFaces[0]->getNormal();
 						const Eigen::Vector3d fn1 = primalBoundaryFaces[1]->getNormal();
-						const bool isFacesParallel = fn0.cross(fn1).norm() < 4 * std::numeric_limits<double>::epsilon();
+						const bool isFacesParallel = fn0.cross(fn1).norm() < 100 * std::numeric_limits<double>::epsilon();
 						Vertex * A = getVertex(primalFaceToDualVertex.coeff(primalBoundaryFaces[0]->getIndex()));
 						Vertex * B = getVertex(primalFaceToDualVertex.coeff(primalBoundaryFaces[1]->getIndex()));
 						if (isFacesParallel) {
@@ -251,13 +259,13 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal)
 			// Therefore, determine a reference normal vector and select all dual edges that yield to same normal vector.
 			// This procedure may be repeated several times
 			while (dualBoundaryEdges.size() > 0) {
-				std::cout << "Dual boundary edges: " << std::endl;
-				for (auto edge : dualBoundaryEdges) {
-					std::cout << *edge << std::endl;
-				}
-				std::cout << std::endl;
+				//std::cout << "Dual boundary edges: " << std::endl;
+				//for (auto edge : dualBoundaryEdges) {
+				//	std::cout << *edge << std::endl;
+				//}
+				//std::cout << std::endl;
 
-				std::cout << "Add auxiliary dual face" << std::endl;
+				//std::cout << "Add auxiliary dual face" << std::endl;
 				// get reference normal direction
 				const Eigen::Vector3d primalVertexPos = primalVertex->getPosition();
 				Eigen::Vector3d posA = dualBoundaryEdges[0]->getVertexA()->getPosition();
@@ -274,16 +282,16 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal)
 					Eigen::Vector3d a = (posA - primalVertexPos).normalized();
 					Eigen::Vector3d b = edgeDir.normalized();
 					const Eigen::Vector3d nVec = a.cross(b).normalized();
-					if (nVec.cross(nVec_ref).norm() < 4 * std::numeric_limits<double>::epsilon()) {
+					if (nVec.cross(nVec_ref).norm() < 100 * std::numeric_limits<double>::epsilon()) {
 						selectedEdges.push_back(dualEdge);
 					}
 				}
 				assert(selectedEdges.size() >= 2);
 
-				std::cout << "Selected edges: " << std::endl;
-				for (auto edge : selectedEdges) {
-					std::cout << *edge << std::endl;
-				}
+				//std::cout << "Selected edges: " << std::endl;
+				//for (auto edge : selectedEdges) {
+				//	std::cout << *edge << std::endl;
+				//}
 
 				// remove selected edges from list
 				const int nDualBoundaryEdges = dualBoundaryEdges.size();
@@ -320,25 +328,25 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal)
 
 					selectedEdges.push_back(dualEdge0);
 					selectedEdges.push_back(dualEdge1);
-					std::cout << "Open end vertices: " << openEndVertices[0]->getIndex() << ", " << openEndVertices[1]->getIndex() << std::endl;
-					std::cout << "Add edges to close: " << std::endl;
-					std::cout << *dualEdge0 << std::endl;
-					std::cout << *dualEdge1 << std::endl;
-					std::cout << "Selected edges (updated): " << std::endl;
-					for (auto edge : selectedEdges) {
-						std::cout << *edge << std::endl;
-					}
+					//std::cout << "Open end vertices: " << openEndVertices[0]->getIndex() << ", " << openEndVertices[1]->getIndex() << std::endl;
+					//std::cout << "Add edges to close: " << std::endl;
+					//std::cout << *dualEdge0 << std::endl;
+					//std::cout << *dualEdge1 << std::endl;
+					//std::cout << "Selected edges (updated): " << std::endl;
+					//for (auto edge : selectedEdges) {
+					//	std::cout << *edge << std::endl;
+					//}
 				}
 
 				std::vector<Edge*> selectedEdgesLoop = makeContinuousLoop(selectedEdges);
 				Face * face = addFace(selectedEdgesLoop);
 				dualFaces.push_back(face);
 			} // end while (dualBoundaryEdges.size() > 0)
-			std::cout << "Create dual cell from faces: " << "(n = " << dualFaces.size() << ") " << "{";
-			for (auto face : dualFaces) {
-				std::cout << face->getIndex() << ",";
-			}
-			std::cout << "}" << std::endl;
+			//std::cout << "Create dual cell from faces: " << "(n = " << dualFaces.size() << ") " << "{";
+			//for (auto face : dualFaces) {
+			//	std::cout << face->getIndex() << ",";
+			//}
+			//std::cout << "}" << std::endl;
 			addCell(dualFaces);
 			//if (i >= 1) { break; }
 		}
@@ -349,16 +357,39 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal)
 				Face * face = getFace(pEidx);
 				dualFaces.push_back(face);
 			}
-			std::cout << "Create dual cell from faces: {";
-			for (auto face : dualFaces) {
-				std::cout << face->getIndex() << ",";
-			}
-			std::cout << "}" << std::endl;
+			//std::cout << "Create dual cell from faces: {";
+			//for (auto face : dualFaces) {
+			//	std::cout << face->getIndex() << ",";
+			//}
+			//std::cout << "}" << std::endl;
 			addCell(dualFaces);
-		}
+		} // end if (hasPrimalBoundaryEdges)
+	} // end for (i < nPrimalVertices)
+	std::cout << "Dual mesh created" << std::endl;
 
 
+	createIncidenceMaps();
 
-	}
+	std::cout << "Compare incidence maps: " << std::endl;
 
+	// Check incidence maps between primal and dual mesh
+	// primal face-to-edge map = transpose of dual face-to-edge map
+	std::cout << "primal.curl == dual.curl^t: ";
+	const Eigen::SparseMatrix<int> & p_f2e = primal.get_f2eMap();
+	Eigen::SparseMatrix<int> temp = face2edgeMap.topLeftCorner(nPrimalEdges, nPrimalFaces).transpose();
+	assert(p_f2e.rows() == temp.rows());
+	assert(p_f2e.cols() == temp.cols());
+	Eigen::SparseMatrix<int> delta = (p_f2e - temp).pruned();// pruned() keeps only non-zero matrix entries
+	std::cout << (delta.nonZeros() == 0 ? "OK" : "FAILED") << std::endl;
+	assert(delta.nonZeros() == 0);
+
+	// primal edge-to-vertex map = (-1) * transpose of dual cell-to-face map
+	std::cout << "primal.grad == (-1)*dual.div^t: ";
+	const Eigen::SparseMatrix<int> & p_e2v = primal.get_e2vMap();
+	temp = -1 * cell2faceMap.topLeftCorner(nPrimalVertices, nPrimalEdges).transpose();
+	assert(p_e2v.rows() == temp.rows());
+	assert(p_e2v.cols() == temp.cols());
+	delta = (p_e2v - temp).pruned(); // pruned() keeps only non-zero matrix entries
+	std::cout << (delta.nonZeros() == 0 ? "OK" : "FAILED") << std::endl; 
+	assert(delta.nonZeros() == 0);
 }

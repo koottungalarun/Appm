@@ -32,8 +32,19 @@ Cell::Cell(const std::vector<Face*>& faces)
 	std::vector<Face*> zFaces;
 	for (auto face : faceList) {
 		const Eigen::Vector3d fn = face->getNormal();
-		if (fn.cross(Eigen::Vector3d(0, 0, 1)).norm() < 4 * std::numeric_limits<double>::epsilon()) {
+		if (fn.cross(Eigen::Vector3d(0, 0, 1)).norm() < 100 * std::numeric_limits<double>::epsilon()) {
 			zFaces.push_back(face);
+		}
+	}
+	const int n_zFaces = zFaces.size();
+	if (n_zFaces < 2) {
+		for (auto face : faceList) {
+			const Eigen::Vector3d fn = face->getNormal();
+			const double fn_x_zUnit_norm = fn.cross(Eigen::Vector3d(0, 0, 1)).norm();
+			std::cout << "Face " << face->getIndex() << ": " << "(fn x zUnit).norm() = " << fn_x_zUnit_norm << std::endl;
+			if (fn.cross(Eigen::Vector3d(0, 0, 1)).norm() < 100 * std::numeric_limits<double>::epsilon()) {
+				zFaces.push_back(face);
+			}
 		}
 	}
 	assert(zFaces.size() == 2);

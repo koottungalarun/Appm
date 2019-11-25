@@ -382,6 +382,16 @@ void Mesh::check() const
 
 }
 
+const Eigen::SparseMatrix<int>& Mesh::get_f2eMap() const
+{
+	return face2edgeMap;
+}
+
+const Eigen::SparseMatrix<int>& Mesh::get_e2vMap() const
+{
+	return edge2vertexMap;
+}
+
 std::vector<Edge*> Mesh::makeContinuousLoop(std::vector<Edge*> edges)
 {
 	std::vector<Edge*> loop;
