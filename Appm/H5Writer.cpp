@@ -18,14 +18,25 @@ H5Writer::~H5Writer()
 {
 }
 
-void H5Writer::writeData(const Eigen::MatrixXd & matrix, const std::string & dataname)
-{
-	std::cout << "Write data to " << this->filename << ": " << dataname << std::endl;
-	const int rank = 2;
-	hsize_t dims[rank];
-	dims[1] = matrix.rows();
-	dims[0] = matrix.cols();
-	DataSpace dataspace(rank, dims);
-	DataSet dataset = file.createDataSet(dataname.c_str(), PredType::NATIVE_DOUBLE, dataspace);
-	dataset.write(matrix.transpose().data(), PredType::NATIVE_DOUBLE);
-}
+//void H5Writer::writeData(const Eigen::MatrixXd & matrix, const std::string & dataname)
+//{
+//	std::cout << "Write data to " << this->filename << ": " << dataname << std::endl;
+//	const int rank = 2;
+//	hsize_t dims[rank];
+//	dims[1] = matrix.rows();
+//	dims[0] = matrix.cols();
+//	DataSpace dataspace(rank, dims);
+//	DataSet dataset = file.createDataSet(dataname.c_str(), PredType::NATIVE_DOUBLE, dataspace);
+//	dataset.write(matrix.transpose().data(), PredType::NATIVE_DOUBLE);
+//}
+//
+//void H5Writer::writeData(const Eigen::VectorXi & vector, const std::string & dataname)
+//{
+//	std::cout << "Write data to " << this->filename << ": " << dataname << std::endl;
+//	const int rank = 1;
+//	hsize_t dims[rank];
+//	dims[0] = vector.cols();
+//	DataSpace dataspace(rank, dims);
+//	DataSet dataset = file.createDataSet(dataname.c_str(), PredType::NATIVE_INT, dataspace);
+//	dataset.write(vector.data(), PredType::NATIVE_INT);
+//}

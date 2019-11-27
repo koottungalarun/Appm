@@ -1,0 +1,87 @@
+\documentclass{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{url}
+
+
+\usepackage{lmodern}
+
+
+
+
+\title{Source code documentation of APPM}
+\author{Roman Fuchs}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+
+\vspace{2em}
+
+APPM: asymptotic preserving plasma model.
+
+\section{Introduction}
+
+Aim of the code: show the feasibility of a plasma model that is based 
+on the Maxwell Grid Equations (see Finite Integration Technique) for 
+electromagnetism and the Navier-Stokes equations for the fluid. 
+
+Equations:
+
+
+
+\section{Mesh construction}
+
+Why a primal and dual mesh?
+
+
+\subsection{Primal mesh}
+
+How it is defined.
+
+
+
+\subsection{Dual mesh}
+
+How it is defined.
+
+
+
+\section{Data output}
+
+The data is visualized in ParaView\footnote{version 5.6.0, 64-bit} 
+using XDMF\footnote{\url{xdmf.org/index.php/XDMF_Model_and_Format}, version 3.} 
+for data description and HDF5\footnote{version 1.10, 64-bit} 
+for the heavy data.
+
+Remark: instead of ParaView, one could also use VisIT for visualization. However, it does not support polygonal cells. 
+
+
+
+
+
+
+\subsection{Mesh}
+
+Definition of cells and faces as given in the XDMF format. 
+
+For each face: facetype + list of vertex indices. Except for a polygon: facetype + number of vertices + list of vertex indices.
+
+For each cell: celltype + list of vertex indices. Except for a polyhedral: celltype + number of faces + description of each face.
+
+
+
+
+\subsection{Data}
+
+
+
+
+
+
+
+\end{document}

@@ -62,15 +62,15 @@ void Mesh::writeToFile()
 	for (int i = 0; i < nVertices; i++) {
 		positions.col(i) = vertexList[i]->getPosition();
 	}
-	file = std::ofstream(this->meshPrefix + "-vertices.dat");
-	file << positions.transpose() << std::endl;
+	//file = std::ofstream(this->meshPrefix + "-vertices.dat");
+	//file << positions.transpose() << std::endl;
 
 	const std::string h5filename = this->meshPrefix + "-mesh.h5";
 	H5Writer h5writer(h5filename);
-	h5writer.writeData(positions, "/vc");
+	h5writer.writeData(positions, "/vertexPos");
 
-	file = std::ofstream(this->meshPrefix + "-coords.dat");
-	file << vertexCoordinates.transpose() << std::endl;
+	//file = std::ofstream(this->meshPrefix + "-coords.dat");
+	//file << vertexCoordinates.transpose() << std::endl;
 
 	// Create incidence maps and write them to file
 	createIncidenceMaps();
@@ -94,34 +94,58 @@ void Mesh::writeToFile()
 	file = std::ofstream(this->meshPrefix + "-f2v.dat");
 	file << f2v.transpose() << std::endl;
 
-	file = std::ofstream(this->meshPrefix + "-faceCenter.dat");
 	Eigen::Matrix3Xd fc(3, nFaces);
 	for (int i = 0; i < nFaces; i++) {
 		fc.col(i) = getFace(i)->getCenter();
 	}
-	file << fc.transpose() << std::endl;
+	h5writer.writeData(fc, "/faceCenter");
+	//file = std::ofstream(this->meshPrefix + "-faceCenter.dat");
+	//file << fc.transpose() << std::endl;
 
-	file = std::ofstream(this->meshPrefix + "-faceNormal.dat");
 	Eigen::Matrix3Xd fn(3, nFaces);
 	for (int i = 0; i < nFaces; i++) {
 		fn.col(i) = getFace(i)->getNormal();
 	}
-	file << fn.transpose() << std::endl;
+	h5writer.writeData(fn, "/faceNormal");
+	//file = std::ofstream(this->meshPrefix + "-faceNormal.dat");
+	//file << fn.transpose() << std::endl;
 
-	file = std::ofstream(this->meshPrefix + "-faceBoundary.dat");
 	Eigen::VectorXi faceBoundary(nFaces);
 	for (int i = 0; i < nFaces; i++) {
 		faceBoundary(i) = getFace(i)->isBoundary();
 	}
-	file << faceBoundary << std::endl;
+	h5writer.writeData(faceBoundary, "/isFaceBoundary");
+	//file = std::ofstream(this->meshPrefix + "-faceBoundary.dat");
+	//file << faceBoundary << std::endl;
 
-	file = std::ofstream(this->meshPrefix + "-cellCenter.dat");
+	const std::vector<int> face2vertexIdx = getXdmfTopology_face2vertexIndices();
+	h5writer.writeData(face2vertexIdx, "/face2vertex");
+
 	const int nCells = cellList.size();
 	Eigen::Matrix3Xd cellCenters(3, nCells);
 	for (int i = 0; i < nCells; i++) {
 		cellCenters.col(i) = getCell(i)->getCenter();
 	}
-	file << cellCenters.transpose() << std::endl;
+	h5writer.writeData(cellCenters, "/cellCenter");
+
+	Eigen::VectorXi faceIdx(nFaces);
+	for (int i = 0; i < nFaces; i++) {
+		faceIdx(i) = getFace(i)->getIndex();
+	}
+	h5writer.writeData(faceIdx, "/faceIndex");
+
+	Eigen::VectorXi cellIdx(nCells);
+	for (int i = 0; i < nCells; i++) {
+		cellIdx(i) = getCell(i)->getIndex();
+	}
+	h5writer.writeData(cellIdx, "/cellIndex");
+
+	const std::vector<int> c2vIdx = getXdmfTopology_cell2vertexIndices();
+	h5writer.writeData(c2vIdx, "/cell2vertex");
+
+
+	//file = std::ofstream(this->meshPrefix + "-cellCenter.dat");
+	//file << cellCenters.transpose() << std::endl;
 
 	//for (auto v : vertexList) {
 	//	std::cout << v->getIndex() << ": " << v->getPosition().transpose() << std::endl;
@@ -326,6 +350,61 @@ const int Mesh::getNumberOfEdges() const
 const int Mesh::getNumberOfFaces() const
 {
 	return faceList.size();
+}
+
+const int Mesh::getNumberOfCells() const
+{
+	return cellList.size();
+}
+
+const std::vector<int> Mesh::getXdmfTopology_cell2vertexIndices() const
+{
+	std::vector<int> data;
+	const int nCells = cellList.size();
+	for (int i = 0; i < nCells; i++) {
+		const Cell * cell = cellList[i];
+		data.push_back(16); // polygon type
+		const std::vector<Face*> cellFaces = cell->getFaceList();
+		const int nCellFaces = cellFaces.size();
+		data.push_back(nCellFaces); // number of faces
+		for (int j = 0; j < nCellFaces; j++) {
+			const Face * face = cellFaces[j];
+			const std::vector<Vertex*> faceVertices = face->getVertexList();
+			const int nFaceVertices = faceVertices.size();
+			data.push_back(nFaceVertices); // number of vertices
+			for (auto vertex : faceVertices) {
+				data.push_back(vertex->getIndex());
+			}
+		}
+	}
+	return data;
+}
+
+const std::vector<int> Mesh::getXdmfTopology_face2vertexIndices() const
+{
+	std::vector<int> f2v;
+	const int nFaces = getNumberOfFaces();
+	for (int i = 0; i < nFaces; i++) {
+		const Face * face = faceList[i];
+		std::vector<Vertex*> faceVertices = face->getVertexList();
+		const int nFaceVertices = faceVertices.size();
+
+		int faceType = 0;
+		switch (nFaceVertices) {
+		case 3: faceType = 4; break;
+		case 4: faceType = 5; break;
+		default: faceType = 3; break;
+		}
+
+		f2v.push_back(faceType);
+		if (faceType == 3) { // polygon face
+			f2v.push_back(nFaceVertices);
+		}
+		for (int j = 0; j < faceVertices.size(); j++) {
+			f2v.push_back(faceVertices[j]->getIndex());
+		}
+	}
+	return f2v;
 }
 
 const std::vector<Cell*> Mesh::getCells() const
@@ -576,36 +655,13 @@ void Mesh::writeXdmf_surface()
 	grid->addChild(topology);
 
 	const int nFaces = faceList.size();
-	std::vector<int> f2v;
-	for (int i = 0; i < nFaces; i++) {
-		const Face * face = faceList[i];
-		std::vector<Vertex*> faceVertices = face->getVertexList();
-		const int nFaceVertices = faceVertices.size();
+	H5Reader h5reader(this->meshPrefix + "-mesh.h5");
 
-		int faceType = 0;
-		switch (nFaceVertices) {
-		case 3: faceType = 4; break;
-		case 4: faceType = 5; break;
-		default: faceType = 3; break;
-		}
-
-		f2v.push_back(faceType);
-		if (faceType == 3) { // polygon face
-			f2v.push_back(nFaceVertices);
-		}
-		for (int j = 0; j < faceVertices.size(); j++) {
-			f2v.push_back(faceVertices[j]->getIndex());
-		}
-	}
-	for (int i = 0; i < f2v.size(); i++) {
-		body << f2v[i] << " ";
-		if ((i+1) % 10 == 0) {
-			body << std::endl;
-		}
-	}
+	const int nElements = h5reader.readDataSize("/face2vertex");
 	ss = std::stringstream();
-	ss << "<DataItem Dimensions=\"" << f2v.size() << "\" DataType=\"Int\" Format=\"XML\">";
-
+	ss << "<DataItem Dimensions=\"" << nElements << "\" DataType=\"Int\" Format=\"HDF\">";
+	body = std::stringstream();
+	body << this->meshPrefix << "-mesh.h5:/face2vertex";
 	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
 	topology->addChild(dataItem);
 
@@ -614,9 +670,22 @@ void Mesh::writeXdmf_surface()
 	ss = std::stringstream();
 	ss << "<DataItem Dimensions=\"" << vertexCoordinates.cols() << " " << 3 << "\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">";
 	body = std::stringstream();
-	body << (this->meshPrefix + "-mesh.h5:/vc");
+	body << (this->meshPrefix + "-mesh.h5:/vertexPos");
 	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
 	geometry->addChild(dataItem);
+
+	// Attribute: face index
+	ss = std::stringstream();
+	ss << "<Attribute Name=\"Face index\" AttributeType=\"Scalar\" Center=\"Cell\">";
+	XmlElement * attribute = new XmlElement(ss.str(), "</Attribute>");
+	body = std::stringstream();
+	body << (this->meshPrefix + "-mesh.h5:/faceIndex");
+	ss = std::stringstream();
+	ss << "<DataItem Format=\"HDF\" DataType=\"Int\" Precision=\"4\" Dimensions=\"" << getNumberOfFaces() << "\">";
+	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
+	attribute->addChild(dataItem);
+	grid->addChild(attribute);
+
 
 
 	std::ofstream file(filename);
@@ -645,32 +714,16 @@ void Mesh::writeXdmf_volume()
 	XmlElement * topology = new XmlElement(ss.str(), "</Topology>");
 	grid->addChild(topology);
 	
-	std::vector<int> data;
-	const int nCells = cellList.size();
-	for (int i = 0; i < nCells; i++) {
-		const Cell * cell = cellList[i];
-		data.push_back(16); // polygon type
-		const std::vector<Face*> cellFaces = cell->getFaceList();
-		const int nCellFaces = cellFaces.size();
-		data.push_back(nCellFaces); // number of faces
-		for (int j = 0; j < nCellFaces; j++) {
-			const Face * face = cellFaces[j];
-			const std::vector<Vertex*> faceVertices = face->getVertexList();
-			const int nFaceVertices = faceVertices.size();
-			data.push_back(nFaceVertices); // number of vertices
-			for (auto vertex : faceVertices) {
-				data.push_back(vertex->getIndex());
-			}
-		}
-	}
-	for (int i = 0; i < data.size(); i++) {
-		body << data[i] << " ";
-		if ((i + 1) % 10 == 0) {
-			body << std::endl;
-		}
-	}
 	ss = std::stringstream();
-	ss << "<DataItem Dimensions=\"" << data.size() << "\" DataType=\"Int\" Format=\"XML\">";
+
+	// Version with HDF
+	const std::string h5filename = (this->meshPrefix) + "-mesh.h5";
+	H5Reader h5reader(h5filename);
+	const std::string dataname = "/cell2vertex";
+	const int nElements = h5reader.readDataSize(dataname); 
+	body = std::stringstream();
+	body << (this->meshPrefix + "-mesh.h5:/cell2vertex");
+	ss << "<DataItem Dimensions=\"" << nElements << "\" DataType=\"Int\" Format=\"HDF\">";
 
 	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
 	topology->addChild(dataItem);
@@ -681,9 +734,21 @@ void Mesh::writeXdmf_volume()
 	ss << "<DataItem Dimensions=\"" << vertexCoordinates.cols() << " " << 3 << "\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">";
 	body = std::stringstream();
 	//body << vertexCoordinates.transpose();
-	body << (this->meshPrefix + "-mesh.h5:/vc");
+	body << (this->meshPrefix + "-mesh.h5:/vertexPos");
 	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
 	geometry->addChild(dataItem);
+
+	// Attribute: cell index
+	ss = std::stringstream();
+	ss << "<Attribute Name=\"Cell index\" AttributeType=\"Scalar\" Center=\"Cell\">";
+	XmlElement * attribute = new XmlElement(ss.str(), "</Attribute>");
+	body = std::stringstream();
+	body << (this->meshPrefix + "-mesh.h5:/cellIndex");
+	ss = std::stringstream();
+	ss << "<DataItem Format=\"HDF\" DataType=\"Int\" Precision=\"4\" Dimensions=\"" << getNumberOfCells() << "\">";
+	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
+	attribute->addChild(dataItem);
+	grid->addChild(attribute);
 
 
 	std::ofstream file(filename);

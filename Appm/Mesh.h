@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "H5Writer.h"
+#include "H5Reader.h"
 
 #include <iostream>
 #include <fstream>
@@ -52,6 +53,10 @@ public:
 	const int getNumberOfVertices() const;
 	const int getNumberOfEdges() const;
 	const int getNumberOfFaces() const;
+	const int getNumberOfCells() const;
+
+	const std::vector<int> getXdmfTopology_cell2vertexIndices() const;
+	const std::vector<int> getXdmfTopology_face2vertexIndices() const;
 
 	const std::vector<Cell*> getCells() const;
 	const std::vector<Face*> getFaces() const;
