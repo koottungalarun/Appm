@@ -65,6 +65,10 @@ void Mesh::writeToFile()
 	file = std::ofstream(this->meshPrefix + "-vertices.dat");
 	file << positions.transpose() << std::endl;
 
+	const std::string h5filename = this->meshPrefix + "-mesh.h5";
+	H5Writer h5writer(h5filename);
+	h5writer.writeData(positions, "/vc");
+
 	file = std::ofstream(this->meshPrefix + "-coords.dat");
 	file << vertexCoordinates.transpose() << std::endl;
 
@@ -584,7 +588,11 @@ void Mesh::writeXdmf_surface()
 		case 4: faceType = 5; break;
 		default: faceType = 3; break;
 		}
+
 		f2v.push_back(faceType);
+		if (faceType == 3) { // polygon face
+			f2v.push_back(nFaceVertices);
+		}
 		for (int j = 0; j < faceVertices.size(); j++) {
 			f2v.push_back(faceVertices[j]->getIndex());
 		}
@@ -604,9 +612,9 @@ void Mesh::writeXdmf_surface()
 	XmlElement * geometry = new XmlElement("<Geometry GeometryType=\"XYZ\">", "</Geometry>");
 	grid->addChild(geometry);
 	ss = std::stringstream();
-	ss << "<DataItem Dimensions=\"" << vertexCoordinates.cols() << " " << 3 << "\" DataType=\"Float\" Precision=\"8\" Format=\"XML\">";
+	ss << "<DataItem Dimensions=\"" << vertexCoordinates.cols() << " " << 3 << "\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">";
 	body = std::stringstream();
-	body << vertexCoordinates.transpose();
+	body << (this->meshPrefix + "-mesh.h5:/vc");
 	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
 	geometry->addChild(dataItem);
 
@@ -670,9 +678,10 @@ void Mesh::writeXdmf_volume()
 	XmlElement * geometry = new XmlElement("<Geometry GeometryType=\"XYZ\">", "</Geometry>");
 	grid->addChild(geometry);
 	ss = std::stringstream();
-	ss << "<DataItem Dimensions=\"" << vertexCoordinates.cols() << " " << 3 << "\" DataType=\"Float\" Precision=\"8\" Format=\"XML\">";
+	ss << "<DataItem Dimensions=\"" << vertexCoordinates.cols() << " " << 3 << "\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">";
 	body = std::stringstream();
-	body << vertexCoordinates.transpose();
+	//body << vertexCoordinates.transpose();
+	body << (this->meshPrefix + "-mesh.h5:/vc");
 	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
 	geometry->addChild(dataItem);
 

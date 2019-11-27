@@ -20,7 +20,7 @@ private:
 	void refineMesh(const int nRefinements);
 	void outerMeshExtrude(const int nLayers);
 	void outerMeshExtrude();
-	void extrudeMesh(const int nLayers);
+	void extrudeMesh(const int nLayers, const double zmax);
 
 	Eigen::Matrix3Xi refine_triangles();
 	Eigen::Matrix3Xi refine_triangles_specialCorners();

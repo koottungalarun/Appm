@@ -23,8 +23,8 @@ PrimalMesh::~PrimalMesh()
 void PrimalMesh::init()
 {
 	init_hexagon();
-	const int nRefinements = 2;
-	const int nOuterMeshLayers = 1;
+	const int nRefinements = 0;
+	const int nOuterMeshLayers = 0;
 	if (nOuterMeshLayers > 0) {
 		assert(nRefinements > 1);
 	}
@@ -33,8 +33,9 @@ void PrimalMesh::init()
 
 	outerMeshExtrude(nOuterMeshLayers);
 
-	const int nLayers = 5;
-	extrudeMesh(nLayers);
+	const int nLayers = 1;
+	const double zmax = 1;
+	extrudeMesh(nLayers, zmax);
 }
 
 
@@ -319,12 +320,13 @@ void PrimalMesh::outerMeshExtrude()
 	}
 }
 
-void PrimalMesh::extrudeMesh(const int nLayers)
+void PrimalMesh::extrudeMesh(const int nLayers, const double zmax)
 {
 	if (nLayers <= 0) {
 		return;
 	}
 	std::cout << "Extrude mesh with " << nLayers << " layers" << std::endl;
+	assert(zmax > 0);
 	const Eigen::Vector3d z_unit(0, 0, 1);
 	const int nVertices_2d = vertexList.size();
 	const int nEdges_2d = edgeList.size();
@@ -337,7 +339,7 @@ void PrimalMesh::extrudeMesh(const int nLayers)
 	// Create vertices
 	for (int layer = 1; layer <= nLayers; layer++) {
 		for (int i = 0; i < nVertices_2d; i++) {
-			Eigen::Vector3d pos = getVertex(i)->getPosition() + layer * ((1./nLayers) * z_unit);
+			Eigen::Vector3d pos = getVertex(i)->getPosition() + layer * ((zmax/nLayers) * z_unit);
 			addVertex(pos);
 		}
 	}

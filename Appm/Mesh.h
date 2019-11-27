@@ -3,6 +3,8 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 
+#include "H5Writer.h"
+
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -11,12 +13,14 @@
 #include <Eigen/Sparse>
 #include "EigenAuxiliaries.h"
 
+
 #include "Vertex.h"
 #include "Edge.h"
 #include "Face.h"
 #include "Cell.h"
 #include "TriPrism.h"
 #include "XmlElement.h"
+
 
 class Mesh
 {

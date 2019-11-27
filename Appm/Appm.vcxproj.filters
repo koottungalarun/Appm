@@ -54,6 +54,9 @@
     <ClInclude Include="TriPrism.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="H5Writer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -90,6 +93,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="TriPrism.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H5Writer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
