@@ -51,5 +51,6 @@ private:
 	void init();
 
 	const Eigen::Vector3d getCircumCenter() const;
+	const double computeArea() const;
 };
 

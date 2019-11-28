@@ -90,6 +90,8 @@ Face::Face(const std::vector<Edge*> & faceEdges)
 	const Eigen::Vector3d b = (posB - center).normalized();
 	faceNormal = (a.cross(b)).normalized();
 	assert(faceNormal.norm() > 0);	
+
+	this->area = computeArea();
 }
 
 
@@ -340,6 +342,22 @@ const Eigen::Vector3d Face::getCircumCenter() const
 	const double bx = -1 * Bx.determinant();
 	const double by =      By.determinant();
 	return Eigen::Vector3d(-bx / (2*a), -by / (2*a), z);
+}
+
+const double Face::computeArea() const
+{
+	double area = 0;
+	const Eigen::Vector3d fc = getCenter();
+	for (auto edge : edgeList) {
+		const Eigen::Vector3d posA = edge->getVertexA()->getPosition();
+		const Eigen::Vector3d posB = edge->getVertexB()->getPosition();
+		const Eigen::Vector3d a = posA - fc;
+		const Eigen::Vector3d b = posB - posA;
+		const double temp = 0.5 * a.cross(b).norm();
+		assert(temp > 0);
+		area += temp;
+	}
+	return area;
 }
 
 std::ostream & operator<<(std::ostream & os, const Face & obj)

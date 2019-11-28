@@ -53,6 +53,13 @@ const Eigen::Vector3d Edge::getDirection() const
 	return B->getPosition() - A->getPosition();
 }
 
+const double Edge::getLength() const
+{
+	const double length = getDirection().norm();
+	assert(length > 0);
+	return length;
+}
+
 bool Edge::isAdjacient(const Vertex * A, const Vertex * B) const
 {
 	assert(A != nullptr);

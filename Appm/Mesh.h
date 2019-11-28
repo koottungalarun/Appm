@@ -48,6 +48,8 @@ public:
 	Face * getFace(const std::vector<Edge*> & faceEdges);
 	Cell * getCell(const int index) const;
 
+	const std::string getPrefix() const;
+
 	void createIncidenceMaps();
 
 	const int getNumberOfVertices() const;

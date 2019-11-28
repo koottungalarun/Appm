@@ -12,11 +12,19 @@ public:
 
 	void run();
 
+
 private:
 	PrimalMesh primalMesh;
 	DualMesh dualMesh;
 
+	Eigen::VectorXd bvec, dvec, evec, hvec, jvec;
 
-	void writeMesh();
+	std::vector<double> timeStamps;
+
+	void writeXdmf();
+	void writeXdmfPrimalMesh();
+	void writeXdmfDualMesh();
+
+	void writeOutput(const int iteration, const double time);
 };
 

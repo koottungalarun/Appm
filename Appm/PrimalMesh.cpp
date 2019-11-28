@@ -23,8 +23,8 @@ PrimalMesh::~PrimalMesh()
 void PrimalMesh::init()
 {
 	init_hexagon();
-	const int nRefinements = 0;
-	const int nOuterMeshLayers = 0;
+	const int nRefinements = 2;
+	const int nOuterMeshLayers = 1;
 	if (nOuterMeshLayers > 0) {
 		assert(nRefinements > 1);
 	}
@@ -33,7 +33,7 @@ void PrimalMesh::init()
 
 	outerMeshExtrude(nOuterMeshLayers);
 
-	const int nLayers = 1;
+	const int nLayers = 5;
 	const double zmax = 1;
 	extrudeMesh(nLayers, zmax);
 }

@@ -20,6 +20,7 @@ public:
 	Vertex * getVertexB();
 	const Vertex * getVertexB() const;
 	const Eigen::Vector3d getDirection() const;
+	const double getLength() const;
 
 	bool isAdjacient(const Vertex * A, const Vertex * B) const;
 	bool isAdjacient(const Vertex * A, const Vertex * B);

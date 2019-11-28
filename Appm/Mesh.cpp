@@ -54,8 +54,8 @@ void Mesh::writeToFile()
 
 	std::ofstream file;
 
-	const int nVertices = vertexList.size();
-	const int nEdges = edgeList.size();
+	const int nVertices = getNumberOfVertices();
+	const int nEdges = getNumberOfEdges();
 
 	// Write vertices to file
 	Eigen::Matrix3Xd positions(3, nVertices);
@@ -78,7 +78,13 @@ void Mesh::writeToFile()
 	Eigen::sparseMatrixToFile(face2edgeMap, this->meshPrefix + "-f2e.dat");
 	Eigen::sparseMatrixToFile(cell2faceMap, this->meshPrefix + "-c2f.dat");
 
-	const int nFaces = faceList.size();
+	Eigen::VectorXd edgeLength(nEdges);
+	for (int i = 0; i < nEdges; i++) {
+		edgeLength(i) = getEdge(i)->getLength();
+	}
+	h5writer.writeData(edgeLength, "/edgeLength");
+
+	const int nFaces = getNumberOfFaces();
 	Eigen::MatrixXi f2v(3, nFaces);
 	for (int j = 0; j < nFaces; j++) {
 		const Face * face = faceList[j];
@@ -95,44 +101,32 @@ void Mesh::writeToFile()
 	file << f2v.transpose() << std::endl;
 
 	Eigen::Matrix3Xd fc(3, nFaces);
+	Eigen::Matrix3Xd fn(3, nFaces);
+	Eigen::VectorXi faceIdx(nFaces);
+	Eigen::VectorXi faceBoundary(nFaces);
+	Eigen::VectorXd faceArea(nFaces);
 	for (int i = 0; i < nFaces; i++) {
 		fc.col(i) = getFace(i)->getCenter();
+		fn.col(i) = getFace(i)->getNormal();
+		faceIdx(i) = getFace(i)->getIndex();
+		faceBoundary(i) = getFace(i)->isBoundary();
+		faceArea(i) = getFace(i)->getArea();
 	}
 	h5writer.writeData(fc, "/faceCenter");
-	//file = std::ofstream(this->meshPrefix + "-faceCenter.dat");
-	//file << fc.transpose() << std::endl;
-
-	Eigen::Matrix3Xd fn(3, nFaces);
-	for (int i = 0; i < nFaces; i++) {
-		fn.col(i) = getFace(i)->getNormal();
-	}
-	h5writer.writeData(fn, "/faceNormal");
-	//file = std::ofstream(this->meshPrefix + "-faceNormal.dat");
-	//file << fn.transpose() << std::endl;
-
-	Eigen::VectorXi faceBoundary(nFaces);
-	for (int i = 0; i < nFaces; i++) {
-		faceBoundary(i) = getFace(i)->isBoundary();
-	}
+	h5writer.writeData(faceIdx, "/faceIndex");
 	h5writer.writeData(faceBoundary, "/isFaceBoundary");
-	//file = std::ofstream(this->meshPrefix + "-faceBoundary.dat");
-	//file << faceBoundary << std::endl;
+	h5writer.writeData(fn, "/faceNormal");
+	h5writer.writeData(faceArea, "/faceArea");
 
 	const std::vector<int> face2vertexIdx = getXdmfTopology_face2vertexIndices();
 	h5writer.writeData(face2vertexIdx, "/face2vertex");
 
-	const int nCells = cellList.size();
+	const int nCells = getNumberOfCells();
 	Eigen::Matrix3Xd cellCenters(3, nCells);
 	for (int i = 0; i < nCells; i++) {
 		cellCenters.col(i) = getCell(i)->getCenter();
 	}
 	h5writer.writeData(cellCenters, "/cellCenter");
-
-	Eigen::VectorXi faceIdx(nFaces);
-	for (int i = 0; i < nFaces; i++) {
-		faceIdx(i) = getFace(i)->getIndex();
-	}
-	h5writer.writeData(faceIdx, "/faceIndex");
 
 	Eigen::VectorXi cellIdx(nCells);
 	for (int i = 0; i < nCells; i++) {
@@ -327,6 +321,11 @@ Cell * Mesh::getCell(const int index) const
 	assert(index >= 0);
 	assert(index < cellList.size());
 	return cellList[index];
+}
+
+const std::string Mesh::getPrefix() const
+{
+	return meshPrefix;
 }
 
 void Mesh::createIncidenceMaps()
@@ -640,7 +639,7 @@ void Mesh::writeXdmf_surface()
 	std::stringstream body;
 	XmlElement * dataItem;
 
-	std::string filename = "appm-" + this->meshPrefix + "-surface.xdmf";
+	std::string filename = this->meshPrefix + "-surface.xdmf";
 	std::cout << "Write XDMF file: " << filename << std::endl;
 
 	XmlElement root("<Xdmf Version=\"3.0\" xmlns:xi=\"[http://www.w3.org/2001/XInclude]\">", "</Xdmf>");
@@ -700,7 +699,7 @@ void Mesh::writeXdmf_volume()
 	std::stringstream body;
 	XmlElement * dataItem;
 
-	std::string filename = "appm-" + this->meshPrefix + "-volume.xdmf";
+	std::string filename = this->meshPrefix + "-volume.xdmf";
 	std::cout << "Write XDMF file: " << filename << std::endl;
 
 	XmlElement root("<Xdmf Version=\"3.0\" xmlns:xi=\"[http://www.w3.org/2001/XInclude]\">", "</Xdmf>");

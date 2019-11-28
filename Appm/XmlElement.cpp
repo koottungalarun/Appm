@@ -31,7 +31,10 @@ void XmlElement::addChild(XmlElement * child)
 
 std::ostream & operator<<(std::ostream & os, const XmlElement & obj)
 {
-	os << obj.startTag << std::endl;
+	os << obj.startTag;
+	if (obj.endTag.size() > 0 || obj.body.size() > 0) {
+		os << std::endl;
+	}
 	if (obj.body.size() > 0) {
 		os << obj.body << std::endl;
 	}

@@ -259,6 +259,8 @@ paket-files/
 # Python Tools for Visual Studio (PTVS)
 __pycache__/
 *.pyc
+
+# Other file extensions to be ignored
 *.xdmf
 *.dat
 *.m
@@ -267,3 +269,4 @@ __pycache__/
 *.aux
 *.gz
 *.toc
+*.tdo

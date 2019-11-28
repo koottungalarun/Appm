@@ -8,7 +8,7 @@ class XmlElement
 {
 public:
 	XmlElement();
-	XmlElement(const std::string & startTag, const std::string & endTag, const std::string & body = "");
+	XmlElement(const std::string & startTag, const std::string & endTag = "", const std::string & body = "");
 	~XmlElement();
 
 	void addChild(XmlElement * child);

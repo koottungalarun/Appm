@@ -4,9 +4,21 @@
 \usepackage[T1]{fontenc}
 \usepackage{amsmath,amssymb}
 \usepackage{url}
+\usepackage{todonotes}
 
 
 \usepackage{lmodern}
+
+\let\oldeps=\epsilon
+\renewcommand{\epsilon}{\varepsilon}
+
+% Vector letters
+\newcommand{\vecLetter}[1]{\vec{#1}}
+\newcommand{\Bvec}{\vecLetter{B}}
+\newcommand{\Dvec}{\vecLetter{D}}
+\newcommand{\Evec}{\vecLetter{E}}
+\newcommand{\Hvec}{\vecLetter{H}}
+\newcommand{\Jvec}{\vecLetter{J}}
 
 
 
@@ -20,6 +32,8 @@
 
 \tableofcontents
 
+\listoftodos
+
 \vspace{2em}
 
 APPM: asymptotic preserving plasma model.
@@ -30,7 +44,31 @@ Aim of the code: show the feasibility of a plasma model that is based
 on the Maxwell Grid Equations (see Finite Integration Technique) for 
 electromagnetism and the Navier-Stokes equations for the fluid. 
 
-Equations:
+Maxwell equations:
+
+\begin{subequations}
+\begin{equation}
+\partial_t \Bvec + \nabla \times \Evec = 0
+\end{equation}
+\begin{equation}
+\partial_t \Dvec - \nabla \times \Hvec = -\Jvec
+\end{equation}
+\begin{equation}
+\nabla \cdot B = 0
+\end{equation}
+\begin{equation}
+\nabla \cdot D = \rho
+\end{equation}
+($\rho$: space charge density)
+\begin{equation}
+\Dvec = \epsilon \Evec
+\end{equation}
+\begin{equation}
+\Bvec = \frac{1}{\mu} \Hvec
+\end{equation}
+\end{subequations}
+
+
 
 
 
@@ -77,6 +115,29 @@ For each cell: celltype + list of vertex indices. Except for a polyhedral: cellt
 
 
 \subsection{Data}
+
+
+
+\section{Testcases}
+
+
+\subsection{Uniform current, determine magnetic fields}
+
+Define current density in z-direction, at radius $r < r_0$. 
+
+
+
+
+
+\section{TODO}
+
+\todo[inline]{Output file (*.xdmf) must be written separately for primal and dual mesh. As of now, Paraview supports EITHER a spatial collection of grids OR a temporal grid of a single mesh. It does not support multiple grids AND time variations. --
+No, it does! (the time value tag was at wrong place)
+}
+
+\todo[inline]{Leapfrog scheme}
+
+\todo[inline]{Raviart-Thomas interpolation of magnetic flux $B$}
 
 
 
