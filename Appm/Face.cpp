@@ -229,7 +229,7 @@ const Eigen::Vector3d Face::getCenter() const
 	return center;
 }
 
-const int Face::getArea() const
+const double Face::getArea() const
 {
 	return area;
 }

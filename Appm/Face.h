@@ -29,7 +29,7 @@ public:
 	bool hasBoundaryEdges() const;
 
 	const Eigen::Vector3d getCenter() const;
-	const int getArea() const;
+	const double getArea() const;
 
 	bool hasCommonCell(const Face * other) const;
 	Cell * getCommonCell(const Face * other) const;

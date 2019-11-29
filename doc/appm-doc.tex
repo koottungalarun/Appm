@@ -117,6 +117,28 @@ For each cell: celltype + list of vertex indices. Except for a polyhedral: cellt
 \subsection{Data}
 
 
+\section{Visualization}
+
+\begin{itemize}
+\item Use ParaView
+\item Open file \texttt{appm.xdmf}
+\item Select Reader \texttt{XDMF Reader} (other options: XMDF Reader S, XDMF Reader T; they do not work)
+
+\item To visualize data on a given mesh: add Filter, extract Block.
+\end{itemize}
+
+
+Vectors:
+
+\begin{itemize}
+\item Add Filter -> Glyphs
+\item Orientation array = \ldots
+\item Scale array = \ldots
+\item Masking / Glyph mode = All points
+\end{itemize}
+
+
+
 
 \section{Testcases}
 

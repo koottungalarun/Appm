@@ -84,6 +84,20 @@ void Mesh::writeToFile()
 	}
 	h5writer.writeData(edgeLength, "/edgeLength");
 
+	Eigen::Matrix2Xi edge2Vertex(2, nEdges);
+	for (int i = 0; i < nEdges; i++) {
+		edge2Vertex(0, i) = getEdge(i)->getVertexA()->getIndex();
+		edge2Vertex(1, i) = getEdge(i)->getVertexB()->getIndex();
+	}
+	h5writer.writeData(edge2Vertex, "/edge2vertex");
+
+	Eigen::VectorXi edgeIdx(nEdges);
+	for (int i = 0; i < nEdges; i++) {
+		edgeIdx(i) = getEdge(i)->getIndex();
+	}
+	h5writer.writeData(edgeIdx, "/edgeIdx");
+
+
 	const int nFaces = getNumberOfFaces();
 	Eigen::MatrixXi f2v(3, nFaces);
 	for (int j = 0; j < nFaces; j++) {
@@ -111,6 +125,7 @@ void Mesh::writeToFile()
 		faceIdx(i) = getFace(i)->getIndex();
 		faceBoundary(i) = getFace(i)->isBoundary();
 		faceArea(i) = getFace(i)->getArea();
+		assert(faceArea(i) > 1e-3);
 	}
 	h5writer.writeData(fc, "/faceCenter");
 	h5writer.writeData(faceIdx, "/faceIndex");
@@ -649,7 +664,7 @@ void Mesh::writeXdmf_surface()
 	XmlElement * grid = new XmlElement("<Grid Name=\"Appm faces\">", "</Grid>");
 	domain->addChild(grid);
 
-	ss << "<Topology TopologyType=\"Mixed\">";
+	ss << "<Topology TopologyType=\"Mixed\" NumberOfElements=\"" << getNumberOfFaces() << "\">";
 	XmlElement * topology = new XmlElement(ss.str(), "</Topology>");
 	grid->addChild(topology);
 
@@ -673,10 +688,11 @@ void Mesh::writeXdmf_surface()
 	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
 	geometry->addChild(dataItem);
 
+	XmlElement * attribute;
 	// Attribute: face index
 	ss = std::stringstream();
 	ss << "<Attribute Name=\"Face index\" AttributeType=\"Scalar\" Center=\"Cell\">";
-	XmlElement * attribute = new XmlElement(ss.str(), "</Attribute>");
+	attribute = new XmlElement(ss.str(), "</Attribute>");
 	body = std::stringstream();
 	body << (this->meshPrefix + "-mesh.h5:/faceIndex");
 	ss = std::stringstream();
@@ -685,8 +701,19 @@ void Mesh::writeXdmf_surface()
 	attribute->addChild(dataItem);
 	grid->addChild(attribute);
 
+	// Attribute: face area
+	ss = std::stringstream();
+	ss << "<Attribute Name=\"Face Area\" AttributeType=\"Scalar\" Center=\"Cell\">";
+	attribute = new XmlElement(ss.str(), "</Attribute>");
+	body = std::stringstream();
+	body << (this->meshPrefix + "-mesh.h5:/faceArea");
+	ss = std::stringstream();
+	ss << "<DataItem Format=\"HDF\" DataType=\"Float\" Precision=\"8\" Dimensions=\"" << getNumberOfFaces() << "\">";
+	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
+	attribute->addChild(dataItem);
+	grid->addChild(attribute);
 
-
+	// Write output file
 	std::ofstream file(filename);
 	file << "<?xml version=\"1.0\" ?>" << std::endl;
 	file << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << std::endl;
@@ -709,7 +736,7 @@ void Mesh::writeXdmf_volume()
 	XmlElement * grid = new XmlElement("<Grid Name=\"Appm cells\">", "</Grid>");
 	domain->addChild(grid);
 
-	ss << "<Topology TopologyType=\"Mixed\">";
+	ss << "<Topology TopologyType=\"Mixed\" NumberOfElements=\"" << getNumberOfCells() << "\">";
 	XmlElement * topology = new XmlElement(ss.str(), "</Topology>");
 	grid->addChild(topology);
 	
