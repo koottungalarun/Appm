@@ -68,6 +68,11 @@ void Mesh::writeToFile()
 	const std::string h5filename = this->meshPrefix + "-mesh.h5";
 	H5Writer h5writer(h5filename);
 	h5writer.writeData(positions, "/vertexPos");
+	Eigen::VectorXi vertexIdx(nVertices);
+	for (int i = 0; i < nVertices; i++) {
+		vertexIdx(i) = getVertex(i)->getIndex();
+	}
+	h5writer.writeData(vertexIdx, "/vertexIdx");
 
 	//file = std::ofstream(this->meshPrefix + "-coords.dat");
 	//file << vertexCoordinates.transpose() << std::endl;
@@ -169,8 +174,26 @@ void Mesh::writeToFile()
 
 void Mesh::writeXdmf()
 {
-	writeXdmf_surface();
-	writeXdmf_volume();
+	XdmfRoot root;
+	XdmfDomain domain;
+
+	//XdmfGrid::GridTags treeGridTags;
+	//treeGridTags.name = "Grid of grids";
+	//treeGridTags.gridType = XdmfGrid::GridType::Tree;
+	//XdmfGrid treeGrid(treeGridTags);
+
+	XdmfGrid surfaceGrid = getXdmfSurfaceGrid();
+	domain.addChild(surfaceGrid);
+
+	//treeGrid.addChild(surfaceGrid);
+	//domain.addChild(treeGrid);
+	//XdmfGrid volumeGrid = getXdmfVolumeGrid();
+	//domain.addChild(volumeGrid);
+	root.addChild(domain);
+
+	std::string filename = this->meshPrefix + "-mesh.xdmf";
+	std::ofstream file(filename);
+	file << root << std::endl;
 }
 
 Vertex * Mesh::addVertex(const Eigen::Vector3d & position)
@@ -648,137 +671,190 @@ void Mesh::create_cell2face_map()
 	//assert(temp.sum() == isBoundaryFace.sum());
 }
 
-void Mesh::writeXdmf_surface()
+XdmfGrid Mesh::getXdmfSurfaceGrid() const
 {
-	std::stringstream ss;
-	std::stringstream body;
-	XmlElement * dataItem;
-
-	std::string filename = this->meshPrefix + "-surface.xdmf";
-	std::cout << "Write XDMF file: " << filename << std::endl;
-
-	XmlElement root("<Xdmf Version=\"3.0\" xmlns:xi=\"[http://www.w3.org/2001/XInclude]\">", "</Xdmf>");
-	XmlElement * domain = new XmlElement("<Domain>", "</Domain>");
-	root.addChild(domain);
-
-	XmlElement * grid = new XmlElement("<Grid Name=\"Appm faces\">", "</Grid>");
-	domain->addChild(grid);
-
-	ss << "<Topology TopologyType=\"Mixed\" NumberOfElements=\"" << getNumberOfFaces() << "\">";
-	XmlElement * topology = new XmlElement(ss.str(), "</Topology>");
-	grid->addChild(topology);
-
-	const int nFaces = faceList.size();
 	H5Reader h5reader(this->meshPrefix + "-mesh.h5");
 
+	XdmfGrid surfaceGrid(XdmfGrid::Tags("FaceGrid"));
+
+	// Topology
+	XdmfTopology topology(XdmfTopology::Tags(XdmfTopology::TopologyType::Mixed, getNumberOfFaces()));
+
+	// Topology DataItem
 	const int nElements = h5reader.readDataSize("/face2vertex");
-	ss = std::stringstream();
-	ss << "<DataItem Dimensions=\"" << nElements << "\" DataType=\"Int\" Format=\"HDF\">";
-	body = std::stringstream();
-	body << this->meshPrefix << "-mesh.h5:/face2vertex";
-	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
-	topology->addChild(dataItem);
+	topology.addChild(
+		XdmfDataItem(
+			XdmfDataItem::Tags(
+				{ nElements }, 
+				XdmfDataItem::NumberType::Int, 
+				XdmfDataItem::Format::HDF), 
+			(std::stringstream() << this->meshPrefix << "-mesh.h5:/face2vertex").str()
+		));
+	surfaceGrid.addChild(topology);
 
-	XmlElement * geometry = new XmlElement("<Geometry GeometryType=\"XYZ\">", "</Geometry>");
-	grid->addChild(geometry);
-	ss = std::stringstream();
-	ss << "<DataItem Dimensions=\"" << vertexCoordinates.cols() << " " << 3 << "\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">";
-	body = std::stringstream();
-	body << (this->meshPrefix + "-mesh.h5:/vertexPos");
-	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
-	geometry->addChild(dataItem);
+	// Geometry and Geometry DataItem
+	XdmfGeometry geometry;
+	geometry.addChild(
+		XdmfDataItem(
+			XdmfDataItem::Tags(
+				{ getNumberOfVertices(), 3 }, 
+				XdmfDataItem::NumberType::Float, 
+				XdmfDataItem::Format::HDF), 
+			(std::stringstream() << this->meshPrefix << "-mesh.h5:/vertexPos").str()
+		));
+	
+	surfaceGrid.addChild(geometry);
 
-	XmlElement * attribute;
 	// Attribute: face index
-	ss = std::stringstream();
-	ss << "<Attribute Name=\"Face index\" AttributeType=\"Scalar\" Center=\"Cell\">";
-	attribute = new XmlElement(ss.str(), "</Attribute>");
-	body = std::stringstream();
-	body << (this->meshPrefix + "-mesh.h5:/faceIndex");
-	ss = std::stringstream();
-	ss << "<DataItem Format=\"HDF\" DataType=\"Int\" Precision=\"4\" Dimensions=\"" << getNumberOfFaces() << "\">";
-	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
-	attribute->addChild(dataItem);
-	grid->addChild(attribute);
+	XdmfAttribute attributeFaceIdx(XdmfAttribute::Tags("Face Index", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
+	std::string faceIdxStringAttribute = (std::stringstream() << this->meshPrefix << "-mesh.h5:/faceIndex").str();
+	attributeFaceIdx.addChild(
+		XdmfDataItem(
+			XdmfDataItem::Tags(
+				{ getNumberOfFaces() },
+				XdmfDataItem::NumberType::Int,
+				XdmfDataItem::Format::HDF),
+			faceIdxStringAttribute));
+	surfaceGrid.addChild(attributeFaceIdx);
 
 	// Attribute: face area
-	ss = std::stringstream();
-	ss << "<Attribute Name=\"Face Area\" AttributeType=\"Scalar\" Center=\"Cell\">";
-	attribute = new XmlElement(ss.str(), "</Attribute>");
-	body = std::stringstream();
-	body << (this->meshPrefix + "-mesh.h5:/faceArea");
-	ss = std::stringstream();
-	ss << "<DataItem Format=\"HDF\" DataType=\"Float\" Precision=\"8\" Dimensions=\"" << getNumberOfFaces() << "\">";
-	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
-	attribute->addChild(dataItem);
-	grid->addChild(attribute);
-
-	// Write output file
-	std::ofstream file(filename);
-	file << "<?xml version=\"1.0\" ?>" << std::endl;
-	file << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << std::endl;
-	file << root << std::endl;
+	XdmfAttribute attributeFaceArea(XdmfAttribute::Tags("Face Area", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
+	std::string faceAreaStringAttribute = (std::stringstream() << this->meshPrefix << "-mesh.h5:/faceArea").str();
+	attributeFaceArea.addChild(
+		XdmfDataItem(
+			XdmfDataItem::Tags(
+				{ getNumberOfFaces() },
+				XdmfDataItem::NumberType::Float,
+				XdmfDataItem::Format::HDF),
+			faceAreaStringAttribute));
+	surfaceGrid.addChild(attributeFaceArea);
+	
+	return surfaceGrid;
 }
 
-void Mesh::writeXdmf_volume()
+XdmfGrid Mesh::getXdmfVolumeGrid() const
 {
-	std::stringstream ss;
-	std::stringstream body;
-	XmlElement * dataItem;
+	H5Reader h5reader(this->meshPrefix + "-mesh.h5");
+	XdmfGrid volumeGrid(XdmfGrid::Tags("VolumeGrid"));
 
-	std::string filename = this->meshPrefix + "-volume.xdmf";
-	std::cout << "Write XDMF file: " << filename << std::endl;
+	// Topology
+	XdmfTopology topology(XdmfTopology::Tags(XdmfTopology::TopologyType::Mixed, getNumberOfCells()));
 
-	XmlElement root("<Xdmf Version=\"3.0\" xmlns:xi=\"[http://www.w3.org/2001/XInclude]\">", "</Xdmf>");
-	XmlElement * domain = new XmlElement("<Domain>", "</Domain>");
-	root.addChild(domain);
+	// Topology DataItem
+	const int nElements = h5reader.readDataSize("/cell2vertex");
+	topology.addChild(
+		XdmfDataItem(
+			XdmfDataItem::Tags(
+				{ nElements },
+				XdmfDataItem::NumberType::Int,
+				XdmfDataItem::Format::HDF),
+				(std::stringstream() << this->meshPrefix << "-mesh.h5:/cell2vertex").str()
+		));
+	volumeGrid.addChild(topology);
 
-	XmlElement * grid = new XmlElement("<Grid Name=\"Appm cells\">", "</Grid>");
-	domain->addChild(grid);
+	// Geometry and Geometry DataItem
+	XdmfGeometry geometry;
+	geometry.addChild(
+		XdmfDataItem(
+			XdmfDataItem::Tags(
+				{ getNumberOfVertices(), 3 },
+				XdmfDataItem::NumberType::Float,
+				XdmfDataItem::Format::HDF),
+				(std::stringstream() << this->meshPrefix << "-mesh.h5:/vertexPos").str()
+		));
 
-	ss << "<Topology TopologyType=\"Mixed\" NumberOfElements=\"" << getNumberOfCells() << "\">";
-	XmlElement * topology = new XmlElement(ss.str(), "</Topology>");
-	grid->addChild(topology);
-	
-	ss = std::stringstream();
-
-	// Version with HDF
-	const std::string h5filename = (this->meshPrefix) + "-mesh.h5";
-	H5Reader h5reader(h5filename);
-	const std::string dataname = "/cell2vertex";
-	const int nElements = h5reader.readDataSize(dataname); 
-	body = std::stringstream();
-	body << (this->meshPrefix + "-mesh.h5:/cell2vertex");
-	ss << "<DataItem Dimensions=\"" << nElements << "\" DataType=\"Int\" Format=\"HDF\">";
-
-	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
-	topology->addChild(dataItem);
-
-	XmlElement * geometry = new XmlElement("<Geometry GeometryType=\"XYZ\">", "</Geometry>");
-	grid->addChild(geometry);
-	ss = std::stringstream();
-	ss << "<DataItem Dimensions=\"" << vertexCoordinates.cols() << " " << 3 << "\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">";
-	body = std::stringstream();
-	//body << vertexCoordinates.transpose();
-	body << (this->meshPrefix + "-mesh.h5:/vertexPos");
-	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
-	geometry->addChild(dataItem);
+	volumeGrid.addChild(geometry);
 
 	// Attribute: cell index
-	ss = std::stringstream();
-	ss << "<Attribute Name=\"Cell index\" AttributeType=\"Scalar\" Center=\"Cell\">";
-	XmlElement * attribute = new XmlElement(ss.str(), "</Attribute>");
-	body = std::stringstream();
-	body << (this->meshPrefix + "-mesh.h5:/cellIndex");
-	ss = std::stringstream();
-	ss << "<DataItem Format=\"HDF\" DataType=\"Int\" Precision=\"4\" Dimensions=\"" << getNumberOfCells() << "\">";
-	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
-	attribute->addChild(dataItem);
-	grid->addChild(attribute);
+	{
+		XdmfAttribute attribute(XdmfAttribute::Tags("Cell Index", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
+		std::string bodyString = (std::stringstream() << this->meshPrefix << "-mesh.h5:/cellIndex").str();
+		attribute.addChild(
+			XdmfDataItem(
+				XdmfDataItem::Tags(
+					{ getNumberOfCells() },
+					XdmfDataItem::NumberType::Int,
+					XdmfDataItem::Format::HDF),
+				bodyString));
+		volumeGrid.addChild(attribute);
+	}
 
+	// Attribute: cell volume (does not yet exist)
+	//{
+	//	XdmfAttribute attribute(XdmfAttribute::Tags("Cell Volume", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
+	//	std::string bodyString = (std::stringstream() << this->meshPrefix << "-mesh.h5:/cellVolume").str();
+	//	attribute.addChild(
+	//		XdmfDataItem(
+	//			XdmfDataItem::Tags(
+	//				{ getNumberOfCells() },
+	//				XdmfDataItem::NumberType::Float,
+	//				XdmfDataItem::Format::HDF),
+	//			bodyString));
+	//	volumeGrid.addChild(attribute);
+	//}
 
-	std::ofstream file(filename);
-	file << "<?xml version=\"1.0\" ?>" << std::endl;
-	file << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << std::endl;
-	file << root << std::endl;
+	return volumeGrid;
 }
+
+//void Mesh::writeXdmf_volume()
+//{
+//	std::stringstream ss;
+//	std::stringstream body;
+//	XmlElement * dataItem;
+//
+//	std::string filename = this->meshPrefix + "-volume.xdmf";
+//	std::cout << "Write XDMF file: " << filename << std::endl;
+//
+//	XmlElement root("<Xdmf Version=\"3.0\" xmlns:xi=\"[http://www.w3.org/2001/XInclude]\">", "</Xdmf>");
+//	XmlElement * domain = new XmlElement("<Domain>", "</Domain>");
+//	root.addChild(domain);
+//
+//	XmlElement * grid = new XmlElement("<Grid Name=\"Appm cells\">", "</Grid>");
+//	domain->addChild(grid);
+//
+//	ss << "<Topology TopologyType=\"Mixed\" NumberOfElements=\"" << getNumberOfCells() << "\">";
+//	XmlElement * topology = new XmlElement(ss.str(), "</Topology>");
+//	grid->addChild(topology);
+//	
+//	ss = std::stringstream();
+//
+//	// Version with HDF
+//	const std::string h5filename = (this->meshPrefix) + "-mesh.h5";
+//	H5Reader h5reader(h5filename);
+//	const std::string dataname = "/cell2vertex";
+//	const int nElements = h5reader.readDataSize(dataname); 
+//	body = std::stringstream();
+//	body << (this->meshPrefix + "-mesh.h5:/cell2vertex");
+//	ss << "<DataItem Dimensions=\"" << nElements << "\" DataType=\"Int\" Format=\"HDF\">";
+//
+//	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
+//	topology->addChild(dataItem);
+//
+//	XmlElement * geometry = new XmlElement("<Geometry GeometryType=\"XYZ\">", "</Geometry>");
+//	grid->addChild(geometry);
+//	ss = std::stringstream();
+//	ss << "<DataItem Dimensions=\"" << vertexCoordinates.cols() << " " << 3 << "\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">";
+//	body = std::stringstream();
+//	//body << vertexCoordinates.transpose();
+//	body << (this->meshPrefix + "-mesh.h5:/vertexPos");
+//	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
+//	geometry->addChild(dataItem);
+//
+//	// Attribute: cell index
+//	ss = std::stringstream();
+//	ss << "<Attribute Name=\"Cell index\" AttributeType=\"Scalar\" Center=\"Cell\">";
+//	XmlElement * attribute = new XmlElement(ss.str(), "</Attribute>");
+//	body = std::stringstream();
+//	body << (this->meshPrefix + "-mesh.h5:/cellIndex");
+//	ss = std::stringstream();
+//	ss << "<DataItem Format=\"HDF\" DataType=\"Int\" Precision=\"4\" Dimensions=\"" << getNumberOfCells() << "\">";
+//	dataItem = new XmlElement(ss.str(), "</DataItem>", body.str());
+//	attribute->addChild(dataItem);
+//	grid->addChild(attribute);
+//
+//
+//	std::ofstream file(filename);
+//	file << "<?xml version=\"1.0\" ?>" << std::endl;
+//	file << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << std::endl;
+//	file << root << std::endl;
+//}

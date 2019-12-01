@@ -6,41 +6,66 @@ XmlElement::XmlElement()
 {
 }
 
-XmlElement::XmlElement(const std::string & startTag, const std::string & endTag, const std::string & body)
-{
-	this->startTag = startTag;
-	this->endTag = endTag;
-	this->body = body;
-}
-
-
 XmlElement::~XmlElement()
 {
-	if (children.size() > 0) {
-		for (auto child : children) {
-			delete child;
-		}
-	}
-	children.resize(0);
 }
 
-void XmlElement::addChild(XmlElement * child)
+void XmlElement::addChild(const XmlElement & child)
 {
 	children.push_back(child);
 }
 
+void XmlElement::setStartTag(const std::string & tag)
+{
+	this->startTag = tag;
+}
+
+void XmlElement::setEndTag(const std::string & tag)
+{
+	this->endTag = tag;
+}
+
+void XmlElement::setBody(const std::string & text)
+{
+	this->body = text;
+}
+
+
+const std::string & XmlElement::getStartTag() const
+{
+	return startTag;
+}
+
+const std::string & XmlElement::getEndTag() const
+{
+	return endTag;
+}
+
+const std::string & XmlElement::getBody() const
+{
+	return body;
+}
+
+const std::vector<XmlElement> & XmlElement::getChildren() const
+{
+	return children;
+}
+
+
 std::ostream & operator<<(std::ostream & os, const XmlElement & obj)
 {
-	os << obj.startTag;
-	if (obj.endTag.size() > 0 || obj.body.size() > 0) {
+	os << obj.getStartTag();
+	if (obj.getBody().size() > 0) {
 		os << std::endl;
-	}
-	if (obj.body.size() > 0) {
-		os << obj.body << std::endl;
+		os << obj.getBody();
 	}
 	for (auto child : obj.children) {
-		os << *child << std::endl;
+		os << std::endl;
+		os << child;
 	}
-	os << obj.endTag;
+	if (obj.getEndTag().size() > 0) {
+		os << std::endl;
+		os << obj.endTag;
+	}
 	return os;
 }

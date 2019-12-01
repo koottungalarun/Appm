@@ -7,6 +7,7 @@ int main() {
 	Main main;
 	main.run();
 	std::cout << "TERMINATED" << std::endl;
+	return EXIT_SUCCESS;
 }
 
 

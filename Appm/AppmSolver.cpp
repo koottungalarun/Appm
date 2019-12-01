@@ -26,6 +26,7 @@ void AppmSolver::run()
 	dualMesh.init_dualMesh(primalMesh);
 	dualMesh.writeToFile();
 	dualMesh.writeXdmf();
+	return;
 
 	// Define data vectors
 	bvec = Eigen::VectorXd::Zero(primalMesh.getNumberOfFaces());
@@ -122,147 +123,147 @@ void AppmSolver::writeXdmf()
 	file << "<?xml version=\"1.0\" ?>" << std::endl;
 	file << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << std::endl;
 
-	XmlElement root("<Xdmf Version=\"3.0\" xmlns:xi=\"[http://www.w3.org/2001/XInclude]\">", "</Xdmf>");
-	XmlElement * domain = new XmlElement("<Domain>", "</Domain>");
-	root.addChild(domain);
+	//XmlElement root("<Xdmf Version=\"3.0\" xmlns:xi=\"[http://www.w3.org/2001/XInclude]\">", "</Xdmf>");
+	//XmlElement * domain = new XmlElement("<Domain>", "</Domain>");
+	//root.addChild(domain);
 
-	XmlElement * timeGrid = new XmlElement("<Grid Name=\"Time Grid\" GridType=\"Collection\" CollectionType=\"Temporal\">", "</Grid>");
-	domain->addChild(timeGrid);
+	//XmlElement * timeGrid = new XmlElement("<Grid Name=\"Time Grid\" GridType=\"Collection\" CollectionType=\"Temporal\">", "</Grid>");
+	//domain->addChild(timeGrid);
 
-	std::stringstream body;
-	std::stringstream headTag;
+	//std::stringstream body;
+	//std::stringstream headTag;
 
-	XmlElement * topology;
-	XmlElement * dataItem;
-	XmlElement * geometry;
-	XmlElement * attribute;
+	//XmlElement * topology;
+	//XmlElement * dataItem;
+	//XmlElement * geometry;
+	//XmlElement * attribute;
 
-	H5Reader h5reader;
-	h5reader = H5Reader("primal-mesh.h5");
-	const int nElemPrimalTopo = h5reader.readDataSize("/face2vertex");
-	assert(nElemPrimalTopo > 0);
-	
-	h5reader = H5Reader("dual-mesh.h5");
-	const int nElemDualTopo = h5reader.readDataSize("/face2vertex");
-	assert(nElemDualTopo > 0);
-
-
-
-	for (int i = 0; i < nTimesteps; i++) {
-		
-		const std::string datafilename = (std::stringstream() << "appm-" << i << ".h5").str();
-		XmlElement * gridList = new XmlElement("<Grid Name=\"Two Grids\" GridType=\"Tree\">", "</Grid>");
-		
-		XmlElement * timeTag = new XmlElement((std::stringstream() << "<Time Value=\"" << timeStamps[i] << "\"/>").str());
-		gridList->addChild(timeTag);
-	
-		// Primal surface grid
-		XmlElement * primalGrid = new XmlElement("<Grid Name=\"Primal\" GridType=\"Uniform\">", "</Grid>");
-		topology = new XmlElement((std::stringstream() << "<Topology TopologyType=\"Mixed\" NumberOfElements=\"" << primalMesh.getNumberOfFaces() << "\">").str(), "</Topology>");
-		body = std::stringstream();
-		body << primalMesh.getPrefix() << "-mesh.h5:/face2vertex";
-		headTag = std::stringstream();
-		headTag << "<DataItem Dimensions=\"" << nElemPrimalTopo << "\" DataType=\"Int\" Format=\"HDF\">";
-		dataItem = new XmlElement(headTag.str(), "</DataItem>", body.str());
-		topology->addChild(dataItem);
-		primalGrid->addChild(topology);
-
-		geometry = new XmlElement("<Geometry GeometryType=\"XYZ\">", "</Geometry>");
-		headTag = std::stringstream();
-		headTag << "<DataItem Dimensions=\"" << primalMesh.getNumberOfVertices() << " 3\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">";
-		body = std::stringstream() << primalMesh.getPrefix() << "-mesh.h5:/vertexPos";
-		dataItem = new XmlElement(headTag.str(), "</DataItem>", body.str());
-		geometry->addChild(dataItem);
-		primalGrid->addChild(geometry);
-
-		// Attribute: B-field
-		attribute = new XmlElement("<Attribute Name=\"Magnetic Flux\" AttributeType=\"Vector\" Center=\"Cell\">", "</Attribute>");
-		body = std::stringstream() << datafilename << ":" << "/B";
-		headTag = std::stringstream() << "<DataItem Dimensions=\"" << primalMesh.getNumberOfFaces() << " 3\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">";
-		dataItem = new XmlElement(headTag.str(), "</DataItem>", body.str());
-		attribute->addChild(dataItem);
-		primalGrid->addChild(attribute);
-
-		// Dual surface grid
-		XmlElement * dualGrid = new XmlElement("<Grid Name=\"Dual\" GridType=\"Uniform\">", "</Grid>");
-		topology = new XmlElement((std::stringstream() << "<Topology TopologyType=\"Mixed\" NumberOfElements=\"" << dualMesh.getNumberOfFaces() << "\">").str(), "</Topology>");
-		body = std::stringstream();
-		body << dualMesh.getPrefix() << "-mesh.h5:/face2vertex";
-		headTag = std::stringstream();
-		headTag << "<DataItem Dimensions=\"" << nElemDualTopo << "\" DataType=\"Int\" Format=\"HDF\">";
-		dataItem = new XmlElement(headTag.str(), "</DataItem>", body.str());
-		topology->addChild(dataItem);
-		dualGrid->addChild(topology);
-
-		geometry = new XmlElement("<Geometry GeometryType=\"XYZ\">", "</Geometry>");
-		headTag = std::stringstream();
-		headTag << "<DataItem Dimensions=\"" << dualMesh.getNumberOfVertices() << " 3\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">";
-		body = std::stringstream() << dualMesh.getPrefix() << "-mesh.h5:/vertexPos";
-		dataItem = new XmlElement(headTag.str(), "</DataItem>", body.str());
-		geometry->addChild(dataItem);
-		dualGrid->addChild(geometry);
-
-		// Attribute: D-field
-		attribute = new XmlElement("<Attribute Name=\"Displacement Field\" AttributeType=\"Vector\" Center=\"Cell\">", "</Attribute>");
-		body = std::stringstream() << datafilename << ":" << "/D";
-		headTag = std::stringstream() << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">";
-		dataItem = new XmlElement(headTag.str(), "</DataItem>", body.str());
-		attribute->addChild(dataItem);
-		dualGrid->addChild(attribute);
-
-		// Attribute: J-field
-		attribute = new XmlElement("<Attribute Name=\"Current\" AttributeType=\"Vector\" Center=\"Cell\">", "</Attribute>");
-		body = std::stringstream() << datafilename << ":" << "/J";
-		headTag = std::stringstream() << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">";
-		dataItem = new XmlElement(headTag.str(), "</DataItem>", body.str());
-		attribute->addChild(dataItem);
-		dualGrid->addChild(attribute);
-
-		// Primal edge grid
-		XmlElement * primalEdgeGrid = new XmlElement("<Grid Name=\"PrimalEdges\" GridType=\"Uniform\">", "</Grid>");
-		topology = new XmlElement((std::stringstream() << "<Topology TopologyType=\"Polyline\" NumberOfElements=\"" << primalMesh.getNumberOfEdges() << "\" NodesPerElement=\"2\">").str(), "</Topology>");
-		body = std::stringstream() << primalMesh.getPrefix() << "-mesh.h5" << ":/edge2vertex";
-		dataItem = new XmlElement((std::stringstream() << "<DataItem Dimensions=\"" << 2*primalMesh.getNumberOfEdges() << "\" DataType=\"Int\" Precision=\"4\" Format=\"HDF\">").str(), "</DataItem>", body.str());
-		topology->addChild(dataItem);
-		primalEdgeGrid->addChild(topology);
-
-		geometry = new XmlElement("<Geometry GeometryType=\"XYZ\">", "</Geometry>");
-		body = std::stringstream() << primalMesh.getPrefix() << "-mesh.h5" << ":/vertexPos";
-		dataItem = new XmlElement((std::stringstream() << "<DataItem Dimensions=\"" << primalMesh.getNumberOfVertices() << " 3\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">").str(), "</DataItem>", body.str());
-		geometry->addChild(dataItem);
-		primalEdgeGrid->addChild(geometry);
-
-		// Attribute: edge index
-		//attribute = new XmlElement("<Attribute Name=\"EdgeIndex\" AttributeType=\"Scalar\" Center=\"Cell\">", "</Attribute>");
-		//body = std::stringstream() << primalMesh.getPrefix() << "-mesh.h5:" << "/edgeIdx";
-		//headTag = std::stringstream() << "<DataItem Dimensions=\"" << primalMesh.getNumberOfEdges() << "\" DataType=\"Int\" Precision=\"4\" Format=\"HDF\">";
-		//dataItem = new XmlElement(headTag.str(), "</DataItem>", body.str());
-		//attribute->addChild(dataItem);
-		//primalEdgeGrid->addChild(attribute);
-
-		// Attribute: E-field
-		attribute = new XmlElement("<Attribute Name=\"Electric Field\" AttributeType=\"Vector\" Center=\"Cell\">", "</Attribute>");
-		body = std::stringstream() << datafilename << ":" << "/E";
-		dataItem = new XmlElement((std::stringstream() << "<DataItem Dimensions=\"" << primalMesh.getNumberOfEdges() << " 3\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">").str(), "</DataItem>", body.str());
-		attribute->addChild(dataItem);
-		primalEdgeGrid->addChild(attribute);
-
-		attribute = new XmlElement("<Attribute Name=\"evec\" AttributeType=\"Scalar\" Center=\"Cell\">", "</Attribute>");
-		body = std::stringstream() << datafilename << ":" << "/evec";
-		dataItem = new XmlElement((std::stringstream() << "<DataItem Dimensions=\"" << primalMesh.getNumberOfEdges() << "\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">").str(), "</DataItem>", body.str());
-		attribute->addChild(dataItem);
-		primalEdgeGrid->addChild(attribute);
+	//H5Reader h5reader;
+	//h5reader = H5Reader("primal-mesh.h5");
+	//const int nElemPrimalTopo = h5reader.readDataSize("/face2vertex");
+	//assert(nElemPrimalTopo > 0);
+	//
+	//h5reader = H5Reader("dual-mesh.h5");
+	//const int nElemDualTopo = h5reader.readDataSize("/face2vertex");
+	//assert(nElemDualTopo > 0);
 
 
-		// Add grids to gridList
-		gridList->addChild(primalGrid);
-		gridList->addChild(dualGrid);
-		gridList->addChild(primalEdgeGrid);
-		timeGrid->addChild(gridList);
-	}
+
+	//for (int i = 0; i < nTimesteps; i++) {
+	//	
+	//	const std::string datafilename = (std::stringstream() << "appm-" << i << ".h5").str();
+	//	XmlElement * gridList = new XmlElement("<Grid Name=\"Two Grids\" GridType=\"Tree\">", "</Grid>");
+	//	
+	//	XmlElement * timeTag = new XmlElement((std::stringstream() << "<Time Value=\"" << timeStamps[i] << "\"/>").str());
+	//	gridList->addChild(timeTag);
+	//
+	//	// Primal surface grid
+	//	XmlElement * primalGrid = new XmlElement("<Grid Name=\"Primal\" GridType=\"Uniform\">", "</Grid>");
+	//	topology = new XmlElement((std::stringstream() << "<Topology TopologyType=\"Mixed\" NumberOfElements=\"" << primalMesh.getNumberOfFaces() << "\">").str(), "</Topology>");
+	//	body = std::stringstream();
+	//	body << primalMesh.getPrefix() << "-mesh.h5:/face2vertex";
+	//	headTag = std::stringstream();
+	//	headTag << "<DataItem Dimensions=\"" << nElemPrimalTopo << "\" DataType=\"Int\" Format=\"HDF\">";
+	//	dataItem = new XmlElement(headTag.str(), "</DataItem>", body.str());
+	//	topology->addChild(dataItem);
+	//	primalGrid->addChild(topology);
+
+	//	geometry = new XmlElement("<Geometry GeometryType=\"XYZ\">", "</Geometry>");
+	//	headTag = std::stringstream();
+	//	headTag << "<DataItem Dimensions=\"" << primalMesh.getNumberOfVertices() << " 3\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">";
+	//	body = std::stringstream() << primalMesh.getPrefix() << "-mesh.h5:/vertexPos";
+	//	dataItem = new XmlElement(headTag.str(), "</DataItem>", body.str());
+	//	geometry->addChild(dataItem);
+	//	primalGrid->addChild(geometry);
+
+	//	// Attribute: B-field
+	//	attribute = new XmlElement("<Attribute Name=\"Magnetic Flux\" AttributeType=\"Vector\" Center=\"Cell\">", "</Attribute>");
+	//	body = std::stringstream() << datafilename << ":" << "/B";
+	//	headTag = std::stringstream() << "<DataItem Dimensions=\"" << primalMesh.getNumberOfFaces() << " 3\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">";
+	//	dataItem = new XmlElement(headTag.str(), "</DataItem>", body.str());
+	//	attribute->addChild(dataItem);
+	//	primalGrid->addChild(attribute);
+
+	//	// Dual surface grid
+	//	XmlElement * dualGrid = new XmlElement("<Grid Name=\"Dual\" GridType=\"Uniform\">", "</Grid>");
+	//	topology = new XmlElement((std::stringstream() << "<Topology TopologyType=\"Mixed\" NumberOfElements=\"" << dualMesh.getNumberOfFaces() << "\">").str(), "</Topology>");
+	//	body = std::stringstream();
+	//	body << dualMesh.getPrefix() << "-mesh.h5:/face2vertex";
+	//	headTag = std::stringstream();
+	//	headTag << "<DataItem Dimensions=\"" << nElemDualTopo << "\" DataType=\"Int\" Format=\"HDF\">";
+	//	dataItem = new XmlElement(headTag.str(), "</DataItem>", body.str());
+	//	topology->addChild(dataItem);
+	//	dualGrid->addChild(topology);
+
+	//	geometry = new XmlElement("<Geometry GeometryType=\"XYZ\">", "</Geometry>");
+	//	headTag = std::stringstream();
+	//	headTag << "<DataItem Dimensions=\"" << dualMesh.getNumberOfVertices() << " 3\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">";
+	//	body = std::stringstream() << dualMesh.getPrefix() << "-mesh.h5:/vertexPos";
+	//	dataItem = new XmlElement(headTag.str(), "</DataItem>", body.str());
+	//	geometry->addChild(dataItem);
+	//	dualGrid->addChild(geometry);
+
+	//	// Attribute: D-field
+	//	attribute = new XmlElement("<Attribute Name=\"Displacement Field\" AttributeType=\"Vector\" Center=\"Cell\">", "</Attribute>");
+	//	body = std::stringstream() << datafilename << ":" << "/D";
+	//	headTag = std::stringstream() << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">";
+	//	dataItem = new XmlElement(headTag.str(), "</DataItem>", body.str());
+	//	attribute->addChild(dataItem);
+	//	dualGrid->addChild(attribute);
+
+	//	// Attribute: J-field
+	//	attribute = new XmlElement("<Attribute Name=\"Current\" AttributeType=\"Vector\" Center=\"Cell\">", "</Attribute>");
+	//	body = std::stringstream() << datafilename << ":" << "/J";
+	//	headTag = std::stringstream() << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">";
+	//	dataItem = new XmlElement(headTag.str(), "</DataItem>", body.str());
+	//	attribute->addChild(dataItem);
+	//	dualGrid->addChild(attribute);
+
+	//	// Primal edge grid
+	//	XmlElement * primalEdgeGrid = new XmlElement("<Grid Name=\"PrimalEdges\" GridType=\"Uniform\">", "</Grid>");
+	//	topology = new XmlElement((std::stringstream() << "<Topology TopologyType=\"Polyline\" NumberOfElements=\"" << primalMesh.getNumberOfEdges() << "\" NodesPerElement=\"2\">").str(), "</Topology>");
+	//	body = std::stringstream() << primalMesh.getPrefix() << "-mesh.h5" << ":/edge2vertex";
+	//	dataItem = new XmlElement((std::stringstream() << "<DataItem Dimensions=\"" << 2*primalMesh.getNumberOfEdges() << "\" DataType=\"Int\" Precision=\"4\" Format=\"HDF\">").str(), "</DataItem>", body.str());
+	//	topology->addChild(dataItem);
+	//	primalEdgeGrid->addChild(topology);
+
+	//	geometry = new XmlElement("<Geometry GeometryType=\"XYZ\">", "</Geometry>");
+	//	body = std::stringstream() << primalMesh.getPrefix() << "-mesh.h5" << ":/vertexPos";
+	//	dataItem = new XmlElement((std::stringstream() << "<DataItem Dimensions=\"" << primalMesh.getNumberOfVertices() << " 3\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">").str(), "</DataItem>", body.str());
+	//	geometry->addChild(dataItem);
+	//	primalEdgeGrid->addChild(geometry);
+
+	//	// Attribute: edge index
+	//	//attribute = new XmlElement("<Attribute Name=\"EdgeIndex\" AttributeType=\"Scalar\" Center=\"Cell\">", "</Attribute>");
+	//	//body = std::stringstream() << primalMesh.getPrefix() << "-mesh.h5:" << "/edgeIdx";
+	//	//headTag = std::stringstream() << "<DataItem Dimensions=\"" << primalMesh.getNumberOfEdges() << "\" DataType=\"Int\" Precision=\"4\" Format=\"HDF\">";
+	//	//dataItem = new XmlElement(headTag.str(), "</DataItem>", body.str());
+	//	//attribute->addChild(dataItem);
+	//	//primalEdgeGrid->addChild(attribute);
+
+	//	// Attribute: E-field
+	//	attribute = new XmlElement("<Attribute Name=\"Electric Field\" AttributeType=\"Vector\" Center=\"Cell\">", "</Attribute>");
+	//	body = std::stringstream() << datafilename << ":" << "/E";
+	//	dataItem = new XmlElement((std::stringstream() << "<DataItem Dimensions=\"" << primalMesh.getNumberOfEdges() << " 3\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">").str(), "</DataItem>", body.str());
+	//	attribute->addChild(dataItem);
+	//	primalEdgeGrid->addChild(attribute);
+
+	//	attribute = new XmlElement("<Attribute Name=\"evec\" AttributeType=\"Scalar\" Center=\"Cell\">", "</Attribute>");
+	//	body = std::stringstream() << datafilename << ":" << "/evec";
+	//	dataItem = new XmlElement((std::stringstream() << "<DataItem Dimensions=\"" << primalMesh.getNumberOfEdges() << "\" DataType=\"Float\" Precision=\"8\" Format=\"HDF\">").str(), "</DataItem>", body.str());
+	//	attribute->addChild(dataItem);
+	//	primalEdgeGrid->addChild(attribute);
 
 
-	file << root << std::endl;
+	//	// Add grids to gridList
+	//	gridList->addChild(primalGrid);
+	//	gridList->addChild(dualGrid);
+	//	gridList->addChild(primalEdgeGrid);
+	//	timeGrid->addChild(gridList);
+	//}
+
+
+	//file << root << std::endl;
 }
 
 

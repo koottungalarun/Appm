@@ -21,6 +21,14 @@
 #include "Cell.h"
 #include "TriPrism.h"
 #include "XmlElement.h"
+#include "XdmfAttribute.h"
+#include "XdmfDataItem.h"
+#include "XdmfDomain.h"
+#include "XdmfGeometry.h"
+#include "XdmfGrid.h"
+#include "XdmfRoot.h"
+#include "XdmfTime.h"
+#include "XdmfTopology.h"
 
 
 class Mesh
@@ -97,8 +105,11 @@ private:
 	void create_face2edge_map();
 	void create_cell2face_map();
 
-	void writeXdmf_surface();
-	void writeXdmf_volume();
+	XdmfGrid getXdmfSurfaceGrid() const;
+	XdmfGrid getXdmfVolumeGrid() const;
+
+	//void writeXdmf_surface();
+	//void writeXdmf_volume();
 
 };
 

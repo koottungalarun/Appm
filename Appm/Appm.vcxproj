@@ -146,6 +146,14 @@
     <ClInclude Include="PrimalMesh.h" />
     <ClInclude Include="TriPrism.h" />
     <ClInclude Include="Vertex.h" />
+    <ClInclude Include="XdmfAttribute.h" />
+    <ClInclude Include="XdmfDataItem.h" />
+    <ClInclude Include="XdmfDomain.h" />
+    <ClInclude Include="XdmfGeometry.h" />
+    <ClInclude Include="XdmfGrid.h" />
+    <ClInclude Include="XdmfRoot.h" />
+    <ClInclude Include="XdmfTime.h" />
+    <ClInclude Include="XdmfTopology.h" />
     <ClInclude Include="XmlElement.h" />
   </ItemGroup>
   <ItemGroup>
@@ -162,6 +170,14 @@
     <ClCompile Include="PrimalMesh.cpp" />
     <ClCompile Include="TriPrism.cpp" />
     <ClCompile Include="Vertex.cpp" />
+    <ClCompile Include="XdmfAttribute.cpp" />
+    <ClCompile Include="XdmfDataItem.cpp" />
+    <ClCompile Include="XdmfDomain.cpp" />
+    <ClCompile Include="XdmfGeometry.cpp" />
+    <ClCompile Include="XdmfGrid.cpp" />
+    <ClCompile Include="XdmfRoot.cpp" />
+    <ClCompile Include="XdmfTime.cpp" />
+    <ClCompile Include="XdmfTopology.cpp" />
     <ClCompile Include="XmlElement.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
