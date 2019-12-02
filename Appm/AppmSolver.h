@@ -26,5 +26,11 @@ private:
 	void writeXdmfDualMesh();
 
 	void writeOutput(const int iteration, const double time);
+
+	XdmfGrid getOutputPrimalEdgeGrid(const int iteration, const double time, const std::string & dataFilename);
+	XdmfGrid getOutputPrimalSurfaceGrid(const int iteration, const double time, const std::string & dataFilename);
+	
+	XdmfGrid getOutputDualEdgeGrid(const int iteration, const double time, const std::string & dataFilename);
+	XdmfGrid getOutputDualSurfaceGrid(const int iteration, const double time, const std::string & dataFilename);
 };
 

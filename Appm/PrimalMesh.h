@@ -26,5 +26,11 @@ private:
 	Eigen::Matrix3Xi refine_triangles_specialCorners();
 
 	void test_quadFace();
+
+	void defineElectrodes(const double radius);
+
+	void defineElectrodes_sortVertices(const double radius);
+	void defineElectrodes_sortEdges(const double radius);
+
 };
 

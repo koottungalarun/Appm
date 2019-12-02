@@ -36,6 +36,9 @@ void PrimalMesh::init()
 	const int nLayers = 5;
 	const double zmax = 1;
 	extrudeMesh(nLayers, zmax);
+
+	const double electrodeRadius = 0.35;
+	defineElectrodes(electrodeRadius);
 }
 
 
@@ -652,4 +655,97 @@ void PrimalMesh::test_quadFace()
 	Edge * edge3 = addEdge(D, A);
 	addFace({ edge0, edge1, edge2, edge3 });
 	//addFace({ A, B, C, D });
+}
+
+void PrimalMesh::defineElectrodes(const double radius) 
+{
+	defineElectrodes_sortVertices(radius);
+	defineElectrodes_sortEdges(radius);
+}
+
+void PrimalMesh::defineElectrodes_sortVertices(const double radius)
+{
+	// Sort vertices
+	std::vector<Vertex*> terminalVertices;
+	std::vector<Vertex*> boundaryVertices;
+	std::vector<Vertex*> innerVertices;
+
+	for (auto vertex : vertexList) {
+		if (vertex->isBoundary()) {
+			const Eigen::Vector3d pos = vertex->getPosition();
+			const Eigen::Vector2d pos_2d(pos.segment(0, 2));
+			if ((pos(2) == 0 || pos(2) == 1) && pos_2d.norm() < radius) {
+				terminalVertices.push_back(vertex);
+			}
+			else {
+				boundaryVertices.push_back(vertex);
+			}
+		}
+		else {
+			innerVertices.push_back(vertex);
+		}
+	}
+
+	// Define new list of vertices
+	std::vector<Vertex*> sortedVertexList(getNumberOfVertices());
+	int offset = 0;
+	for (int i = 0; i < innerVertices.size(); i++) {
+		sortedVertexList[offset++] = innerVertices[i];
+	}
+	for (int i = 0; i < boundaryVertices.size(); i++) {
+		sortedVertexList[offset++] = boundaryVertices[i];
+	}
+	for (int i = 0; i < terminalVertices.size(); i++) {
+		sortedVertexList[offset++] = terminalVertices[i];
+	}
+	assert(offset == sortedVertexList.size());
+
+	for (int i = 0; i < sortedVertexList.size(); i++) {
+		sortedVertexList[i]->setIndex(i);
+	}
+	vertexList = sortedVertexList;
+}
+
+void PrimalMesh::defineElectrodes_sortEdges(const double radius)
+{
+	// Sort edges
+	std::vector<Edge*> boundaryEdges;
+	std::vector<Edge*> boundaryNormalEdges;
+	std::vector<Edge*> innerEdges;
+
+	for (auto edge : edgeList) {
+		bool isBoundaryA = edge->getVertexA()->isBoundary();
+		bool isBoundaryB = edge->getVertexB()->isBoundary();
+
+		int nBoundaryVertices = isBoundaryA + isBoundaryB;
+		switch (nBoundaryVertices) {
+		case 0:
+			innerEdges.push_back(edge); break;
+		case 1:
+			boundaryNormalEdges.push_back(edge); break;
+		case 2:
+			boundaryEdges.push_back(edge); break;
+		default:
+			assert(false);
+		}
+	}
+	
+	// Define new list of edges
+	std::vector<Edge*> sortedEdgeList(getNumberOfEdges());
+	int offset = 0;
+	for (int i = 0; i < innerEdges.size(); i++) {
+		sortedEdgeList[offset++] = innerEdges[i];
+	}
+	for (int i = 0; i < boundaryNormalEdges.size(); i++) {
+		sortedEdgeList[offset++] = boundaryNormalEdges[i];
+	}
+	for (int i = 0; i < boundaryEdges.size(); i++) {
+		sortedEdgeList[offset++] = boundaryEdges[i];
+	}
+	assert(offset == sortedEdgeList.size());
+
+	for (int i = 0; i < sortedEdgeList.size(); i++) {
+		sortedEdgeList[i]->setIndex(i);
+	}
+	edgeList = sortedEdgeList;
 }

@@ -105,6 +105,8 @@ private:
 	void create_face2edge_map();
 	void create_cell2face_map();
 
+	XdmfGrid getXdmfVertexGrid() const;
+	XdmfGrid getXdmfEdgeGrid() const;
 	XdmfGrid getXdmfSurfaceGrid() const;
 	XdmfGrid getXdmfVolumeGrid() const;
 

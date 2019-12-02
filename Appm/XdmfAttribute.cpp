@@ -14,6 +14,7 @@ XdmfAttribute::XdmfAttribute(const XdmfAttribute::Tags & tags)
 	std::stringstream ss;
 	ss << "<Attribute";
 	ss << " Name=\"" << tags.name << "\"";
+	ss << " AttributeType=\"" << tags.type << "\"";
 	ss << " Center=\"" << tags.center << "\"";
 	ss << ">";
 	this->setStartTag(ss.str());

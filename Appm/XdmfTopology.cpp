@@ -22,7 +22,7 @@ XdmfTopology::XdmfTopology(const XdmfTopology::Tags & tags)
 		assert(tags.nodesPerElement > 0);
 	}
 	if (tags.nodesPerElement > 0) {
-		ss << "NodesPerElement=\"" << tags.nodesPerElement << "\"";
+		ss << " NodesPerElement=\"" << tags.nodesPerElement << "\"";
 	}
 	ss << ">";
 	this->setStartTag(ss.str());
