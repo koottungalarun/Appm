@@ -37,7 +37,8 @@ void PrimalMesh::init()
 	const double zmax = 1;
 	extrudeMesh(nLayers, zmax);
 
-	sortVertices();
+	const double electrodeRadius = 0.35;
+	sortVertices(electrodeRadius);
 	sortEdges();
 }
 
@@ -660,10 +661,8 @@ void PrimalMesh::test_quadFace()
 /**
  * Sort vertices such that they have the sequence: inner vertices, boundary vertices.
 */
-void PrimalMesh::sortVertices()
+void PrimalMesh::sortVertices(const double electrodeRadius)
 {
-	const double electrodeRadius = 1.5;
-
 	std::vector<Vertex*> boundaryVertices;
 	std::vector<Vertex*> innerVertices;
 	std::vector<Vertex*> terminalVertices;
@@ -673,15 +672,18 @@ void PrimalMesh::sortVertices()
 			const Eigen::Vector3d pos = vertex->getPosition();
 			const Eigen::Vector2d pos_2d(pos.segment(0, 2));
 
-			if (pos_2d.norm() < electrodeRadius) {
+			if (pos_2d.norm() < electrodeRadius && (pos(2) == 0 || pos(2) == 1)) {
 				terminalVertices.push_back(vertex);
+				vertex->setType(Vertex::Type::Terminal);
 			}
 			else {
 				boundaryVertices.push_back(vertex);
+				vertex->setType(Vertex::Type::Boundary);
 			}
 		}
 		else {
 			innerVertices.push_back(vertex);
+			vertex->setType(Vertex::Type::Inner);
 		}
 	}
 

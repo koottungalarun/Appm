@@ -29,7 +29,7 @@ private:
 	void test_quadFace();
 
 
-	void sortVertices();
+	void sortVertices(const double electrodeRadius);
 	void sortEdges();
 };
 

@@ -80,6 +80,12 @@ void Mesh::writeToFile()
 	}
 	h5writer.writeData(isBoundaryVertex, "/isBoundaryVertex");
 
+	Eigen::VectorXi vertexType(nVertices);
+	for (int i = 0; i < nVertices; i++) {
+		vertexType(i) = static_cast<int>(getVertex(i)->getType());
+	}
+	h5writer.writeData(vertexType, "/vertexType");
+
 	//file = std::ofstream(this->meshPrefix + "-coords.dat");
 	//file << vertexCoordinates.transpose() << std::endl;
 
