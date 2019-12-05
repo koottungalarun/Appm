@@ -54,10 +54,10 @@ Maxwell equations:
 \partial_t \Dvec - \nabla \times \Hvec = -\Jvec
 \end{equation}
 \begin{equation}
-\nabla \cdot B = 0
+\nabla \cdot \Bvec = 0
 \end{equation}
 \begin{equation}
-\nabla \cdot D = \rho
+\nabla \cdot \Dvec = \rho
 \end{equation}
 ($\rho$: space charge density)
 \begin{equation}
@@ -92,11 +92,25 @@ How it is defined.
 \section{Data output}
 
 The data is visualized in ParaView\footnote{version 5.6.0, 64-bit} 
+or VisIT, 
 using XDMF\footnote{\url{xdmf.org/index.php/XDMF_Model_and_Format}, version 3.} 
 for data description and HDF5\footnote{version 1.10, 64-bit} 
 for the heavy data.
 
-Remark: instead of ParaView, one could also use VisIT for visualization. However, it does not support polygonal cells. 
+Remarks:
+\begin{itemize}
+\item Use ParaView, because VisIT does not support polyhedral cells.
+
+\item ParaView has three readers for *.xdmf-files: XMDF Reader, Xdmf3ReaderS, and Xdmf3ReaderT. 
+
+\item XDMF Reader supports the \texttt{GridType=''Tree''} tag (i.e., grid of grids), but does not support polyhedrals.
+
+\item Xdmf3ReaderS supports polyhedrals, but does not support \texttt{GridType=''Tree''}.
+
+\item Therefore, the mesh data is split into two xdmf files: one that has vertex, edge, and surface data (that can be read with XDMF Reader); and a separate one for volume data (that can be read with Xdmf3ReaderS).
+
+\end{itemize}
+
 
 
 
@@ -153,15 +167,12 @@ Define current density in z-direction, at radius $r < r_0$.
 
 \section{TODO}
 
-\todo[inline]{Output file (*.xdmf) must be written separately for primal and dual mesh. As of now, Paraview supports EITHER a spatial collection of grids OR a temporal grid of a single mesh. It does not support multiple grids AND time variations. --
-No, it does! (the time value tag was at wrong place)
-}
 
 \todo[inline]{Leapfrog scheme}
 
 \todo[inline]{Raviart-Thomas interpolation of magnetic flux $B$}
 
-
+\todo[inline]{Flow states}
 
 
 

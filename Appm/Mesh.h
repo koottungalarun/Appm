@@ -110,6 +110,8 @@ private:
 	XdmfGrid getXdmfSurfaceGrid() const;
 	XdmfGrid getXdmfVolumeGrid() const;
 
+	void writeXdmfVolumeMesh() const;
+
 	//void writeXdmf_surface();
 	//void writeXdmf_volume();
 

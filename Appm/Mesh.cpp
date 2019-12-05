@@ -204,15 +204,14 @@ void Mesh::writeXdmf()
 	XdmfGrid surfaceGrid = getXdmfSurfaceGrid();
 	treeGrid.addChild(surfaceGrid);
 
-	//XdmfGrid volumeGrid = getXdmfVolumeGrid();
-	//domain.addChild(volumeGrid);
-	
 	domain.addChild(treeGrid);
 	root.addChild(domain);
 
 	std::string filename = this->meshPrefix + "-mesh.xdmf";
 	std::ofstream file(filename);
 	file << root << std::endl;
+
+	writeXdmfVolumeMesh();
 }
 
 Vertex * Mesh::addVertex(const Eigen::Vector3d & position)
@@ -920,6 +919,17 @@ XdmfGrid Mesh::getXdmfVolumeGrid() const
 	//}
 
 	return volumeGrid;
+}
+
+void Mesh::writeXdmfVolumeMesh() const
+{
+	XdmfRoot root;
+	XdmfDomain domain;
+	XdmfGrid volumeGrid = getXdmfVolumeGrid();
+	domain.addChild(volumeGrid);
+	root.addChild(domain);
+	std::ofstream file(this->meshPrefix + "-volume.xdmf");
+	file << root << std::endl;
 }
 
 //void Mesh::writeXdmf_volume()

@@ -24,7 +24,7 @@ void PrimalMesh::init()
 {
 	init_hexagon();
 	const int nRefinements = 2;
-	const int nOuterMeshLayers = 1;
+	const int nOuterMeshLayers = 0;
 	if (nOuterMeshLayers > 0) {
 		assert(nRefinements > 1);
 	}
@@ -37,10 +37,9 @@ void PrimalMesh::init()
 	const double zmax = 1;
 	extrudeMesh(nLayers, zmax);
 
-	const double electrodeRadius = 0.35;
-	defineElectrodes(electrodeRadius);
+	sortVertices();
+	sortEdges();
 }
-
 
 void PrimalMesh::init_hexagon()
 {
@@ -657,24 +656,24 @@ void PrimalMesh::test_quadFace()
 	//addFace({ A, B, C, D });
 }
 
-void PrimalMesh::defineElectrodes(const double radius) 
-{
-	defineElectrodes_sortVertices(radius);
-	defineElectrodes_sortEdges(radius);
-}
 
-void PrimalMesh::defineElectrodes_sortVertices(const double radius)
+/**
+ * Sort vertices such that they have the sequence: inner vertices, boundary vertices.
+*/
+void PrimalMesh::sortVertices()
 {
-	// Sort vertices
-	std::vector<Vertex*> terminalVertices;
+	const double electrodeRadius = 1.5;
+
 	std::vector<Vertex*> boundaryVertices;
 	std::vector<Vertex*> innerVertices;
+	std::vector<Vertex*> terminalVertices;
 
 	for (auto vertex : vertexList) {
 		if (vertex->isBoundary()) {
 			const Eigen::Vector3d pos = vertex->getPosition();
 			const Eigen::Vector2d pos_2d(pos.segment(0, 2));
-			if ((pos(2) == 0 || pos(2) == 1) && pos_2d.norm() < radius) {
+
+			if (pos_2d.norm() < electrodeRadius) {
 				terminalVertices.push_back(vertex);
 			}
 			else {
@@ -706,7 +705,10 @@ void PrimalMesh::defineElectrodes_sortVertices(const double radius)
 	vertexList = sortedVertexList;
 }
 
-void PrimalMesh::defineElectrodes_sortEdges(const double radius)
+/** 
+* Sort edges such that they have the sequence: inner edges, boundary normal edges, boundary edges.
+*/
+void PrimalMesh::sortEdges()
 {
 	// Sort edges
 	std::vector<Edge*> boundaryEdges;

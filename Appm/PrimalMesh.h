@@ -14,6 +14,7 @@ public:
 
 	void init();
 
+
 private:
 	void init_hexagon();
 	void init_triangle();
@@ -27,10 +28,8 @@ private:
 
 	void test_quadFace();
 
-	void defineElectrodes(const double radius);
 
-	void defineElectrodes_sortVertices(const double radius);
-	void defineElectrodes_sortEdges(const double radius);
-
+	void sortVertices();
+	void sortEdges();
 };
 
