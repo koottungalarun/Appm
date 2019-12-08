@@ -80,10 +80,11 @@ void Mesh::writeToFile()
 	}
 	h5writer.writeData(isBoundaryVertex, "/isBoundaryVertex");
 
-	Eigen::VectorXi vertexType(nVertices);
-	for (int i = 0; i < nVertices; i++) {
-		vertexType(i) = static_cast<int>(getVertex(i)->getType());
-	}
+	//Eigen::VectorXi vertexType(nVertices);
+	//for (int i = 0; i < nVertices; i++) {
+	//	vertexType(i) = static_cast<int>(getVertex(i)->getType());
+	//}
+	Eigen::VectorXi vertexType = getVertexTypes();
 	h5writer.writeData(vertexType, "/vertexType");
 
 	//file = std::ofstream(this->meshPrefix + "-coords.dat");
@@ -937,6 +938,38 @@ void Mesh::writeXdmfVolumeMesh() const
 	std::ofstream file(this->meshPrefix + "-volume.xdmf");
 	file << root << std::endl;
 }
+
+
+const Eigen::VectorXi Mesh::getVertexTypes() const
+{
+	const int nV = getNumberOfVertices();
+	Eigen::VectorXi types(nV);
+	for (int i = 0; i < nV; i++) {
+		types(i) = static_cast<int>(getVertex(i)->getType());
+	}
+	return types;
+}
+
+const Eigen::VectorXi Mesh::getEdgeTypes() const
+{
+	const int nE = getNumberOfEdges();
+	Eigen::VectorXi types(nE);
+	for (int i = 0; i < nE; i++) {
+		types(i) = static_cast<int>(getEdge(i)->getType());
+	}
+	return types;
+}
+
+const Eigen::VectorXi Mesh::getFaceTypes() const
+{
+	const int nF = getNumberOfFaces();
+	Eigen::VectorXi types(nF);
+	for (int i = 0; i < nF; i++) {
+		types(i) = getFace(i)->isBoundary();
+	}
+	return types;
+}
+
 
 //void Mesh::writeXdmf_volume()
 //{

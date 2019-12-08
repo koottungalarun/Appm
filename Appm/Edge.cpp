@@ -180,6 +180,16 @@ const std::vector<Face*> Edge::getFaceList() const
 	return faceList;
 }
 
+void Edge::setType(const Edge::Type & type)
+{
+	this->type = type;
+}
+
+const Edge::Type Edge::getType() const
+{
+	return type;
+}
+
 std::ostream & operator<<(std::ostream & os, const Edge & obj)
 {
 	os << "Edge " << obj.getIndex() << ": ";

@@ -14,7 +14,6 @@ public:
 
 	void init();
 
-
 private:
 	void init_hexagon();
 	void init_triangle();
@@ -31,5 +30,6 @@ private:
 
 	void sortVertices(const double electrodeRadius);
 	void sortEdges();
+	void sortFaces();
 };
 

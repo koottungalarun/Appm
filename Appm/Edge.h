@@ -10,6 +10,11 @@ class Edge :
 	public GeometryItem
 {
 public:
+
+	enum class Type {
+		Interior, InteriorToBoundary, Boundary
+	};
+
 	Edge();
 	Edge(const int index);
 	Edge(Vertex * A, Vertex * B);
@@ -44,11 +49,15 @@ public:
 	int getIncidence(const Vertex * v) const;
 	const std::vector<Face*> getFaceList() const;
 
+	void setType(const Edge::Type & type);
+	const Edge::Type getType() const;
+
 
 private:
 	Vertex * A = nullptr;
 	Vertex * B = nullptr;
 	Eigen::Vector3d edgeCenter;
 	std::vector<Face*> faceList;
+	Type type;
 };
 

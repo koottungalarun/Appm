@@ -40,6 +40,7 @@ void PrimalMesh::init()
 	const double electrodeRadius = 0.35;
 	sortVertices(electrodeRadius);
 	sortEdges();
+	sortFaces();
 }
 
 void PrimalMesh::init_hexagon()
@@ -752,4 +753,51 @@ void PrimalMesh::sortEdges()
 		sortedEdgeList[i]->setIndex(i);
 	}
 	edgeList = sortedEdgeList;
+	for (auto edge : edgeList) {
+		const Vertex * A = edge->getVertexA();
+		const Vertex * B = edge->getVertexB();
+		const Vertex::Type vTypeA = A->getType();
+		const Vertex::Type vTypeB = B->getType();
+
+		bool isAboundary = (vTypeA == Vertex::Type::Boundary || vTypeA == Vertex::Type::Terminal);
+		bool isBboundary = (vTypeB == Vertex::Type::Boundary || vTypeB == Vertex::Type::Terminal);
+		int nBoundary = isAboundary + isBboundary;
+		if (nBoundary == 0) {
+			edge->setType(Edge::Type::Interior);
+		}
+		if (nBoundary == 1) {
+			edge->setType(Edge::Type::InteriorToBoundary);
+		}
+		if (nBoundary == 2) {
+			edge->setType(Edge::Type::Boundary);
+		}
+	}
+}
+
+void PrimalMesh::sortFaces()
+{
+	std::vector<Face*> boundaryFaces;
+	std::vector<Face*> innerFaces;
+	for (int i = 0; i < getNumberOfFaces(); i++) {
+		Face * face = getFace(i);
+		if (face->isBoundary()) {
+			boundaryFaces.push_back(face);
+		}
+		else {
+			innerFaces.push_back(face);
+		}
+	}
+	std::vector<Face*> sortedFaces(getNumberOfFaces());
+	int offset = 0;
+	for (auto face : innerFaces) {
+		sortedFaces[offset++] = face;
+	}
+	for (auto face : boundaryFaces) {
+		sortedFaces[offset++] = face;
+	}
+	assert(offset == getNumberOfFaces());
+	for (int i = 0; i < sortedFaces.size(); i++) {
+		sortedFaces[i]->setIndex(i);
+	}
+	faceList = sortedFaces;
 }

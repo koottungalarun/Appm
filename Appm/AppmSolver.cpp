@@ -14,45 +14,89 @@ AppmSolver::~AppmSolver()
 void AppmSolver::run()
 {
 	init_meshes();
-	return;
 
-	const int nDualFaces = dualMesh.getNumberOfFaces();
+	const Eigen::VectorXi vertexType = primalMesh.getVertexTypes();
+	const Eigen::VectorXi edgeType = primalMesh.getEdgeTypes();
+	const Eigen::VectorXi faceType = primalMesh.getFaceTypes();
+
+	// Number of primal vertices
+	const int nPv = primalMesh.getNumberOfVertices();
+	// Number of primal vertices on boundary
+	const int nPvb = (vertexType.array() == static_cast<int>(Vertex::Type::Boundary)).count()
+		+ (vertexType.array() == static_cast<int>(Vertex::Type::Terminal)).count(); 	
+	// Number of primal vertices in interior
+	const int nPvi = (vertexType.array() == static_cast<int>(Vertex::Type::Inner)).count();
+	// Number of primal vertrices at terminals
+	const int nPvt = (vertexType.array() == static_cast<int>(Vertex::Type::Terminal)).count();
+	assert((nPvb + nPvi) == nPv);
+
+	// Number of primal edges
+	const int nPe = primalMesh.getNumberOfEdges();
+
+	// Number of primal edges in interior
+	const int nPei = (edgeType.array() == static_cast<int>(Edge::Type::Interior)).count() 
+		+ (edgeType.array() == static_cast<int>(Edge::Type::InteriorToBoundary)).count();
+
+	// Number of primal faces
+	const int nPf = primalMesh.getNumberOfFaces();
+	const int nPfi = (faceType.array() == 0).count();
+
+	const int nDof = nPei + nPvb;
+	double dt = 0.1;
+
+	// Setup of operator Q = [id, G_b]
+	Eigen::SparseMatrix<double> Q;
+	Q = setupOperatorQ().cast<double>();
+
+	Eigen::SparseMatrix<double> Meps;
+	Eigen::SparseMatrix<double> Mnu;
+	Meps = setupOperatorMeps();
+	Mnu  = setupOperatorMnu().topLeftCorner(nPfi,nPfi);
+
+	// Curl operator on primal mesh
+	Eigen::SparseMatrix<int> C;
+	C = primalMesh.get_f2eMap();
+
+	// Curl operator for inner-faces and inner-edges
+	Eigen::SparseMatrix<int> Cii = C.topLeftCorner(nPfi, nPei);
+
+	// Setup of operator P = [Cii 0]
+	Eigen::SparseMatrix<double> P;
+	P = Eigen::SparseMatrix<double>(nPfi, nPei + nPvb);
+	P.leftCols(Cii.cols()) = Cii.cast<double>();
+
+	Eigen::SparseMatrix<double> A;
+	Eigen::SparseMatrix<double> B;
+	A = Q.transpose() * Meps * Q;
+	B = P.transpose() * Mnu * P;
+	assert(A.rows() == B.rows());
+	assert(A.cols() == B.cols());
+
+	// System of equations
+	Eigen::SparseMatrix<double> M;
+	M = A + pow(dt, 2) * B;
+	
+	Eigen::SparseMatrix<double> M_d;
+	M_d = M.rightCols(nPvt);
+
+	const int nFreeIdx = M.rows() - nPvt;
+	assert(nFreeIdx > 0);
+	Eigen::SparseMatrix<double> M_f;
+	M_f = M.topLeftCorner(nFreeIdx, nFreeIdx);
+	Eigen::SparseLU<Eigen::SparseMatrix<double>> solver;
+	solver.compute(M_f);
+	if (solver.info() != Eigen::Success) {
+		std::cout << "Solver initialization failed" << std::endl;
+		exit(-1);
+	}
+
 
 	// Define data vectors
 	bvec = Eigen::VectorXd::Zero(primalMesh.getNumberOfFaces());
 	dvec = Eigen::VectorXd::Zero(dualMesh.getNumberOfFaces());
-	evec = Eigen::VectorXd::Zero(primalMesh.getNumberOfEdges());
+	E_h = Eigen::VectorXd::Zero(primalMesh.getNumberOfEdges());
 	hvec = Eigen::VectorXd::Zero(dualMesh.getNumberOfEdges());
 	jvec = Eigen::VectorXd::Zero(dualMesh.getNumberOfFaces());
-
-	// Initialize variables for Maxwell equations
-	// Note: actual values are for testing
-	for (int i = 0; i < nDualFaces; i++) {
-		const Face * face = dualMesh.getFace(i);
-		const Eigen::Vector3d fc = face->getCenter();
-		const Eigen::Vector2d fc_2d = fc.segment(0, 2);
-
-		if (fc_2d.norm() < 0.3) {
-			const Eigen::Vector3d fn = face->getNormal();
-			jvec(i) = 1 * face->getArea() * fn.dot(Eigen::Vector3d(0, 0, 1));
-		}
-	}
-	for (int i = 0; i < primalMesh.getNumberOfEdges(); i++) {
-		const Edge * edge = primalMesh.getEdge(i);
-		const Eigen::Vector3d edgeDir = edge->getDirection();
-		evec(i) = edgeDir.dot(Eigen::Vector3d(0, 0, 1));
-	}
-	for (int i = 0; i < primalMesh.getNumberOfFaces(); i++) {
-		bvec(i) = primalMesh.getFace(i)->getNormal().dot(Eigen::Vector3d(0, 0, 1));
-	}
-	for (int i = 0; i < dualMesh.getNumberOfFaces(); i++) {
-		dvec(i) = dualMesh.getFace(i)->getNormal().dot(Eigen::Vector3d(0, 0, 1));
-	}
-	for (int i = 0; i < dualMesh.getNumberOfEdges(); i++) {
-		const Edge * edge = dualMesh.getEdge(i);
-		const Eigen::Vector3d edgeDir = edge->getDirection();
-		hvec(i) = edgeDir.dot(Eigen::Vector3d(0, 0, 1));
-	}
 
 	// Initialize fluid states
 	init_fluid();
@@ -61,55 +105,66 @@ void AppmSolver::run()
 	int iteration = 0;
 	writeOutput(iteration, time);
 
-	const Eigen::SparseMatrix<double> Cprimal = primalMesh.get_f2eMap().cast<double>();
-	const Eigen::SparseMatrix<double> Cdual = dualMesh.get_f2eMap().cast<double>();
-	assert(Cprimal.rows() == bvec.size());
-	assert(Cprimal.cols() == evec.size());
-	assert(Cdual.rows() == dvec.size());
-	assert(Cdual.cols() == hvec.size());
-
-	const int nPrimalFaces = primalMesh.getNumberOfFaces();
-	const int nPrimalEdges = primalMesh.getNumberOfEdges();
-	typedef Eigen::Triplet<double> T;
-	std::vector<T> triplets;
-	for (int i = 0; i < nPrimalFaces; i++) {
-		double value = dualMesh.getEdge(i)->getLength() / primalMesh.getFace(i)->getArea();
-		triplets.push_back(T(i, i, value));
-	}
-	Eigen::SparseMatrix<double> hodgeOp_muInv(nPrimalFaces, nPrimalFaces);
-	hodgeOp_muInv.setFromTriplets(triplets.begin(), triplets.end());
-	hodgeOp_muInv.makeCompressed();
-
-	triplets.resize(0);
-	for (int i = 0; i < nPrimalEdges; i++) {
-		double value = primalMesh.getEdge(i)->getLength() / dualMesh.getFace(i)->getArea();
-		triplets.push_back(T(i, i, value));
-	}
-	Eigen::SparseMatrix<double> hodgeOp_epsInv(nPrimalEdges, nPrimalEdges);
-	hodgeOp_epsInv.setFromTriplets(triplets.begin(), triplets.end());
-	hodgeOp_epsInv.makeCompressed();
-
 	// Time integration loop
-	double dT = 0.05;
-	const int maxIteration = 0;
-	const double maxTime = 10;
+	//double dT = 0.05;
+	const int maxIteration = 100;
+	const double maxTime = 100;
+
+	Eigen::VectorXd x_m(nDof);
+	Eigen::VectorXd x_mm1(nDof);
+	x_m.setZero();
+	x_mm1.setZero();
+
+
 	while (iteration < maxIteration && time < maxTime) {
+		std::cout << "Iteration " << iteration << ",\t time = " << time << std::endl;
 		// Fluid equations
-		dT = update_fluid();
+		//dT = update_fluid();
 
 		// Maxwell equations
-		//bvec = bvec - dT * Cprimal * evec;
-		//hvec.topRows(hodgeOp_muInv.rows()) = hodgeOp_muInv * bvec;
-		//dvec = dvec + dT * Cdual * hvec - dT * jvec;
-		//evec = hodgeOp_epsInv * dvec.topRows(hodgeOp_epsInv.cols());
 
-		assert(bvec.array().isFinite().all());
-		assert(dvec.array().isFinite().all());
-		assert(evec.array().isFinite().all());
-		assert(hvec.array().isFinite().all());
+		// Vector of degrees of freedom (dof)
+		Eigen::VectorXd x(nDof);
+		Eigen::VectorXd rhs = Eigen::VectorXd::Zero(x.size());
+
+		rhs = A * (2 * x_m - x_mm1) + pow(dt, 2) * rhs;
+
+		Eigen::VectorXd phi_t(nPvt);
+		double phi1 = 0;
+		double phi2 = 0.5 * (1 + tanh((time - 5)));
+		phi_t.topRows(nPvt / 2).array() = phi1;
+		phi_t.bottomRows(nPvt / 2).array() = phi2;
+
+		Eigen::VectorXd x_d;
+		x_d = phi_t;
+		rhs -= M_d * x_d;
+
+		Eigen::VectorXd rhs_f = rhs.topRows(nFreeIdx);
+		Eigen::VectorXd x_f(nFreeIdx);
+		x_f = solver.solve(rhs_f);
+		if (solver.info() != Eigen::Success) {
+			std::cout << "Solver solution failed" << std::endl;
+			exit(-1);
+		}
+		x.topRows(x_f.size()) = x_f;
+		x.bottomRows(x_d.size()) = x_d;
+		Eigen::sparseMatrixToFile(Q, "Q.dat");
+		std::ofstream file("x.dat");
+		file << x.transpose() << std::endl;
+		E_h = Q * x;
+
+		
+		// Update state vectors
+		x_mm1 = x_m;
+		x_m = x;
+
+		//assert(bvec.array().isFinite().all());
+		//assert(dvec.array().isFinite().all());
+		//assert(evec.array().isFinite().all());
+		//assert(hvec.array().isFinite().all());
 
 		iteration++;
-		time += dT;
+		time += dt;
 		writeOutput(iteration, time);
 	}
 	std::cout << "Final time:      " << time << std::endl;
@@ -186,7 +241,7 @@ void AppmSolver::init_fluid()
 
 const double AppmSolver::update_fluid()
 {
-	return;
+	return 0.0;
 	const int nDualFaces = dualMesh.getNumberOfFaces();
 	const int nDualCells = dualMesh.getNumberOfCells();
 
@@ -230,7 +285,7 @@ const double AppmSolver::update_fluid()
 		dt_local(i) = 0.;
 	}
 
-	assert((dt_local.array() > 0).all());
+	//assert((dt_local.array() > 0).all());
 
 	// get global timestep size
 	const double dt = dt_local.minCoeff();
@@ -361,7 +416,7 @@ void AppmSolver::writeOutput(const int iteration, const double time)
 	// Maxwell states
 	h5writer.writeData(bvec, "/bvec");
 	h5writer.writeData(dvec, "/dvec");
-	h5writer.writeData(evec, "/evec");
+	h5writer.writeData(E_h, "/evec");
 	h5writer.writeData(hvec, "/hvec");
 	h5writer.writeData(jvec, "/jvec");
 
@@ -392,7 +447,7 @@ void AppmSolver::writeOutput(const int iteration, const double time)
 	Eigen::Matrix3Xd E(3, nPrimalEdges);
 	for (int i = 0; i < nPrimalEdges; i++) {
 		const Edge * edge = primalMesh.getEdge(i);
-		E.col(i) = evec(i) / edge->getLength() * edge->getDirection();
+		E.col(i) = E_h(i) / edge->getLength() * edge->getDirection();
 	}
 	h5writer.writeData(E, "/E");
 
@@ -704,5 +759,83 @@ XdmfGrid AppmSolver::getOutputDualVolumeGrid(const int iteration, const double t
 	grid.addChild(densityAttribute);
 
 	return grid;
+}
+
+Eigen::SparseMatrix<int> AppmSolver::setupOperatorQ()
+{
+	const Eigen::VectorXi vertexTypes = primalMesh.getVertexTypes();
+	const Eigen::VectorXi edgeTypes = primalMesh.getEdgeTypes();
+
+	const int boundaryVertexType = static_cast<int>(Vertex::Type::Boundary);
+	const int terminalVertexType = static_cast<int>(Vertex::Type::Terminal);
+	const int innerVertexType = static_cast<int>(Vertex::Type::Inner);
+	
+	const int boundaryEdgeType = static_cast<int>(Edge::Type::Boundary);
+	const int interiorToBoundaryEdgeType = static_cast<int>(Edge::Type::InteriorToBoundary);
+	const int interiorEdgeType = static_cast<int>(Edge::Type::Interior);
+
+	const int nPv = primalMesh.getNumberOfVertices();
+	const int nPvb = (vertexTypes.array() == boundaryVertexType).count() + (vertexTypes.array() == terminalVertexType).count();
+	const int nPvi = (vertexTypes.array() == innerVertexType).count();
+	const int nPe = primalMesh.getNumberOfEdges();
+	const int nPei = (edgeTypes.array() == interiorEdgeType).count() + (edgeTypes.array() == interiorToBoundaryEdgeType).count();
+	const int nPeb = (edgeTypes.array() == boundaryEdgeType).count();
+
+	assert(nPe == nPei + nPeb);
+
+	Eigen::SparseMatrix<int> X(nPv, nPvb);
+	typedef Eigen::Triplet<int> T;
+	std::vector<T> triplets;
+	for (int i = 0; i < nPvb; i++) {
+		triplets.push_back(T(nPvi + i, i, 1));
+	}
+	X.setFromTriplets(triplets.begin(), triplets.end());
+	X.makeCompressed();
+
+	const Eigen::SparseMatrix<int> G = primalMesh.get_e2vMap();
+	Eigen::SparseMatrix<int> GX = G * X;
+
+	assert(nPei < nPe);
+	Eigen::SparseMatrix<int> id(nPe, nPei);
+	//id.setIdentity(); // only for square matrices
+	for (int i = 0; i < nPei; i++) {
+		id.coeffRef(i, i) = 1;
+	}
+
+	// Number of degrees of freedom
+	const int nDof = id.cols() + GX.cols();
+	assert(nDof == id.cols() + GX.cols());
+	Eigen::SparseMatrix<int> Q = Eigen::SparseMatrix<int>(nPe, nDof);
+	Q.leftCols(id.cols()) = id;
+	Q.rightCols(GX.cols()) = GX;
+	assert(Q.rows() == nPe);
+	assert(Q.cols() == nDof);
+	return Q;
+}
+
+Eigen::SparseMatrix<double> AppmSolver::setupOperatorMeps()
+{
+	const int nPe = primalMesh.getNumberOfEdges();
+	Eigen::SparseMatrix<double> Meps(nPe, nPe);
+	Meps.setIdentity();
+	for (int i = 0; i < nPe; i++) {
+		const double dualFaceArea = dualMesh.getFace(i)->getArea();
+		const double primalEdgeLength = primalMesh.getEdge(i)->getLength();
+		Meps.coeffRef(i, i) = dualFaceArea / primalEdgeLength;
+	}
+	return Meps;
+}
+
+Eigen::SparseMatrix<double> AppmSolver::setupOperatorMnu()
+{
+	const int nPf = primalMesh.getNumberOfFaces();
+	Eigen::SparseMatrix<double> Mnu(nPf, nPf);
+	Mnu.setIdentity();
+	for (int i = 0; i < nPf; i++) {
+		const double dualEdgeLength = dualMesh.getEdge(i)->getLength();
+		const double primalFaceArea = primalMesh.getFace(i)->getArea();
+		Mnu.coeffRef(i, i) = dualEdgeLength / primalFaceArea;
+	}
+	return Mnu;
 }
 

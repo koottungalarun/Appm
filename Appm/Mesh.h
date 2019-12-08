@@ -76,6 +76,11 @@ public:
 	const Eigen::SparseMatrix<int> & get_f2eMap() const;
 	const Eigen::SparseMatrix<int> & get_e2vMap() const;
 
+	const Eigen::VectorXi getVertexTypes() const;
+	const Eigen::VectorXi getEdgeTypes() const;
+	const Eigen::VectorXi getFaceTypes() const;
+
+
 protected:
 	std::vector<Vertex*> vertexList;
 	std::vector<Edge*> edgeList;

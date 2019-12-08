@@ -4,6 +4,8 @@
 #include "DualMesh.h"
 #include "FluidState.h"
 
+#include <Eigen/SparseLU>
+
 
 class AppmSolver
 {
@@ -18,7 +20,7 @@ private:
 	PrimalMesh primalMesh;
 	DualMesh dualMesh;
 
-	Eigen::VectorXd bvec, dvec, evec, hvec, jvec;
+	Eigen::VectorXd bvec, dvec, E_h, hvec, jvec;
 	Eigen::MatrixXd fluidStates;
 	Eigen::MatrixXd fluidFluxes;
 
@@ -40,5 +42,10 @@ private:
 	XdmfGrid getOutputDualEdgeGrid(const int iteration, const double time, const std::string & dataFilename);
 	XdmfGrid getOutputDualSurfaceGrid(const int iteration, const double time, const std::string & dataFilename);
 	XdmfGrid getOutputDualVolumeGrid(const int iteration, const double time, const std::string & dataFilename);
+
+	Eigen::SparseMatrix<int> setupOperatorQ();
+	Eigen::SparseMatrix<double> setupOperatorMeps();
+	Eigen::SparseMatrix<double> setupOperatorMnu();
+
 };
 
