@@ -153,12 +153,12 @@ void Mesh::writeToFile()
 		faceIdx(i) = getFace(i)->getIndex();
 		faceBoundary(i) = getFace(i)->isBoundary();
 		faceArea(i) = getFace(i)->getArea();
-		assert(faceArea(i) > 1e-3);
 	}
 	h5writer.writeData(fc, "/faceCenter");
 	h5writer.writeData(faceIdx, "/faceIndex");
 	h5writer.writeData(faceBoundary, "/isFaceBoundary");
 	h5writer.writeData(fn, "/faceNormal");
+	assert((faceArea.array() > 0).all());
 	h5writer.writeData(faceArea, "/faceArea");
 
 	const std::vector<int> face2vertexIdx = getXdmfTopology_face2vertexIndices();
@@ -179,6 +179,12 @@ void Mesh::writeToFile()
 
 	const std::vector<int> c2vIdx = getXdmfTopology_cell2vertexIndices();
 	h5writer.writeData(c2vIdx, "/cell2vertex");
+
+	Eigen::VectorXd cellVolume(nCells);
+	for (int i = 0; i < nCells; i++) {
+		cellVolume(i) = getCell(i)->getVolume();
+	}
+	h5writer.writeData(cellVolume, "/cellVolume");
 
 
 	//file = std::ofstream(this->meshPrefix + "-cellCenter.dat");
@@ -911,19 +917,19 @@ XdmfGrid Mesh::getXdmfVolumeGrid() const
 		volumeGrid.addChild(attribute);
 	}
 
-	// Attribute: cell volume (does not yet exist)
-	//{
-	//	XdmfAttribute attribute(XdmfAttribute::Tags("Cell Volume", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
-	//	std::string bodyString = (std::stringstream() << this->meshPrefix << "-mesh.h5:/cellVolume").str();
-	//	attribute.addChild(
-	//		XdmfDataItem(
-	//			XdmfDataItem::Tags(
-	//				{ getNumberOfCells() },
-	//				XdmfDataItem::NumberType::Float,
-	//				XdmfDataItem::Format::HDF),
-	//			bodyString));
-	//	volumeGrid.addChild(attribute);
-	//}
+	// Attribute: cell volume
+	{
+		XdmfAttribute attribute(XdmfAttribute::Tags("Cell Volume", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
+		std::string bodyString = (std::stringstream() << this->meshPrefix << "-mesh.h5:/cellVolume").str();
+		attribute.addChild(
+			XdmfDataItem(
+				XdmfDataItem::Tags(
+					{ getNumberOfCells() },
+					XdmfDataItem::NumberType::Float,
+					XdmfDataItem::Format::HDF),
+				bodyString));
+		volumeGrid.addChild(attribute);
+	}
 
 	return volumeGrid;
 }

@@ -13,150 +13,30 @@ AppmSolver::~AppmSolver()
 
 void AppmSolver::run()
 {
-	init_meshes();
-
-	const Eigen::VectorXi vertexType = primalMesh.getVertexTypes();
-	const Eigen::VectorXi edgeType = primalMesh.getEdgeTypes();
-	const Eigen::VectorXi faceType = primalMesh.getFaceTypes();
-
-	// Number of primal vertices
-	const int nPv = primalMesh.getNumberOfVertices();
-	// Number of primal vertices on boundary
-	const int nPvb = (vertexType.array() == static_cast<int>(Vertex::Type::Boundary)).count()
-		+ (vertexType.array() == static_cast<int>(Vertex::Type::Terminal)).count(); 	
-	// Number of primal vertices in interior
-	const int nPvi = (vertexType.array() == static_cast<int>(Vertex::Type::Inner)).count();
-	// Number of primal vertrices at terminals
-	const int nPvt = (vertexType.array() == static_cast<int>(Vertex::Type::Terminal)).count();
-	assert((nPvb + nPvi) == nPv);
-
-	// Number of primal edges
-	const int nPe = primalMesh.getNumberOfEdges();
-
-	// Number of primal edges in interior
-	const int nPei = (edgeType.array() == static_cast<int>(Edge::Type::Interior)).count() 
-		+ (edgeType.array() == static_cast<int>(Edge::Type::InteriorToBoundary)).count();
-
-	// Number of primal faces
-	const int nPf = primalMesh.getNumberOfFaces();
-	const int nPfi = (faceType.array() == 0).count();
-
-	const int nDof = nPei + nPvb;
-	double dt = 0.1;
-
-	// Setup of operator Q = [id, G_b]
-	Eigen::SparseMatrix<double> Q;
-	Q = setupOperatorQ().cast<double>();
-
-	Eigen::SparseMatrix<double> Meps;
-	Eigen::SparseMatrix<double> Mnu;
-	Meps = setupOperatorMeps();
-	Mnu  = setupOperatorMnu().topLeftCorner(nPfi,nPfi);
-
-	// Curl operator on primal mesh
-	Eigen::SparseMatrix<int> C;
-	C = primalMesh.get_f2eMap();
-
-	// Curl operator for inner-faces and inner-edges
-	Eigen::SparseMatrix<int> Cii = C.topLeftCorner(nPfi, nPei);
-
-	// Setup of operator P = [Cii 0]
-	Eigen::SparseMatrix<double> P;
-	P = Eigen::SparseMatrix<double>(nPfi, nPei + nPvb);
-	P.leftCols(Cii.cols()) = Cii.cast<double>();
-
-	Eigen::SparseMatrix<double> A;
-	Eigen::SparseMatrix<double> B;
-	A = Q.transpose() * Meps * Q;
-	B = P.transpose() * Mnu * P;
-	assert(A.rows() == B.rows());
-	assert(A.cols() == B.cols());
-
-	// System of equations
-	Eigen::SparseMatrix<double> M;
-	M = A + pow(dt, 2) * B;
-	
-	Eigen::SparseMatrix<double> M_d;
-	M_d = M.rightCols(nPvt);
-
-	const int nFreeIdx = M.rows() - nPvt;
-	assert(nFreeIdx > 0);
-	Eigen::SparseMatrix<double> M_f;
-	M_f = M.topLeftCorner(nFreeIdx, nFreeIdx);
-	Eigen::SparseLU<Eigen::SparseMatrix<double>> solver;
-	solver.compute(M_f);
-	if (solver.info() != Eigen::Success) {
-		std::cout << "Solver initialization failed" << std::endl;
-		exit(-1);
-	}
-
-
-	// Define data vectors
-	bvec = Eigen::VectorXd::Zero(primalMesh.getNumberOfFaces());
-	dvec = Eigen::VectorXd::Zero(dualMesh.getNumberOfFaces());
-	E_h = Eigen::VectorXd::Zero(primalMesh.getNumberOfEdges());
-	hvec = Eigen::VectorXd::Zero(dualMesh.getNumberOfEdges());
-	jvec = Eigen::VectorXd::Zero(dualMesh.getNumberOfFaces());
-
-	// Initialize fluid states
-	init_fluid();
-
+	double dt = 1;
 	double time = 0;
 	int iteration = 0;
+
+	init_meshes();  // Initialize primal and dual meshes
+	init_maxwell(dt); // Initialize Maxwell equations and states
+	init_fluid(); 	// Initialize fluid states
+
 	writeOutput(iteration, time);
 
 	// Time integration loop
 	//double dT = 0.05;
-	const int maxIteration = 100;
-	const double maxTime = 100;
-
-	Eigen::VectorXd x_m(nDof);
-	Eigen::VectorXd x_mm1(nDof);
-	x_m.setZero();
-	x_mm1.setZero();
-
+	const int maxIteration = 10;
+	const double maxTime = 10;
 
 	while (iteration < maxIteration && time < maxTime) {
 		std::cout << "Iteration " << iteration << ",\t time = " << time << std::endl;
 		// Fluid equations
-		//dT = update_fluid();
-
-		// Maxwell equations
-
-		// Vector of degrees of freedom (dof)
-		Eigen::VectorXd x(nDof);
-		Eigen::VectorXd rhs = Eigen::VectorXd::Zero(x.size());
-
-		rhs = A * (2 * x_m - x_mm1) + pow(dt, 2) * rhs;
-
-		Eigen::VectorXd phi_t(nPvt);
-		double phi1 = 0;
-		double phi2 = 0.5 * (1 + tanh((time - 5)));
-		phi_t.topRows(nPvt / 2).array() = phi1;
-		phi_t.bottomRows(nPvt / 2).array() = phi2;
-
-		Eigen::VectorXd x_d;
-		x_d = phi_t;
-		rhs -= M_d * x_d;
-
-		Eigen::VectorXd rhs_f = rhs.topRows(nFreeIdx);
-		Eigen::VectorXd x_f(nFreeIdx);
-		x_f = solver.solve(rhs_f);
-		if (solver.info() != Eigen::Success) {
-			std::cout << "Solver solution failed" << std::endl;
-			exit(-1);
-		}
-		x.topRows(x_f.size()) = x_f;
-		x.bottomRows(x_d.size()) = x_d;
-		Eigen::sparseMatrixToFile(Q, "Q.dat");
-		std::ofstream file("x.dat");
-		file << x.transpose() << std::endl;
-		E_h = Q * x;
-
+		// dt = update_fluid();
+		std::cout << "dt = " << dt << std::endl;
 		
-		// Update state vectors
-		x_mm1 = x_m;
-		x_m = x;
+		// Maxwell equations
+		update_maxwell(dt, time);
+
 
 		//assert(bvec.array().isFinite().all());
 		//assert(dvec.array().isFinite().all());
@@ -237,64 +117,235 @@ void AppmSolver::init_fluid()
 
 		fluidStates.col(i) = (cellCenter(2) < 0.5) ? qL_vec : qR_vec;
 	}
+
+	std::cout << "Test for fluid flux: " << std::endl;
+	double dt_loc = 0;
+	Eigen::VectorXd fluidFlux = Numerics::fluidFlux_rusanov(qL_vec, qR_vec, Eigen::Vector3d(0, 0, 1), 1, dt_loc);
+	std::cout << "Flux: " << fluidFlux.transpose() << std::endl;
+	std::cout << "dt_loc: " << dt_loc << std::endl;
+}
+
+void AppmSolver::init_maxwell(const double dt)
+{
+	// Define data vectors
+	B_h = Eigen::VectorXd::Zero(primalMesh.getNumberOfFaces());
+	E_h = Eigen::VectorXd::Zero(primalMesh.getNumberOfEdges());
+	J_h = Eigen::VectorXd::Zero(dualMesh.getNumberOfFaces());
+
+
+	const Eigen::VectorXi vertexType = primalMesh.getVertexTypes();
+	const Eigen::VectorXi edgeType = primalMesh.getEdgeTypes();
+	const Eigen::VectorXi faceType = primalMesh.getFaceTypes();
+
+	// Number of primal vertices
+	const int nPv = primalMesh.getNumberOfVertices();
+	// Number of primal vertices on boundary
+	const int nPvb = (vertexType.array() == static_cast<int>(Vertex::Type::Boundary)).count()
+		+ (vertexType.array() == static_cast<int>(Vertex::Type::Terminal)).count();
+	// Number of primal vertices in interior
+	const int nPvi = (vertexType.array() == static_cast<int>(Vertex::Type::Inner)).count();
+	// Number of primal vertrices at terminals
+	const int nPvt = (vertexType.array() == static_cast<int>(Vertex::Type::Terminal)).count();
+	assert((nPvb + nPvi) == nPv);
+
+	// Number of primal edges
+	const int nPe = primalMesh.getNumberOfEdges();
+
+	// Number of primal edges in interior
+	const int nPei = (edgeType.array() == static_cast<int>(Edge::Type::Interior)).count()
+		+ (edgeType.array() == static_cast<int>(Edge::Type::InteriorToBoundary)).count();
+
+	// Number of primal faces
+	const int nPf = primalMesh.getNumberOfFaces();
+	const int nPfi = (faceType.array() == 0).count();
+
+	const int nDof = nPei + nPvb;
+	x_m = Eigen::VectorXd::Zero(nDof);
+	x_mm1 = Eigen::VectorXd::Zero(nDof);
+
+	// Setup of operator Q = [id, G_b]
+	Q = setupOperatorQ().cast<double>();
+
+	Eigen::SparseMatrix<double> Meps;
+	Eigen::SparseMatrix<double> Mnu;
+	Meps = setupOperatorMeps();
+	Mnu = setupOperatorMnu().topLeftCorner(nPfi, nPfi);
+
+	// Curl operator on primal mesh
+	Eigen::SparseMatrix<int> C;
+	C = primalMesh.get_f2eMap();
+	this->C = C.cast<double>();
+
+	// Curl operator for inner-faces and inner-edges
+	Eigen::SparseMatrix<int> Cii = C.topLeftCorner(nPfi, nPei);
+
+	// Setup of operator P = [Cii 0]
+	Eigen::SparseMatrix<double> P;
+	P = Eigen::SparseMatrix<double>(nPfi, nPei + nPvb);
+	P.leftCols(Cii.cols()) = Cii.cast<double>();
+
+	Eigen::SparseMatrix<double> B;
+	A = Q.transpose() * Meps * Q;
+	B = P.transpose() * Mnu * P;
+	assert(A.rows() == B.rows());
+	assert(A.cols() == B.cols());
+
+	// System of equations
+	assert(dt > 0);
+	assert(isfinite(dt));
+	this->M = A + pow(dt, 2) * B;
+	const int nFreeIdx = M.rows() - nPvt;
+	assert(nFreeIdx > 0);
+	this->M_d = M.rightCols(nPvt);
+	M_f = M.topLeftCorner(nFreeIdx, nFreeIdx);
+
+	maxwellSolver.compute(M_f);
+	if (maxwellSolver.info() != Eigen::Success) {
+		std::cout << "Solver initialization failed" << std::endl;
+		exit(-1);
+	}
 }
 
 const double AppmSolver::update_fluid()
 {
-	return 0.0;
 	const int nDualFaces = dualMesh.getNumberOfFaces();
-	const int nDualCells = dualMesh.getNumberOfCells();
-
 	Eigen::VectorXd dt_local(nDualFaces);
-
-	Eigen::MatrixXd dU = Eigen::MatrixXd::Zero(fluidStates.rows(), fluidStates.cols());
-	
+	Eigen::MatrixXd dq = Eigen::MatrixXd::Zero(fluidStates.rows(), fluidStates.cols());
 
 	// Compute fluid fluxes at faces
 	for (int i = 0; i < nDualFaces; i++) {
-		// TODO
-		// Rusanov flux: F = 0.5 * (f(qL) + f(qR)) - 0.5 * max(sL, sR) * (qR - qL)
-		// with s(q) = max eigenvalue of f(q)
-
 		const Face * face = dualMesh.getFace(i);
 		const Eigen::Vector3d faceNormal = face->getNormal();
+		const double faceArea = face->getArea();
 
-		// get cell index of left and right cells that are adjacient to this face
-		const int idxL = 0;
-		const int idxR = 0;
+		if (face->isBoundary()) {
+			const std::vector<Cell*> faceCells = face->getCellList();
+			assert(faceCells.size() == 1);
+			Cell * cell = faceCells[0];
+			const int idxC = cell->getIndex();
+			const int orientation = (face->getCenter() - cell->getCenter()).dot(faceNormal) > 0 ? 1 : -1;
 
-		// get fluid state in 1d in direction of face normal
-		const Eigen::VectorXd qL = fluidStates.col(idxL);
-		const Eigen::VectorXd qR = fluidStates.col(idxR);
+			Eigen::VectorXd qL, qR;
+			// TODO open boundary conditions
+			if (orientation > 0) {
+				qL = fluidStates.col(idxC);
+				qR = qL;
+				qR.segment(1, 3) *= -1;
+			}
+			else {
+				qR = fluidStates.col(idxC);
+				qL = qR;
+				qL.segment(1, 3) *= -1;
+			}
+			const Eigen::Vector3d cc = cell->getCenter();
+			const Eigen::Vector3d fc = face->getCenter();
+			const double dx = std::abs((fc - cc).dot(faceNormal));
+			double dt_loc = 0;
+			const Eigen::VectorXd flux = Numerics::fluidFlux_rusanov(qL, qR, faceNormal, dx, dt_loc);
+			assert(dt_loc > 0);
+			dt_local(i) = dt_loc;
+			dq.col(idxC) += orientation * faceArea * flux;
+		}
+		else {
+			// Get left and right cell of this face
+			std::vector<Cell*> faceCells = face->getCellList();
+			assert(faceCells.size() == 2);
+			const Cell * cell = faceCells[0];
+			const int orientation = (face->getCenter() - cell->getCenter()).dot(faceNormal) > 0 ? 1 : -1;
+			Cell * leftCell = nullptr;
+			Cell * rightCell = nullptr;
+			if (orientation > 0) {
+				leftCell  = faceCells[0];
+				rightCell = faceCells[1];
+			}
+			else {
+				leftCell  = faceCells[1];
+				rightCell = faceCells[0];
+			}
+			const int idxL = leftCell->getIndex();
+			const int idxR = rightCell->getIndex();
 
-		// get max eigenvalue and fluid flux for left and right state
-		const double sL = 0;
-		const double sR = 0;
-		const Eigen::VectorXd fluxL;
-		const Eigen::VectorXd fluxR;
-		
-		const Eigen::VectorXd faceFlux_1d = 0.5 * (fluxL + fluxR) - 0.5 * std::max(sL, sR) * (qR - qL);
-		const Eigen::VectorXd faceFlux_3d; // get face flux in 3D
-		fluidFluxes.col(i) = faceFlux_3d;
+			// distance between cell center and face center
+			const Eigen::Vector3d fc = face->getCenter();
+			const Eigen::Vector3d ccL = leftCell->getCenter();
+			const Eigen::Vector3d ccR = rightCell->getCenter();
+			const double dxL = std::abs((fc - ccL).dot(faceNormal));
+			const double dxR = std::abs((fc - ccR).dot(faceNormal));
+			const double dx = std::min(dxL, dxR); // minimum distance between cell center and face center
+			assert(dx > 0);
+			const Eigen::VectorXd qL = fluidStates.col(idxL);
+			const Eigen::VectorXd qR = fluidStates.col(idxR);
 
-		// TODO set update of cell states
-		dU.col(idxL);
-		dU.col(idxR);
+			double dt_loc = 0;
+			const Eigen::VectorXd faceFlux = Numerics::fluidFlux_rusanov(qL, qR, faceNormal, dx, dt_loc);
+			assert(dt_loc > 0);
+			dt_local(i) = dt_loc;
 
-		// get local timestep size
-		dt_local(i) = 0.;
+			dq.col(idxL) += faceFlux * faceArea;
+			dq.col(idxR) -= faceFlux * faceArea;
+		}
 	}
-
-	//assert((dt_local.array() > 0).all());
+	bool allPositive = (dt_local.array() > 0.).all();
+	assert(allPositive);
 
 	// get global timestep size
 	const double dt = dt_local.minCoeff();
 	assert(dt > 0);
 
-	fluidStates += dt * dU;
+	for (int i = 0; i < dualMesh.getNumberOfCells(); i++) {
+		dq.col(i) *= 1./(dualMesh.getCell(i)->getVolume());
+	}
+
+	fluidStates -= dt * dq;
 
 	return dt;
 }
+
+void AppmSolver::update_maxwell(const double dt, const double time)
+{
+	const int nDof = x_m.size();
+
+	// Vector of degrees of freedom (dof)
+	Eigen::VectorXd x(nDof);
+	Eigen::VectorXd rhs = Eigen::VectorXd::Zero(x.size());
+
+	rhs = A * (2 * x_m - x_mm1) + pow(dt, 2) * rhs;
+
+	const int nPvt = M_d.cols();
+	const int nFreeIdx = M.rows() - nPvt;
+
+	// Electric potential at terminal vertices
+	Eigen::VectorXd phi_t(nPvt);
+	double phi1 = 0;
+	double phi2 = 0.5 * (1 + tanh((time - 5)));
+	phi_t.topRows(nPvt / 2).array() = phi1;
+	phi_t.bottomRows(nPvt / 2).array() = phi2;
+
+	Eigen::VectorXd x_d;
+	x_d = phi_t;
+	rhs -= M_d * x_d;
+
+	Eigen::VectorXd rhs_f = rhs.topRows(nFreeIdx);
+	Eigen::VectorXd x_f(nFreeIdx);
+	x_f = maxwellSolver.solve(rhs_f);
+	if (maxwellSolver.info() != Eigen::Success) {
+		std::cout << "Solver solution failed" << std::endl;
+		exit(-1);
+	}
+	x.topRows(x_f.size()) = x_f;
+	x.bottomRows(x_d.size()) = x_d;
+
+	// Electric field (from electrostatic boundary conditions)
+	E_h = Q * x;
+
+	// Update of magnetic field
+	B_h = B_h - dt * C * E_h;
+
+	// Update state vectors
+	x_mm1 = x_m;
+	x_m = x;
+}
+
 
 void AppmSolver::writeXdmf()
 {
@@ -414,35 +465,26 @@ void AppmSolver::writeOutput(const int iteration, const double time)
 
 
 	// Maxwell states
-	h5writer.writeData(bvec, "/bvec");
-	h5writer.writeData(dvec, "/dvec");
+	h5writer.writeData(B_h, "/bvec");
 	h5writer.writeData(E_h, "/evec");
-	h5writer.writeData(hvec, "/hvec");
-	h5writer.writeData(jvec, "/jvec");
+	h5writer.writeData(J_h, "/jvec");
 
 	Eigen::Matrix3Xd B(3, nPrimalFaces);
-	Eigen::Matrix3Xd D(3, nDualFaces);
 	Eigen::Matrix3Xd J(3, nDualFaces);
-	Eigen::Matrix3Xd H(3, nDualEdges);
-
+	
 	for (int i = 0; i < nPrimalFaces; i++) {
 		const Eigen::Vector3d fn = primalMesh.getFace(i)->getNormal();
-		B.col(i) = bvec(i) * fn;
-	}
-	for (int i = 0; i < nDualEdges; i++) {
-		const Edge * edge = dualMesh.getEdge(i);
-		H.col(i) = hvec(i) / edge->getLength() * edge->getDirection();
+		const double fA = primalMesh.getFace(i)->getArea();
+		B.col(i) = (B_h(i) / fA) * fn;
 	}
 	for (int i = 0; i < nDualFaces; i++) {
 		const Eigen::Vector3d fn = dualMesh.getFace(i)->getNormal();
-		D.col(i) = dvec(i) * fn;
-		J.col(i) = jvec(i) * fn;
+		const double fA = dualMesh.getFace(i)->getArea();
+		J.col(i) = J_h(i) / fA * fn;
 	}
 	h5writer.writeData(B, "/B");
-	h5writer.writeData(D, "/D");
 	h5writer.writeData(J, "/J");
-	h5writer.writeData(H, "/H");
-
+	
 	const int nPrimalEdges = primalMesh.getNumberOfEdges();
 	Eigen::Matrix3Xd E(3, nPrimalEdges);
 	for (int i = 0; i < nPrimalEdges; i++) {
@@ -610,20 +652,20 @@ XdmfGrid AppmSolver::getOutputDualEdgeGrid(const int iteration, const double tim
 		grid.addChild(attribute);
 	}
 
-	// Attribute: Magnetic Field H
-	{
-		XdmfAttribute attribute(
-			XdmfAttribute::Tags("Magnetic field", XdmfAttribute::Type::Vector, XdmfAttribute::Center::Cell)
-		);
-		attribute.addChild(
-			XdmfDataItem(XdmfDataItem::Tags(
-				{ dualMesh.getNumberOfEdges(), 3 },
-				XdmfDataItem::NumberType::Float,
-				XdmfDataItem::Format::HDF),
-				(std::stringstream() << dataFilename << ":/H").str()
-			));
-		grid.addChild(attribute);
-	}
+	//// Attribute: Magnetic Field H
+	//{
+	//	XdmfAttribute attribute(
+	//		XdmfAttribute::Tags("Magnetic field", XdmfAttribute::Type::Vector, XdmfAttribute::Center::Cell)
+	//	);
+	//	attribute.addChild(
+	//		XdmfDataItem(XdmfDataItem::Tags(
+	//			{ dualMesh.getNumberOfEdges(), 3 },
+	//			XdmfDataItem::NumberType::Float,
+	//			XdmfDataItem::Format::HDF),
+	//			(std::stringstream() << dataFilename << ":/H").str()
+	//		));
+	//	grid.addChild(attribute);
+	//}
 	return grid;
 }
 
@@ -670,20 +712,20 @@ XdmfGrid AppmSolver::getOutputDualSurfaceGrid(const int iteration, const double 
 		));
 	grid.addChild(faceIndexAttribute);
 
-	// Attribute: Displacement Field D
-	{
-		XdmfAttribute attribute(
-			XdmfAttribute::Tags("Displacement Field", XdmfAttribute::Type::Vector, XdmfAttribute::Center::Cell)
-		);
-		attribute.addChild(
-			XdmfDataItem(XdmfDataItem::Tags(
-				{ dualMesh.getNumberOfFaces(), 3 },
-				XdmfDataItem::NumberType::Float,
-				XdmfDataItem::Format::HDF),
-				(std::stringstream() << dataFilename << ":/D").str()
-			));
-		grid.addChild(attribute);
-	}
+	//// Attribute: Displacement Field D
+	//{
+	//	XdmfAttribute attribute(
+	//		XdmfAttribute::Tags("Displacement Field", XdmfAttribute::Type::Vector, XdmfAttribute::Center::Cell)
+	//	);
+	//	attribute.addChild(
+	//		XdmfDataItem(XdmfDataItem::Tags(
+	//			{ dualMesh.getNumberOfFaces(), 3 },
+	//			XdmfDataItem::NumberType::Float,
+	//			XdmfDataItem::Format::HDF),
+	//			(std::stringstream() << dataFilename << ":/D").str()
+	//		));
+	//	grid.addChild(attribute);
+	//}
 
 	// Attribute: Electric current J
 	{
@@ -757,6 +799,34 @@ XdmfGrid AppmSolver::getOutputDualVolumeGrid(const int iteration, const double t
 			(std::stringstream() << dataFilename << ":/density").str()
 		));
 	grid.addChild(densityAttribute);
+
+	// Attribute: Pressure
+	XdmfAttribute pressureAttribute(
+		XdmfAttribute::Tags("Pressure", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell)
+	);
+	pressureAttribute.addChild(
+		XdmfDataItem(XdmfDataItem::Tags(
+			{ dualMesh.getNumberOfCells() },
+			XdmfDataItem::NumberType::Float,
+			XdmfDataItem::Format::HDF),
+			(std::stringstream() << dataFilename << ":/pressure").str()
+		));
+	grid.addChild(pressureAttribute);
+
+	// Attribute: velocity
+	XdmfAttribute velocityAttribute(
+		XdmfAttribute::Tags("Velocity", XdmfAttribute::Type::Vector, XdmfAttribute::Center::Cell)
+	);
+	velocityAttribute.addChild(
+		XdmfDataItem(XdmfDataItem::Tags(
+			{ dualMesh.getNumberOfCells(), 3 },
+			XdmfDataItem::NumberType::Float,
+			XdmfDataItem::Format::HDF),
+			(std::stringstream() << dataFilename << ":/velocity").str()
+		));
+	grid.addChild(velocityAttribute);
+
+
 
 	return grid;
 }

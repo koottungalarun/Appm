@@ -56,6 +56,18 @@ Cell::Cell(const std::vector<Face*>& faces)
 	this->center = Eigen::Vector3d::Zero();
 	center = 1. / 2. * (zFaces[0]->getCenter() + zFaces[1]->getCenter());
 
+	// Set cell volume
+	volume = 0;
+	for (auto face : faceList) {
+		const double fA = face->getArea();
+		const Eigen::Vector3d fn = face->getNormal();
+		double h = std::abs(fn.dot(center - face->getCenter()));
+		double dV = 1. / 3. * fA * h;
+		assert(dV > 0);
+		volume += dV;
+	}
+	assert(volume > 0);
+
 	//Eigen::Matrix3d M;
 	//M.col(0) = zFaces[0]->getCenter();
 	//M.col(1) = zFaces[1]->getCenter();

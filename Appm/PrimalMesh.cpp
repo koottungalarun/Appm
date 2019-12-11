@@ -24,7 +24,7 @@ void PrimalMesh::init()
 {
 	init_hexagon();
 	const int nRefinements = 2;
-	const int nOuterMeshLayers = 0;
+	const int nOuterMeshLayers = 1;
 	if (nOuterMeshLayers > 0) {
 		assert(nRefinements > 1);
 	}

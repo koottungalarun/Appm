@@ -144,6 +144,7 @@
     <ClInclude Include="H5Writer.h" />
     <ClInclude Include="Main.h" />
     <ClInclude Include="Mesh.h" />
+    <ClInclude Include="Numerics.h" />
     <ClInclude Include="PrimalMesh.h" />
     <ClInclude Include="TriPrism.h" />
     <ClInclude Include="Vertex.h" />
@@ -169,6 +170,7 @@
     <ClCompile Include="H5Writer.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Mesh.cpp" />
+    <ClCompile Include="Numerics.cpp" />
     <ClCompile Include="PrimalMesh.cpp" />
     <ClCompile Include="TriPrism.cpp" />
     <ClCompile Include="Vertex.cpp" />
