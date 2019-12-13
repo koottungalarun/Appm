@@ -133,6 +133,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="AppmSolver.h" />
+    <ClInclude Include="AppmSolverCrankNichol.h" />
+    <ClInclude Include="AppmSolverLeapfrog.h" />
     <ClInclude Include="Cell.h" />
     <ClInclude Include="DualMesh.h" />
     <ClInclude Include="Edge.h" />
@@ -160,6 +162,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AppmSolver.cpp" />
+    <ClCompile Include="AppmSolverCrankNichol.cpp" />
+    <ClCompile Include="AppmSolverLeapfrog.cpp" />
     <ClCompile Include="Cell.cpp" />
     <ClCompile Include="DualMesh.cpp" />
     <ClCompile Include="Edge.cpp" />

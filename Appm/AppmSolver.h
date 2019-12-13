@@ -10,39 +10,66 @@
 
 class AppmSolver
 {
+
 public:
 	AppmSolver();
-	~AppmSolver();
+	//AppmSolver(const AppmSolver & other);
+	virtual ~AppmSolver();
 
 	void run();
 
+protected:
+	struct MeshInfo {
+		int nVertices = 0;         // number of vertices
+		int nVerticesBoundary = 0; // number of vertices on domain boundary
+		int nVerticesTerminal = 0; // number of degrees of freedom with Dirichlet conditions
 
-private:
+		int nEdges = 0;      // number of edges
+		int nEdgesInner = 0; // number of edges in interior of domain
+
+		int nFaces = 0;      // number of faces
+		int nFacesInner = 0; // number of faces in interior of domain
+
+		int nCells = 0; // number of cells
+	} primalMeshInfo, dualMeshInfo;
+
 	PrimalMesh primalMesh;
 	DualMesh dualMesh;
 
-	Eigen::VectorXd B_h, E_h, J_h;
+	Eigen::VectorXd B_h, E_h, H_h, J_h;
 	Eigen::MatrixXd fluidStates;
 	Eigen::MatrixXd fluidFluxes;
 
-	Eigen::VectorXd x_m, x_mm1;
+	virtual void init_maxwell(const double dt) = 0;
+	virtual void init_maxwell() = 0;
+	virtual void update_maxwell(const double dt, const double time) = 0;
 
-	Eigen::SparseMatrix<double> A;
-	Eigen::SparseMatrix<double> C;
-	Eigen::SparseMatrix<double> M;
-	Eigen::SparseMatrix<double> M_d, M_f;
-	Eigen::SparseMatrix<double> Q;
-	Eigen::SparseLU<Eigen::SparseMatrix<double>> maxwellSolver;
+	Eigen::SparseMatrix<int> setupOperatorQ();
+	Eigen::SparseMatrix<double> setupOperatorMeps();
+	Eigen::SparseMatrix<double> setupOperatorMnu();
+
+	Eigen::VectorXd electricPotentialTerminals(const double time);
+
+	Eigen::SparseMatrix<double> speye(const int rows, const int cols);
+
+	Eigen::SparseMatrix<double> hodgeOperatorPrimalEdgeToDualFace();
+	Eigen::SparseMatrix<double> hodgeOperatorDualEdgeToPrimalFace();
+	Eigen::SparseMatrix<double> hodgeOperatorElectricalConductivity();
+
+	/** Inclusion operator of boundary vertices into all vertices */
+	Eigen::SparseMatrix<double> inclusionOperatorBoundaryVerticesToAllVertices();
+
+
+	AppmSolver::MeshInfo setMeshInfo(const Mesh & mesh);
+
+private:
 
 	std::vector<double> timeStamps;
 
 	void init_meshes();
 	void init_fluid();
-	void init_maxwell(const double dt);
-
 
 	const double update_fluid();
-	void update_maxwell(const double dt, const double time);
 	
 	void writeXdmf();
 	void writeXdmfDualVolume();
@@ -56,8 +83,5 @@ private:
 	XdmfGrid getOutputDualSurfaceGrid(const int iteration, const double time, const std::string & dataFilename);
 	XdmfGrid getOutputDualVolumeGrid(const int iteration, const double time, const std::string & dataFilename);
 
-	Eigen::SparseMatrix<int> setupOperatorQ();
-	Eigen::SparseMatrix<double> setupOperatorMeps();
-	Eigen::SparseMatrix<double> setupOperatorMnu();
 };
 

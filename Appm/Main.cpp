@@ -1,5 +1,4 @@
 #include "Main.h"
-#include "Numerics.h"
 
 int main() {
 	std::cout << "***********************" << std::endl;
@@ -47,6 +46,7 @@ void Main::run()
 	std::cout << "flux: " << flux.transpose() << std::endl;
 	std::cout << "dt:   " << dt_loc << std::endl;
 
-	AppmSolver appm;
-	appm.run();
+	AppmSolver * appm = new AppmSolverCrankNichol();
+	appm->run();
+	delete appm;
 }
