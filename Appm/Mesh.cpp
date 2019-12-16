@@ -261,34 +261,37 @@ Face * Mesh::addFace(const std::vector<Edge*> & faceEdges)
 	}
 	else {
 		Face * face = getFace(faceEdges);
+		assert(face != nullptr);
 		return face;
 	}
 	return nullptr;
 }
-//Face * Mesh::addFace(const std::vector<Vertex*> & faceVertices)
-//{
-//	assert(faceVertices.size() >= 3);
-//	std::vector<Edge*> faceEdges;
-//	const int nVertices = faceVertices.size();
-//	for (int i = 0; i < nVertices; i++) {
-//		Vertex * A = faceVertices[i];
-//		Vertex * B = faceVertices[(i + 1) % nVertices];
-//		Edge * edge = getEdge(A, B);
-//		assert(edge != nullptr);
-//		faceEdges.push_back(edge);
-//	}
-//	if (!isConnected(faceEdges)) {
-//		Face * face = new Face(faceVertices);
-//		face->setIndex(faceList.size());
-//		faceList.push_back(face);
-//		return face;
-//	}
-//	else {
-//		Face * face = getFace(faceEdges);
-//		return face;
-//	}
-//	return nullptr;
-//}
+
+Face * Mesh::addFace(const std::vector<Vertex*> & faceVertices)
+{
+	assert(faceVertices.size() >= 3);
+	std::vector<Edge*> faceEdges;
+	const int nVertices = faceVertices.size();
+	for (int i = 0; i < nVertices; i++) {
+		Vertex * A = faceVertices[i];
+		Vertex * B = faceVertices[(i + 1) % nVertices];
+		Edge * edge = getEdge(A, B);
+		assert(edge != nullptr);
+		faceEdges.push_back(edge);
+	}
+	if (!isConnected(faceEdges)) {
+		Face * face = new Face(faceEdges);
+		face->setIndex(faceList.size());
+		faceList.push_back(face);
+		return face;
+	}
+	else {
+		Face * face = getFace(faceEdges);
+		assert(face != nullptr);
+		return face;
+	}
+	return nullptr;
+}
 
 
 

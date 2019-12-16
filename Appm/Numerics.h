@@ -14,5 +14,7 @@ public:
 	static Eigen::Vector3d fluidFlux(const Eigen::Vector3d & q);
 
 	static double maxWaveSpeed(const Eigen::Vector3d & q);
+
+	static Eigen::Vector3d raviartThomasBasis(const int idx, const Eigen::Vector3d & x);
 };
 

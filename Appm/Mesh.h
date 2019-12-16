@@ -44,7 +44,7 @@ public:
 	Vertex * addVertex(const Eigen::Vector3d & position);
 	Edge * addEdge(Vertex * A, Vertex * B);
 	Face * addFace(const std::vector<Edge*> & faceEdges);
-	//Face * addFace(const std::vector<Vertex*> & faceVertices);
+	Face * addFace(const std::vector<Vertex*> & faceVertices);
 
 	TriPrism * addTriPrism(const std::vector<Face*> & sideFaces, Face * bottomFace, Face * topFace);
 	Cell * addCell(const std::vector<Face*> & cellFaces);

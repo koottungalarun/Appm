@@ -8,6 +8,10 @@
 #include <Eigen/SparseLU>
 
 
+#define _RT_ONECELL 
+#undef _RT_ONECELL
+
+
 class AppmSolver
 {
 
@@ -63,6 +67,9 @@ protected:
 	AppmSolver::MeshInfo setMeshInfo(const Mesh & mesh);
 
 private:
+
+	void test_raviartThomas();
+	const Eigen::Matrix3Xd getPrismReferenceCoords(const int nSamples);
 
 	std::vector<double> timeStamps;
 

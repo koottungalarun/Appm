@@ -24,7 +24,7 @@ void PrimalMesh::init()
 {
 	init_hexagon();
 	const int nRefinements = 2;
-	const int nOuterMeshLayers = 1;
+	const int nOuterMeshLayers = 0;
 	if (nOuterMeshLayers > 0) {
 		assert(nRefinements > 1);
 	}
@@ -33,7 +33,7 @@ void PrimalMesh::init()
 
 	outerMeshExtrude(nOuterMeshLayers);
 
-	const int nLayers = 5;
+	const int nLayers = 1;
 	const double zmax = 1;
 	extrudeMesh(nLayers, zmax);
 
@@ -460,9 +460,9 @@ Eigen::Matrix3Xi PrimalMesh::refine_triangles()
 		int e1 = faceEdges[1]->getIndex() + nVertices;
 		int e2 = faceEdges[2]->getIndex() + nVertices;
 
-		f2v.col(idx++) = Eigen::Vector3i(v0, e1, e2);
-		f2v.col(idx++) = Eigen::Vector3i(e0, v1, e2);
-		f2v.col(idx++) = Eigen::Vector3i(e0, e1, v2);
+		f2v.col(idx++) = Eigen::Vector3i(v0, e2, e1);
+		f2v.col(idx++) = Eigen::Vector3i(v1, e0, e2);
+		f2v.col(idx++) = Eigen::Vector3i(v2, e1, e0);
 		f2v.col(idx++) = Eigen::Vector3i(e0, e1, e2);
 	}
 	assert(idx == f2v.cols());
@@ -566,14 +566,33 @@ Eigen::Matrix3Xi PrimalMesh::refine_triangles_specialCorners()
 					break;
 				}
 			}
+
+			// Vertex index at face center
+			int vc = face->getIndex() + faceOffset;
+			// Position of face center
+			const Eigen::Vector3d center = vertexCoordinates.col(vc);
+
 			assert(idx_notSpecialEdge >= 0);
 			// edge0 is not a special edge, but edge1 and edge2 are a special edge
 			const Edge * edge0 = faceEdges[idx_notSpecialEdge];
-			const Edge * edge1 = faceEdges[(idx_notSpecialEdge + 1) % 3];
-			const Edge * edge2 = faceEdges[(idx_notSpecialEdge + 2) % 3];
+			Edge * edge1 = faceEdges[(idx_notSpecialEdge + 1) % 3];
+			Edge * edge2 = faceEdges[(idx_notSpecialEdge + 2) % 3];
 			assert(specialEdges(edge0->getIndex()) == 0);
 			assert(specialEdges(edge1->getIndex()) == 1);
 			assert(specialEdges(edge2->getIndex()) == 1);
+
+			// Ensure that the triangle {edge0,edge1,edge2} is a right-handed system
+			const Eigen::Vector3d temp1 = edge1->getHalfwayPosition();
+			const Eigen::Vector3d temp2 = edge2->getHalfwayPosition();
+			const Eigen::Vector3d a = temp1 - center;
+			const Eigen::Vector3d b = temp2 - temp1;
+			const Eigen::Vector3d n = a.normalized().cross(b.normalized());
+			// If the normal vector is anti-parallel to z-axis, flip edge1 and edge2
+			if (n.dot(Eigen::Vector3d::UnitZ()) < 0) {
+				Edge * tempEdge = edge1;
+				edge1 = edge2;
+				edge2 = tempEdge;
+			}
 
 			int v0 = edge1->getCoincidentVertex(edge2)->getIndex();
 			int v1 = edge2->getCoincidentVertex(edge0)->getIndex();
@@ -591,7 +610,6 @@ Eigen::Matrix3Xi PrimalMesh::refine_triangles_specialCorners()
 			int v11 = edge2innerVertices(0, edge1->getIndex());
 			int v22 = edge2innerVertices(0, edge2->getIndex());
 
-			int vc = face->getIndex() + faceOffset;
 
 			// Define refined faces
 			f2v.col(fidx++) = Eigen::Vector3i(vc, v01, v02);
@@ -634,9 +652,9 @@ Eigen::Matrix3Xi PrimalMesh::refine_triangles_specialCorners()
 			f2v.col(fidx++) = Eigen::Vector3i(vc, v01, v02);
 			f2v.col(fidx++) = Eigen::Vector3i(vc, v02, v12);
 			f2v.col(fidx++) = Eigen::Vector3i(vc, v12, v10);
-			f2v.col(fidx++) = Eigen::Vector3i(v0, v10, v20);
+			f2v.col(fidx++) = Eigen::Vector3i(v0, v20, v10);
 			f2v.col(fidx++) = Eigen::Vector3i(v1, v01, v21);
-			f2v.col(fidx++) = Eigen::Vector3i(v2, v02, v12);
+			f2v.col(fidx++) = Eigen::Vector3i(v2, v12, v02);
 		}
 	}
 	f2v.conservativeResize(3, fidx);
