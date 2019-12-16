@@ -33,7 +33,7 @@ void PrimalMesh::init()
 
 	outerMeshExtrude(nOuterMeshLayers);
 
-	const int nLayers = 1;
+	const int nLayers = 5;
 	const double zmax = 1;
 	extrudeMesh(nLayers, zmax);
 

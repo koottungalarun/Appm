@@ -41,6 +41,8 @@ protected:
 	DualMesh dualMesh;
 
 	Eigen::VectorXd B_h, E_h, H_h, J_h;
+	Eigen::Matrix3Xd B_vertex;
+
 	Eigen::MatrixXd fluidStates;
 	Eigen::MatrixXd fluidFluxes;
 
@@ -67,8 +69,9 @@ protected:
 	AppmSolver::MeshInfo setMeshInfo(const Mesh & mesh);
 
 private:
+	void interpolateMagneticFluxToPrimalVertices();
 
-	void test_raviartThomas();
+	// void test_raviartThomas();
 	const Eigen::Matrix3Xd getPrismReferenceCoords(const int nSamples);
 
 	std::vector<double> timeStamps;
@@ -89,6 +92,12 @@ private:
 	XdmfGrid getOutputDualEdgeGrid(const int iteration, const double time, const std::string & dataFilename);
 	XdmfGrid getOutputDualSurfaceGrid(const int iteration, const double time, const std::string & dataFilename);
 	XdmfGrid getOutputDualVolumeGrid(const int iteration, const double time, const std::string & dataFilename);
+
+	void setAzimuthalMagneticFluxField();
+	void init_RaviartThomasInterpolation();
+
+	std::vector<Eigen::Matrix3d> rt_piolaMatrix;
+	std::vector<Eigen::Vector3d> rt_piolaVector;
 
 };
 

@@ -21,13 +21,12 @@ void AppmSolver::run()
 	init_maxwell(); // Initialize Maxwell equations and states
 	init_fluid(); 	// Initialize fluid states
 
-	test_raviartThomas();
 
 	writeOutput(iteration, time);
 
 	// Time integration loop
 	//double dT = 0.05;
-	const int maxIteration = 0;
+	const int maxIteration = 200;
 	const double maxTime = 20;
 
 	while (iteration < maxIteration && time < maxTime) {
@@ -38,7 +37,7 @@ void AppmSolver::run()
 		
 		// Maxwell equations
 		update_maxwell(dt, time);
-
+		interpolateMagneticFluxToPrimalVertices();
 
 		//assert(bvec.array().isFinite().all());
 		//assert(dvec.array().isFinite().all());
@@ -51,6 +50,8 @@ void AppmSolver::run()
 	}
 	std::cout << "Final time:      " << time << std::endl;
 	std::cout << "Final iteration: " << iteration << std::endl;
+
+	// test_raviartThomas();
 
 	// Use Paraview (version 5.6.0) to visualize.
 	// Light data is given in XDMF files (version 3). 
@@ -99,180 +100,229 @@ AppmSolver::MeshInfo AppmSolver::setMeshInfo(const Mesh & mesh)
 	return meshInfo;
 }
 
-void AppmSolver::test_raviartThomas()
+void AppmSolver::interpolateMagneticFluxToPrimalVertices()
 {
-	std::cout << "Test Raviart Thomas Interpolation" << std::endl;
-	// Magnetic flux B at primal vertices
-	const int nVertices = primalMeshInfo.nVertices;
-	Eigen::Matrix3Xd B_vertex(3, nVertices);
 	B_vertex.setZero();
-
-	// Set magnetic flux B at primal faces.
-	const Eigen::Vector3d zUnit(0, 0, 1);
-	const int nFaces = primalMeshInfo.nFaces;
-	for (int i = 0; i < nFaces; i++) {
-		const Face * face = primalMesh.getFace(i);
-		const double fa = face->getArea();
-		const Eigen::Vector3d fn = face->getNormal();
-		if (fn.cross(zUnit).norm() > 0.99) {
-			// azimuthal field
-			Eigen::Vector3d fc = face->getCenter();
-			fc(2) = 0;
-			fc.normalize();
-			B_h(i) = fn.dot(fc.cross(zUnit));
-		}
-		else {
-			B_h(i) = 0;
-		}
-	}
-
-	// Primal cells are prisms.
-	// For each cell, 
-	// - compute Piola map, 
-	// - compute reference coordinates of vertices
-	// - evaluate RT basis functions 
-	// - map RT basis functions from reference to actual coordinates
-	// - multiply by magnetic flux B
-	// - write data to file: B at vertices
-	const int nCells = primalMeshInfo.nCells;
+	// For each cell ...
+	const int nCells = primalMesh.getNumberOfCells();
 	for (int cidx = 0; cidx < nCells; cidx++) {
-#ifdef _RT_ONECELL
-		std::cout << "cidx = " << cidx << std::endl;
-#endif
-		const Cell* cell = primalMesh.getCell(cidx);
+		const Cell * cell = primalMesh.getCell(cidx);
 		const std::vector<Face*> cellFaces = cell->getFaceList();
-		assert(cellFaces.size() == 5); // prism cells
-		assert(cellFaces[3]->getVertexList().size() == 3); // triangle faces are at end of list
-		assert(cellFaces[4]->getVertexList().size() == 3);
+		const std::vector<Vertex*> bottomVertices = cellFaces[3]->getVertexList();
+		const std::vector<Vertex*> topVertices = cellFaces[4]->getVertexList();
 
-		const Face * bottomFace = cellFaces[3];
-		const Face * topFace = cellFaces[4];
-		const std::vector<Vertex*> bottomVertices = bottomFace->getVertexList();
-		const std::vector<Vertex*> topVertices = topFace->getVertexList();
+		// Piola map
+		const Eigen::Matrix3d & BK = rt_piolaMatrix[cidx];
+		const Eigen::Vector3d & bK = rt_piolaVector[cidx];
+		const double detBK = BK.determinant();
 
-		// check if vertices of triangle faces have same ordering
-		for (int i = 0; i < 3; i++) {
-			Eigen::Vector3d v = topVertices[i]->getPosition() - bottomVertices[i]->getPosition();
-			v.normalize();
-			assert(v.cross(zUnit).norm() < 10 * std::numeric_limits<double>::epsilon());
-		}
-
-		// check if bottom triangle vertices form a right-handed system
-		const Eigen::Vector3d fc = bottomFace->getCenter();
-		for (int i = 0; i < 3; i++) {
-			const Eigen::Vector3d v0 = bottomVertices[i]->getPosition();
-			const Eigen::Vector3d v1 = bottomVertices[(i + 1) % 3]->getPosition();
-			const Eigen::Vector3d a = v0 - fc;
-			const Eigen::Vector3d b = v1 - v0;
-			const Eigen::Vector3d n = a.normalized().cross(b.normalized());
-			assert(n.dot(Eigen::Vector3d::UnitZ()) > 0);
-		}
-
+		// Get prism vertices
 		std::vector<Vertex*> cellVertices(6);
 		for (int i = 0; i < 3; i++) {
 			cellVertices[i] = bottomVertices[i];
 			cellVertices[i + 3] = topVertices[i];
 		}
 
-		const Eigen::Vector3d v0 = cellVertices[0]->getPosition();
-		const Eigen::Vector3d v1 = cellVertices[1]->getPosition();
-		const Eigen::Vector3d v2 = cellVertices[2]->getPosition();
-		const Eigen::Vector3d v3 = cellVertices[5]->getPosition();
-
-		// Piola map: xRef -> x := BK*xRef + bk
-		Eigen::Matrix3d BK;
-		BK.col(0) = v0 - v2;
-		BK.col(1) = v1 - v2;
-		BK.col(2) = v3 - v2;
-		const double detBK = BK.determinant();
-		const Eigen::Vector3d bk = v2;
-#ifdef _RT_ONECELL
-		std::cout << "BK: " << BK << std::endl;
-		std::cout << "det(BK): " << detBK << std::endl;
-#endif
-		// vertex coordinates in actual space
-		Eigen::Matrix3Xd vertexCoords(3, 6);
+		//Eigen::Matrix3cd vertexCoords(3, 6);
+		Eigen::MatrixXd refCoords(3, 6);
+		Eigen::VectorXi vertexIdx(6);
 		for (int i = 0; i < 6; i++) {
-			vertexCoords.col(i) = cellVertices[i]->getPosition();
+			const Vertex * v = cellVertices[i];
+			const Eigen::Vector3d pos = v->getPosition();
+			//vertexCoords.col(i) = pos;
+			vertexIdx(i) = v->getIndex();
+			refCoords.col(i) = BK.inverse() * (pos - bK);
 		}
-		// points in reference coordinates 
-		const int nSamples = 5;
-		Eigen::Matrix3Xd refCoords3d(3, 6);
-		refCoords3d.setZero();
-#ifdef _RT_ONECELL
-		refCoords3d = getPrismReferenceCoords(nSamples);
-#else
-		// Reference coordinates of cell vertices
-		for (int i = 0; i < 6; i++) {
-			const Eigen::Vector3d pos = vertexCoords.col(i);
-			const Eigen::Vector3d refPos = BK.inverse() * (pos - bk);
-			refCoords3d.col(i) = refPos;
-		}
-#endif
+		const double tolerance = 16 * std::numeric_limits<double>::epsilon();
+		// Check that reference coordinates are in [0,1]
+		assert((refCoords.array() >= -tolerance).all());
+		assert(((refCoords.array() - 1) <= tolerance).all());
 
-		assert((refCoords3d.array() >= -1 * std::numeric_limits<double>::epsilon()).all());
-		assert((refCoords3d.array() - 1 <= std::numeric_limits<double>::epsilon()).all());
-
-		for (int i = 0; i < cellFaces.size(); i++) {
-			const Face * face = cellFaces[i];
-			const Eigen::Vector3d fn = face->getNormal();
-			const Eigen::Vector3d fc = face->getCenter();
-
-#ifdef _RT_ONECELL
-			std::cout << "Face " << i << ": ";
-			std::cout << "fc: " << fc.transpose() << "\t ";
-			std::cout << "fn: " << fn.transpose() << "\t "; 
-			std::cout << "incid: " << cell->getOrientation(face) << "\t ";
-			std::cout << std::endl;
-#endif
-		}
-
-		Eigen::VectorXd coeff = Eigen::VectorXd::Zero(5);
-		Eigen::VectorXd B_h_loc(5);
-		for (int i = 0; i < 5; i++) {
-			const Face * face = cellFaces[i];
+		// Get coefficients for RT interpolation
+		Eigen::VectorXd coeff(5);
+		for (int idx = 0; idx < 5; idx++) {
+			const Face * face = cellFaces[idx];
+			const int faceIncidence = cell->getOrientation(face);
 			const int fidx = face->getIndex();
-			const int orientation = cell->getOrientation(face);
-			B_h_loc(i) = B_h(fidx);
-			coeff(i) = orientation * B_h(fidx);
+			coeff(idx) = faceIncidence * B_h(fidx);
 		}
-#ifdef _RT_ONECELL
-		std::cout << "B_h_loc: " << B_h_loc << std::endl;
-		std::cout << "coeff: " << coeff << std::endl;
-#endif
-		
-		// for each vertex
-		Eigen::Matrix3Xd Btest(3, refCoords3d.cols());
-		Eigen::Matrix3Xd xCoords3d(3, refCoords3d.cols());
-		for (int i = 0; i < refCoords3d.cols(); i++) {
-			const Eigen::Vector3d refPos = refCoords3d.col(i);
-			Eigen::Vector3d Bv;
-			Bv.setZero();
-			// for each basis function
-			for (int idx = 0; idx < 5; idx++) {
-				const Eigen::Vector3d rt = Numerics::raviartThomasBasis(idx, refPos);
-				Bv += coeff(idx) / detBK * BK * rt;
-			}
-#ifdef _RT_ONECELL
-			Btest.col(i) = Bv;
-			xCoords3d.col(i) = BK * refPos + bk;
-#else
-			const int vIdx = cellVertices[i]->getIndex();
-			B_vertex.col(vIdx) += Bv;
-#endif
-		}
-#ifdef _RT_ONECELL
-		H5Writer tempwriter("temp.h5");
-		tempwriter.writeData(refCoords3d, "/refCoords3d");
-		tempwriter.writeData(Btest, "/Btest");
-		tempwriter.writeData(xCoords3d, "/xCoords3d");
-		break;
-#endif
-	}
 
-	H5Writer h5writer("rt.h5");
-	h5writer.writeData(B_vertex, "/Bvertex");
+		// Interpolate B-field with RT-basis functions in actual space
+		Eigen::Matrix3Xd B_vertex_local = Eigen::Matrix3Xd::Zero(3, 6);
+		for (int idx = 0; idx < 5; idx++) {
+			for (int i = 0; i < 6; i++) {
+				const int vIdx = vertexIdx(i);
+				const Eigen::Vector3d refPos = refCoords.col(i);
+				const Eigen::Vector3d rt = Numerics::raviartThomasBasis(idx, refPos);
+				B_vertex_local.col(i) += coeff(idx) / detBK * BK * rt;
+			}
+		}
+		for (int i = 0; i < 6; i++) {
+			const int vIdx = vertexIdx(i);
+			B_vertex.col(vIdx) += B_vertex_local.col(i);
+		}
+	}
 }
+
+//void AppmSolver::test_raviartThomas()
+//{
+//	std::cout << "Test Raviart Thomas Interpolation" << std::endl;
+//	// setAzimuthalMagneticFluxField();
+//
+//	B_vertex.setZero();
+//
+//
+//
+//	// Primal cells are prisms.
+//	// For each cell, 
+//	// - compute Piola map, 
+//	// - compute reference coordinates of vertices
+//	// - evaluate RT basis functions 
+//	// - map RT basis functions from reference to actual coordinates
+//	// - multiply by magnetic flux B
+//	// - write data to file: B at vertices
+//	const int nCells = primalMeshInfo.nCells;
+//	for (int cidx = 0; cidx < nCells; cidx++) {
+//#ifdef _RT_ONECELL
+//		std::cout << "cidx = " << cidx << std::endl;
+//#endif
+//		const Cell* cell = primalMesh.getCell(cidx);
+//		const std::vector<Face*> cellFaces = cell->getFaceList();
+//		assert(cellFaces.size() == 5); // prism cells
+//		assert(cellFaces[3]->getVertexList().size() == 3); // triangle faces are at end of list
+//		assert(cellFaces[4]->getVertexList().size() == 3);
+//
+//		const Face * bottomFace = cellFaces[3];
+//		const Face * topFace = cellFaces[4];
+//		const std::vector<Vertex*> bottomVertices = bottomFace->getVertexList();
+//		const std::vector<Vertex*> topVertices = topFace->getVertexList();
+//
+//		// check if vertices of triangle faces have same ordering
+//		for (int i = 0; i < 3; i++) {
+//			Eigen::Vector3d v = topVertices[i]->getPosition() - bottomVertices[i]->getPosition();
+//			v.normalize();
+//			assert(v.cross(zUnit).norm() < 10 * std::numeric_limits<double>::epsilon());
+//		}
+//
+//		// check if bottom triangle vertices form a right-handed system
+//		const Eigen::Vector3d fc = bottomFace->getCenter();
+//		for (int i = 0; i < 3; i++) {
+//			const Eigen::Vector3d v0 = bottomVertices[i]->getPosition();
+//			const Eigen::Vector3d v1 = bottomVertices[(i + 1) % 3]->getPosition();
+//			const Eigen::Vector3d a = v0 - fc;
+//			const Eigen::Vector3d b = v1 - v0;
+//			const Eigen::Vector3d n = a.normalized().cross(b.normalized());
+//			assert(n.dot(Eigen::Vector3d::UnitZ()) > 0);
+//		}
+//
+//		std::vector<Vertex*> cellVertices(6);
+//		for (int i = 0; i < 3; i++) {
+//			cellVertices[i] = bottomVertices[i];
+//			cellVertices[i + 3] = topVertices[i];
+//		}
+//
+//		const Eigen::Vector3d v0 = cellVertices[0]->getPosition();
+//		const Eigen::Vector3d v1 = cellVertices[1]->getPosition();
+//		const Eigen::Vector3d v2 = cellVertices[2]->getPosition();
+//		const Eigen::Vector3d v3 = cellVertices[5]->getPosition();
+//
+//		// Piola map: xRef -> x := BK*xRef + bk
+//		Eigen::Matrix3d BK;
+//		BK.col(0) = v0 - v2;
+//		BK.col(1) = v1 - v2;
+//		BK.col(2) = v3 - v2;
+//		const double detBK = BK.determinant();
+//		const Eigen::Vector3d bk = v2;
+//#ifdef _RT_ONECELL
+//		std::cout << "BK: " << BK << std::endl;
+//		std::cout << "det(BK): " << detBK << std::endl;
+//#endif
+//		// vertex coordinates in actual space
+//		Eigen::Matrix3Xd vertexCoords(3, 6);
+//		for (int i = 0; i < 6; i++) {
+//			vertexCoords.col(i) = cellVertices[i]->getPosition();
+//		}
+//		// points in reference coordinates 
+//		const int nSamples = 5;
+//		Eigen::Matrix3Xd refCoords3d(3, 6);
+//		refCoords3d.setZero();
+//#ifdef _RT_ONECELL
+//		refCoords3d = getPrismReferenceCoords(nSamples);
+//#else
+//		// Reference coordinates of cell vertices
+//		for (int i = 0; i < 6; i++) {
+//			const Eigen::Vector3d pos = vertexCoords.col(i);
+//			const Eigen::Vector3d refPos = BK.inverse() * (pos - bk);
+//			refCoords3d.col(i) = refPos;
+//		}
+//#endif
+//		const double tolerance = 16 * std::numeric_limits<double>::epsilon();
+//		assert((refCoords3d.array() >= -1 * std::numeric_limits<double>::epsilon()).all());
+//		if ( ( (refCoords3d.array() - 1) > tolerance ).any() ) {
+//			std::cout << "max value: " << (refCoords3d.array() - 1).maxCoeff() << std::endl;
+//		}
+//		assert((refCoords3d.array() - 1 <= tolerance).all());
+//
+//		for (int i = 0; i < cellFaces.size(); i++) {
+//			const Face * face = cellFaces[i];
+//			const Eigen::Vector3d fn = face->getNormal();
+//			const Eigen::Vector3d fc = face->getCenter();
+//
+//#ifdef _RT_ONECELL
+//			std::cout << "Face " << i << ": ";
+//			std::cout << "fc: " << fc.transpose() << "\t ";
+//			std::cout << "fn: " << fn.transpose() << "\t "; 
+//			std::cout << "incid: " << cell->getOrientation(face) << "\t ";
+//			std::cout << std::endl;
+//#endif
+//		}
+//
+//		Eigen::VectorXd coeff = Eigen::VectorXd::Zero(5);
+//		Eigen::VectorXd B_h_loc(5);
+//		for (int i = 0; i < 5; i++) {
+//			const Face * face = cellFaces[i];
+//			const int fidx = face->getIndex();
+//			const int orientation = cell->getOrientation(face);
+//			B_h_loc(i) = B_h(fidx);
+//			coeff(i) = orientation * B_h(fidx);
+//		}
+//#ifdef _RT_ONECELL
+//		std::cout << "B_h_loc: " << B_h_loc << std::endl;
+//		std::cout << "coeff: " << coeff << std::endl;
+//#endif
+//		
+//		// for each vertex
+//		Eigen::Matrix3Xd Btest(3, refCoords3d.cols());
+//		Eigen::Matrix3Xd xCoords3d(3, refCoords3d.cols());
+//		for (int i = 0; i < refCoords3d.cols(); i++) {
+//			const Eigen::Vector3d refPos = refCoords3d.col(i);
+//			Eigen::Vector3d Bv;
+//			Bv.setZero();
+//			// for each basis function
+//			for (int idx = 0; idx < 5; idx++) {
+//				const Eigen::Vector3d rt = Numerics::raviartThomasBasis(idx, refPos);
+//				Bv += coeff(idx) / detBK * BK * rt;
+//			}
+//#ifdef _RT_ONECELL
+//			Btest.col(i) = Bv;
+//			xCoords3d.col(i) = BK * refPos + bk;
+//#else
+//			const int vIdx = cellVertices[i]->getIndex();
+//			B_vertex.col(vIdx) += Bv;
+//#endif
+//		}
+//#ifdef _RT_ONECELL
+//		H5Writer tempwriter("temp.h5");
+//		tempwriter.writeData(refCoords3d, "/refCoords3d");
+//		tempwriter.writeData(Btest, "/Btest");
+//		tempwriter.writeData(xCoords3d, "/xCoords3d");
+//		break;
+//#endif
+//	}
+//
+//	H5Writer h5writer("rt.h5");
+//	h5writer.writeData(B_vertex, "/Bvertex");
+//}
 
 const Eigen::Matrix3Xd AppmSolver::getPrismReferenceCoords(const int nSamples)
 {
@@ -377,6 +427,9 @@ void AppmSolver::init_maxwell()
 	E_h = Eigen::VectorXd::Zero(primalMesh.getNumberOfEdges());
 	H_h = Eigen::VectorXd::Zero(dualMesh.getNumberOfEdges());
 	J_h = Eigen::VectorXd::Zero(dualMesh.getNumberOfFaces());
+
+	B_vertex = Eigen::Matrix3Xd::Zero(3, primalMesh.getNumberOfVertices());
+	init_RaviartThomasInterpolation();
 }
 
 /** Initialize Maxwell objects. */
@@ -634,6 +687,9 @@ void AppmSolver::writeOutput(const int iteration, const double time)
 		H.col(i) = H_h(i) / edge->getLength() * edge->getDirection();
 	}
 	h5writer.writeData(H, "/H");
+
+	// Interpolated values of B-field to primal vertices
+	h5writer.writeData(B_vertex, "/Bvertex");
 
 	Eigen::VectorXd timeVec(1);
 	timeVec(0) = time;
@@ -968,6 +1024,93 @@ XdmfGrid AppmSolver::getOutputDualVolumeGrid(const int iteration, const double t
 		));
 	grid.addChild(velocityAttribute);
 	return grid;
+}
+
+/**
+* Define magnetic flux to be an azimuthal field. Useful for testing.
+*/
+void AppmSolver::setAzimuthalMagneticFluxField()
+{
+	const int nFaces = primalMeshInfo.nFaces;
+	for (int i = 0; i < nFaces; i++) {
+		const Face * face = primalMesh.getFace(i);
+		const double fa = face->getArea();
+		const Eigen::Vector3d fn = face->getNormal();
+		if (fn.cross(Eigen::Vector3d::UnitZ()).norm() > 0.99) {
+			// azimuthal field
+			Eigen::Vector3d fc = face->getCenter();
+			fc(2) = 0;
+			fc.normalize();
+			B_h(i) = fn.dot(fc.cross(Eigen::Vector3d::UnitZ()));
+		}
+		else {
+			B_h(i) = 0;
+		}
+	}
+}
+
+void AppmSolver::init_RaviartThomasInterpolation()
+{
+	const int nCells = primalMesh.getNumberOfCells();
+	rt_piolaMatrix.reserve(nCells);
+	rt_piolaVector.reserve(nCells);
+
+	for (int cidx = 0; cidx < nCells; cidx++) {
+		const Cell * cell = primalMesh.getCell(cidx);
+		const std::vector<Face*> cellFaces = cell->getFaceList();
+		assert(cellFaces.size() == 5); // prism cells
+
+		// get top and bottom face of prism
+		const Face * bottomFace = cellFaces[3];
+		const Face * topFace = cellFaces[4];
+		assert(bottomFace->getVertexList().size() == 3); // check if faces are triangular
+		assert(topFace->getVertexList().size() == 3);
+
+		// get vertices of triangle faces
+		const std::vector<Vertex*> bottomVertices = bottomFace->getVertexList();
+		const std::vector<Vertex*> topVertices = topFace->getVertexList();
+
+		// check if vertices of triangle faces have same ordering
+		for (int i = 0; i < 3; i++) {
+			const Eigen::Vector3d v = topVertices[i]->getPosition() - bottomVertices[i]->getPosition();
+			assert(v.normalized().cross(Eigen::Vector3d::UnitZ()).norm() < 16 * std::numeric_limits<double>::epsilon());
+		}
+
+		// check if bottom triangle vertices form a right-handed system
+		const Eigen::Vector3d fc = bottomFace->getCenter();
+		for (int i = 0; i < 3; i++) {
+			const Eigen::Vector3d v0 = bottomVertices[i]->getPosition();
+			const Eigen::Vector3d v1 = bottomVertices[(i + 1) % 3]->getPosition();
+			const Eigen::Vector3d a = v0 - fc;
+			const Eigen::Vector3d b = v1 - v0;
+			const Eigen::Vector3d n = a.normalized().cross(b.normalized());
+			assert(n.dot(Eigen::Vector3d::UnitZ()) > 0);
+		}
+
+		// Collect prism vertices in standard topology format
+		std::vector<Vertex*> cellVertices(6);
+		for (int i = 0; i < 3; i++) {
+			const int offset = 3;
+			cellVertices[i] = bottomVertices[i];
+			cellVertices[i + offset] = topVertices[i];
+		}
+
+		// Vertex positions of prism
+		const Eigen::Vector3d A = cellVertices[0]->getPosition();
+		const Eigen::Vector3d B = cellVertices[1]->getPosition();
+		const Eigen::Vector3d C = cellVertices[2]->getPosition();
+		const Eigen::Vector3d F = cellVertices[5]->getPosition();
+
+		// Define Piola map: xRef  -->  BK * xRef + bK
+		const Eigen::Vector3d bK = C;
+		Eigen::Matrix3d BK;
+		BK.col(0) = A - C;
+		BK.col(1) = B - C;
+		BK.col(2) = F - C;
+		rt_piolaMatrix.emplace_back(BK);
+		rt_piolaVector.emplace_back(bK);
+
+	}
 }
 
 Eigen::SparseMatrix<int> AppmSolver::setupOperatorQ()

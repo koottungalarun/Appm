@@ -132,5 +132,7 @@ void AppmSolverCrankNichol::update_maxwell(const double dt, const double time)
 	H_h.topRows(nH) = maxwellState.topRows(nH);
 	const int nx = Q.cols();
 	E_h = Q * maxwellState.bottomRows(nx);
+
+	B_h.topRows(M_mu.rows()) = M_mu * H_h.topRows(M_mu.cols());
 }
 
