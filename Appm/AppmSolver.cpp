@@ -807,6 +807,22 @@ XdmfGrid AppmSolver::getOutputPrimalSurfaceGrid(const int iteration, const doubl
 			(std::stringstream() << dataFilename << ":/B").str()
 		));
 	primalSurfaceGrid.addChild(BfieldAttribute);
+
+	{
+		// Attribute: Magnetic flux B
+		XdmfAttribute attribute(
+			XdmfAttribute::Tags("Magnetic Flux Interpolated", XdmfAttribute::Type::Vector, XdmfAttribute::Center::Node)
+		);
+		attribute.addChild(
+			XdmfDataItem(XdmfDataItem::Tags(
+				{ primalMesh.getNumberOfVertices(), 3 },
+				XdmfDataItem::NumberType::Float,
+				XdmfDataItem::Format::HDF),
+				(std::stringstream() << dataFilename << ":/Bvertex").str()
+			));
+		primalSurfaceGrid.addChild(attribute);
+
+	}
 	return primalSurfaceGrid;
 }
 
@@ -984,6 +1000,21 @@ XdmfGrid AppmSolver::getOutputDualVolumeGrid(const int iteration, const double t
 			(std::stringstream() << dualMesh.getPrefix() << "-mesh.h5:/cellIndex").str()
 		));
 	grid.addChild(cellIndexAttribute);
+
+	// Attribute: B-field at primal vertices = dual cell centers
+	{
+		XdmfAttribute attribute(
+			XdmfAttribute::Tags("Magnetic Flux", XdmfAttribute::Type::Vector, XdmfAttribute::Center::Node)
+		);
+		attribute.addChild(
+			XdmfDataItem(XdmfDataItem::Tags(
+				{ dualMesh.getNumberOfVertices(), 3 },
+				XdmfDataItem::NumberType::Float,
+				XdmfDataItem::Format::HDF),
+				(std::stringstream() << dataFilename << ":/Bvertex").str()
+			));
+		grid.addChild(attribute);
+	}
 
 	// Attribute: Density
 	XdmfAttribute densityAttribute(

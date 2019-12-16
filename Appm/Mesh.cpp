@@ -745,7 +745,6 @@ XdmfGrid Mesh::getXdmfVertexGrid() const
 	);
 	vertexGrid.addChild(vertexIdxAttribute);
 
-
 	return vertexGrid;
 }
 
