@@ -94,6 +94,7 @@ private:
 	XdmfGrid getOutputDualVolumeGrid(const int iteration, const double time, const std::string & dataFilename);
 
 	void setAzimuthalMagneticFluxField();
+	void setUniformMagneticFluxField(const Eigen::Vector3d & fieldVector);
 	void init_RaviartThomasInterpolation();
 
 	std::vector<Eigen::Matrix3d> rt_piolaMatrix;

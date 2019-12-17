@@ -133,12 +133,17 @@ void Mesh::writeToFile()
 		std::vector<Vertex*> faceVertices = face->getVertexList();
 		const int nFaceVertices = faceVertices.size();
 		if (nFaceVertices > f2v.rows()) {
+			const int nRowsOld = f2v.rows();
 			f2v.conservativeResize(nFaceVertices, f2v.cols());
+			f2v.bottomRows(nFaceVertices - nRowsOld).array() = -1;
 		}
 		for (int k = 0; k < nFaceVertices; k++) {
 			f2v(k, j) = faceVertices[k]->getIndex();
 		}
 	}
+	const int f2v_maxCoeff = f2v.array().abs().maxCoeff();
+	//std::cout << "f2v max: " << f2v_maxCoeff << std::endl;
+	//assert(f2v_maxCoeff == getNumberOfVertices() - 1);
 	file = std::ofstream(this->meshPrefix + "-f2v.dat");
 	file << f2v.transpose() << std::endl;
 

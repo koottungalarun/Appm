@@ -21,6 +21,10 @@ void AppmSolver::run()
 	init_maxwell(); // Initialize Maxwell equations and states
 	init_fluid(); 	// Initialize fluid states
 
+	// For testing of RT interpolation:
+	//setAzimuthalMagneticFluxField();
+	//setUniformMagneticFluxField(Eigen::Vector3d(1,1,1));
+	//interpolateMagneticFluxToPrimalVertices();
 
 	writeOutput(iteration, time);
 
@@ -105,6 +109,8 @@ void AppmSolver::interpolateMagneticFluxToPrimalVertices()
 	B_vertex.setZero();
 	// For each cell ...
 	const int nCells = primalMesh.getNumberOfCells();
+	Eigen::VectorXi countVertexVisits = Eigen::VectorXi::Zero(primalMesh.getNumberOfVertices());
+
 	for (int cidx = 0; cidx < nCells; cidx++) {
 		const Cell * cell = primalMesh.getCell(cidx);
 		const std::vector<Face*> cellFaces = cell->getFaceList();
@@ -144,7 +150,8 @@ void AppmSolver::interpolateMagneticFluxToPrimalVertices()
 			const Face * face = cellFaces[idx];
 			const int faceIncidence = cell->getOrientation(face);
 			const int fidx = face->getIndex();
-			coeff(idx) = faceIncidence * B_h(fidx);
+			const int factor = 1;// face->isBoundary() ? 2 : 1;
+			coeff(idx) = faceIncidence * B_h(fidx) * factor;
 		}
 
 		// Interpolate B-field with RT-basis functions in actual space
@@ -154,14 +161,21 @@ void AppmSolver::interpolateMagneticFluxToPrimalVertices()
 				const int vIdx = vertexIdx(i);
 				const Eigen::Vector3d refPos = refCoords.col(i);
 				const Eigen::Vector3d rt = Numerics::raviartThomasBasis(idx, refPos);
-				B_vertex_local.col(i) += coeff(idx) / detBK * BK * rt;
+				const int directionFactor = (idx >= 3) ? 2 : 1; // Because: prism in z-direction (i.e., face idx < 3) are quads with normal vector perpendicular to z-axis, and face idx >= 3 are triangles. Hence, det(B) acts differently.
+				B_vertex_local.col(i) += directionFactor * coeff(idx) / detBK * BK * rt;
 			}
 		}
 		for (int i = 0; i < 6; i++) {
 			const int vIdx = vertexIdx(i);
+			countVertexVisits(vIdx) += 1;
 			B_vertex.col(vIdx) += B_vertex_local.col(i);
 		}
 	}
+	for (int i = 0; i < primalMesh.getNumberOfVertices(); i++) {
+		B_vertex.col(i) /= countVertexVisits(i);
+	}
+	//Eigen::MatrixXd temp = countVertexVisits.transpose().replicate(3, 1).cast<double>();
+	//B_vertex.cwiseQuotient(temp);
 }
 
 //void AppmSolver::test_raviartThomas()
@@ -1079,6 +1093,34 @@ void AppmSolver::setAzimuthalMagneticFluxField()
 		}
 	}
 }
+
+void AppmSolver::setUniformMagneticFluxField(const Eigen::Vector3d & fieldVector)
+{
+	const int nFaces = primalMeshInfo.nFaces;
+	for (int i = 0; i < nFaces; i++) {
+		const Face * face = primalMesh.getFace(i);
+		const double area = face->getArea();
+		const Eigen::Vector3d fn = face->getNormal();
+		B_h(i) = area * fn.dot(fieldVector);
+	}
+}
+
+//void AppmSolver::setAxialMagneticFluxField()
+//{
+//	const int nFaces = primalMeshInfo.nFaces;
+//	for (int i = 0; i < nFaces; i++) {
+//		const Face * face = primalMesh.getFace(i);
+//		const double fa = face->getArea();
+//		const Eigen::Vector3d fn = face->getNormal();
+//		if (fn.cross(Eigen::Vector3d::UnitZ()).norm() < 0.01) {
+//			// axial field in z-direction
+//			B_h(i) = face->getArea() * fn.normalized().dot(Eigen::Vector3d::UnitZ());
+//		}
+//		else {
+//			B_h(i) = 0;
+//		}
+//	}
+//}
 
 void AppmSolver::init_RaviartThomasInterpolation()
 {
