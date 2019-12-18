@@ -91,7 +91,11 @@ void AppmSolverCrankNichol::update_maxwell(const double dt, const double time)
 	A_11 = M_mu;
 	A_12 = +0.5 * dt * P;
 	A_21 = -0.5 * dt * P.transpose();
+#ifdef _APPM_CN_CURRENT_BC_	
+	A_22 = Q.transpose() * M_eps * Q;
+#else
 	A_22 = Q.transpose() * (M_eps + 0.5 * dt * M_sigma) * Q;
+#endif
 
 	const Eigen::SparseMatrix<double> Aleft = Eigen::vertcat(A_11, A_21);
 	const Eigen::SparseMatrix<double> Aright = Eigen::vertcat(A_12, A_22);
@@ -102,14 +106,22 @@ void AppmSolverCrankNichol::update_maxwell(const double dt, const double time)
 	B_11 = M_mu;
 	B_12 = -0.5 * dt * P;
 	B_21 = +0.5 * dt * P.transpose();
+#ifdef _APPM_CN_CURRENT_BC_
+	B_22 = Q.transpose() * M_eps * Q;
+#else
 	B_22 = Q.transpose() * (M_eps - 0.5 * dt * M_sigma) * Q;
+#endif
 
 	const Eigen::SparseMatrix<double> Bleft  = Eigen::vertcat(B_11, B_21);
 	const Eigen::SparseMatrix<double> Bright = Eigen::vertcat(B_12, B_22);
 	B.leftCols(Bleft.cols()) = Bleft;
 	B.rightCols(Bright.cols()) = Bright;
 
+#ifdef _APPM_CN_CURRENT_BC_
+	const int nDirichlet = nVerticesTerminal / 2; // number of fixed values by boundary condition
+#else
 	const int nDirichlet = nVerticesTerminal; // number of fixed values by boundary condition
+#endif
 	const int nFree = n - nDirichlet; // number of free unknowns 
 
 	const Eigen::SparseMatrix<double> M_f = A.topLeftCorner(nFree, nFree);
@@ -117,20 +129,44 @@ void AppmSolverCrankNichol::update_maxwell(const double dt, const double time)
 
 	// Solve system of equations for free unknowns
 	Eigen::SparseLU<Eigen::SparseMatrix<double>> maxwellSolver(M_f);
+	if (maxwellSolver.info() != Eigen::Success) {
+		std::cout << "Maxwell solver failed to setup the system of equations" << std::endl;
+	}
 	const Eigen::VectorXd x_d   = electricPotentialTerminals(time); // voltage boundary condition on terminals at new timestep
-	const Eigen::VectorXd rhs   = B * prevState - M_d * x_d;        // get right hand side of equation
+	Eigen::VectorXd rhs;  // right hand side of equation
+#ifdef _APPM_CN_CURRENT_BC_
+	assert(M_d.cols() == nDirichlet);
+	rhs = B * prevState;
+	rhs -= M_d * x_d.bottomRows(nDirichlet);
+#else
+	rhs = B * prevState - M_d * x_d;
+#endif
+
+	const int nx = Q.cols();
+	std::cout << "Q.size: " << Q.rows() << " x " << Q.cols() << std::endl;
+	std::cout << "nFacesInner: " << primalMeshInfo.nEdges << std::endl;
+#ifdef _APPM_CN_CURRENT_BC_
+	const Eigen::VectorXd temp = -1 * dt * Q.transpose() * J_h.topRows(primalMeshInfo.nEdges); // TODO this should be ... + 1/2 * dt * Q^t * (J^(k+1) + J(k))
+	rhs.bottomRows(nx) += temp;
+#else
+	rhs = B * prevState - M_d * x_d;
+#endif
+
+
 	const Eigen::VectorXd rhs_f = rhs.topRows(M_f.rows());          // discard equations to terminal vertices
 	Eigen::VectorXd x_f(nFree);
 	x_f = maxwellSolver.solve(rhs_f);       // solve system of equations
+	if (maxwellSolver.info() != Eigen::Success) {
+		std::cout << "Maxwell solver failed to solve for vector of unknowns" << std::endl;
+	}
 
 	// assign solution to state vector
 	maxwellState.topRows(nFree) = x_f; 
-	maxwellState.bottomRows(nDirichlet) = x_d; 
+	maxwellState.bottomRows(nDirichlet) = x_d.bottomRows(nDirichlet); 
 
 	// map data to vectors
 	const int nH = primalMeshInfo.nFacesInner;
 	H_h.topRows(nH) = maxwellState.topRows(nH);
-	const int nx = Q.cols();
 	E_h = Q * maxwellState.bottomRows(nx);
 
 	B_h.topRows(M_mu.rows()) = M_mu * H_h.topRows(M_mu.cols());

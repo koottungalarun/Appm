@@ -1,5 +1,9 @@
 #pragma once
 #include "AppmSolver.h"
+
+#define _APPM_CN_CURRENT_BC_
+#undef  _APPM_CN_CURRENT_BC_
+
 class AppmSolverCrankNichol :
 	public AppmSolver
 {

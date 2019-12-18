@@ -26,6 +26,23 @@ void AppmSolver::run()
 	//setUniformMagneticFluxField(Eigen::Vector3d(1,1,1));
 	//interpolateMagneticFluxToPrimalVertices();
 
+	// initialize current flow
+	//const double electrodeRadius = 0.35;
+	//const Eigen::Vector3d currentDensityVector = Eigen::Vector3d::UnitZ();
+	//for (int i = 0; i < dualMeshInfo.nFaces; i++) {
+	//	const Face * dualFace = dualMesh.getFace(i);
+	//	const Eigen::Vector3d fc = dualFace->getCenter();
+	//	const Eigen::Vector3d fn = dualFace->getNormal();
+	//	const double area = dualFace->getArea();
+	//	if (fc.segment(0,2).norm() <= electrodeRadius) {
+	//		J_h(i) = area * fn.dot(currentDensityVector);
+	//	}
+	//	else {
+	//		J_h(i) = 0;
+	//	}
+	//}
+
+
 	writeOutput(iteration, time);
 
 	// Time integration loop
@@ -1270,9 +1287,10 @@ Eigen::VectorXd AppmSolver::electricPotentialTerminals(const double time)
 	assert(n % 2 == 0);
 	const double t0 = 3;
 	const double sigma_t = 1;
-	const double phi1 = 10 * 0.5 * (1 + tanh( (time - t0) / sigma_t));
-	const double phi2 = 0;
-	std::cout << "phi1 = " << phi1 << std::endl;
+	const double phiA = 10;
+	const double phiB = 0;
+	const double phi1 = phiA * 0.5 * (1 + tanh( (time - t0) / sigma_t));
+	const double phi2 = phiB;
 	Eigen::VectorXd phi_terminals(n);
 	phi_terminals.topRows(n / 2).array() = phi1;
 	phi_terminals.bottomRows(n / 2).array() = phi2;
