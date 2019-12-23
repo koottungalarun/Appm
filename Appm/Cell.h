@@ -19,6 +19,7 @@ public:
 	const int getOrientation(const Face * face) const;
 
 	const Eigen::Vector3d & getCenter() const;
+	const Eigen::Matrix3Xd getVertexCoordinates() const;
 
 private:
 	double volume = 0;

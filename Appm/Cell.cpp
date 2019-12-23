@@ -122,3 +122,25 @@ const Eigen::Vector3d & Cell::getCenter() const
 {
 	return center;
 }
+
+const Eigen::Matrix3Xd Cell::getVertexCoordinates() const
+{
+	std::vector<Vertex*> vertexList;
+	for (auto face : faceList) {
+		for (auto vertex : face->getVertexList()) {
+			vertexList.push_back(vertex);
+		}
+	}
+	std::sort(vertexList.begin(), vertexList.end());
+	std::vector<Vertex*>::iterator it;
+	it = std::unique(vertexList.begin(), vertexList.end());
+	int nVertices = std::distance(vertexList.begin(), it);
+	assert(nVertices >= 4);
+
+	Eigen::Matrix3Xd coords(3, nVertices);
+	for (int i = 0; i < nVertices; i++) {
+		const Vertex * vertex = vertexList[i];
+		coords.col(i) = vertex->getPosition();
+	}
+	return coords;
+}
