@@ -14,6 +14,12 @@ PrimalMesh::PrimalMesh(const std::string & meshPrefix)
 	//std::cout << "Call to PrimalMesh(string)" << std::endl;
 }
 
+PrimalMesh::PrimalMesh(const PrimalMeshParams & p)
+	: PrimalMesh()
+{
+	this->params = p;
+}
+
 
 PrimalMesh::~PrimalMesh()
 {
@@ -23,22 +29,18 @@ PrimalMesh::~PrimalMesh()
 void PrimalMesh::init()
 {
 	init_hexagon();
-	const int nRefinements = 2;
-	const int nOuterMeshLayers = 0;
-	if (nOuterMeshLayers > 0) {
-		assert(nRefinements > 1);
-	}
+
+	validateParameters();
+
 	assert(getNumberOfVertices() > 0);
-	refineMesh(nRefinements);
+	refineMesh(params.nRefinements);
 
-	outerMeshExtrude(nOuterMeshLayers);
+	outerMeshExtrude(params.nOuterLayers);
 
-	const int nLayers = 5;
 	const double zmax = 1;
-	extrudeMesh(nLayers, zmax);
+	extrudeMesh(params.nAxialLayers, zmax);
 
-	const double electrodeRadius = 0.35;
-	sortVertices(electrodeRadius);
+	sortVertices(params.electrodeRadius);
 	sortEdges();
 	sortFaces();
 }
@@ -208,23 +210,6 @@ void PrimalMesh::outerMeshExtrude()
 		const int idxE = boundaryEdges.innerIndexPtr()[i];
 		const Edge * edge = edgeList[idxE];
 		assert(edge != nullptr);
-		//const std::vector<Face*> edgeFaces = edge->getFaceList();
-		//assert(edgeFaces.size() == 1);
-		//const Face * face = edgeFaces[0];
-		//assert(face != nullptr);
-		//const std::vector<Vertex*> faceVertices = face->getVertexList();
-		//assert(faceVertices.size() == 3);
-		//const Vertex * A = edge->getVertexA();
-		//const Vertex * B = edge->getVertexB();
-		//Vertex * C = nullptr;
-		//for (int j = 0; j < 3; j++) {
-		//	if (faceVertices[j] != A && faceVertices[j] != B) {
-		//		C = faceVertices[j];
-		//		break;
-		//	}
-		//}
-		//assert(C != nullptr);
-		//const Eigen::Vector3d posC = C->getPosition();
 		Eigen::Vector3d pos = edge->getHalfwayPosition();
 		pos *= 1.25;
 		boundaryEdgeVertexCoord.col(idx++) = pos;
@@ -270,7 +255,18 @@ void PrimalMesh::outerMeshExtrude()
 		assert(C1 != nullptr);
 		Vertex * A = edge->getVertexA();
 		Vertex * B = edge->getVertexB();
-		f2v_edges.col(idx++) = Eigen::Vector3i(A->getIndex(), B->getIndex(), C1->getIndex());
+
+		// check for face orientation; ensure that the face resulting face has positive orientation in z-direction
+		const Eigen::Vector3d a = A->getPosition();
+		const Eigen::Vector3d b = B->getPosition() - A->getPosition();
+		const Eigen::Vector3d n = a.normalized().cross(b.normalized());
+		const double orientation = n.dot(Eigen::Vector3d::UnitZ());
+		if (orientation < 0) {
+			Vertex * temp = A;
+			A = B;
+			B = temp;
+		}
+		f2v_edges.col(idx++) = Eigen::Vector3i(A->getIndex(), C1->getIndex(), B->getIndex());
 	
 		const int idxA1 = boundaryVertexVertexIdx.coeff(A->getIndex());
 		const int idxB1 = boundaryVertexVertexIdx.coeff(B->getIndex());
@@ -286,10 +282,10 @@ void PrimalMesh::outerMeshExtrude()
 	idx = 0;
 	for (int i = 0; i < nnzV; i++) {
 		const int idxV = boundaryVertices.innerIndexPtr()[i];
-		Vertex * bV = getVertex(idxV);
+		Vertex * B = getVertex(idxV);
 
 		// get adjacient boundary edges
-		std::vector<Edge*> vertexEdges = bV->getEdges();
+		std::vector<Edge*> vertexEdges = B->getEdges();
 		std::vector<Edge*> boundaryEdgeList;
 		for (auto edge : vertexEdges) {
 			if ((edge->getIndex() < nEdges) && edge->isBoundary()) {
@@ -300,10 +296,21 @@ void PrimalMesh::outerMeshExtrude()
 
 		Vertex * C1 = getVertex(boundaryEdgeVertexIdx.coeff(boundaryEdgeList[0]->getIndex()));
 		Vertex * D1 = getVertex(boundaryEdgeVertexIdx.coeff(boundaryEdgeList[1]->getIndex()));
-		Vertex * B1 = getVertex(boundaryVertexVertexIdx.coeff(bV->getIndex()));
+		Vertex * B1 = getVertex(boundaryVertexVertexIdx.coeff(B->getIndex()));
 
-		f2v_vertices.col(idx++) = Eigen::Vector3i(bV->getIndex(), C1->getIndex(), D1->getIndex());
-		f2v_vertices.col(idx++) = Eigen::Vector3i(B1->getIndex(), C1->getIndex(), D1->getIndex());
+		// check for face orientation
+		const Eigen::Vector3d a = C1->getPosition() - B->getPosition();
+		const Eigen::Vector3d b = D1->getPosition() - C1->getPosition();
+		const Eigen::Vector3d n = a.normalized().cross(b.normalized());
+		const double orientation = n.dot(Eigen::Vector3d::UnitZ());
+		if (orientation < 0) {
+			Vertex * temp = C1;
+			C1 = D1;
+			D1 = temp;
+		}
+
+		f2v_vertices.col(idx++) = Eigen::Vector3i(B->getIndex(), C1->getIndex(), D1->getIndex());
+		f2v_vertices.col(idx++) = Eigen::Vector3i(B1->getIndex(), D1->getIndex(), C1->getIndex());
 	}
 	assert(f2v_vertices.cols() == idx);
 
@@ -818,4 +825,14 @@ void PrimalMesh::sortFaces()
 		sortedFaces[i]->setIndex(i);
 	}
 	faceList = sortedFaces;
+}
+
+void PrimalMesh::validateParameters()
+{
+	assert(params.nAxialLayers >= 1);
+	assert(params.nRefinements >= 1);
+	if (params.nOuterLayers > 0) {
+		assert(params.nRefinements > 1);
+	}
+
 }
