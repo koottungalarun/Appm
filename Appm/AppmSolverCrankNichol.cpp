@@ -91,11 +91,12 @@ void AppmSolverCrankNichol::update_maxwell(const double dt, const double time)
 	A_11 = M_mu;
 	A_12 = +0.5 * dt * P;
 	A_21 = -0.5 * dt * P.transpose();
-#ifdef _APPM_CN_CURRENT_BC_	
-	A_22 = Q.transpose() * M_eps * Q;
-#else
-	A_22 = Q.transpose() * (M_eps + 0.5 * dt * M_sigma) * Q;
-#endif
+	if (isMaxwellCurrentSource) {
+		A_22 = Q.transpose() * M_eps * Q;
+	}
+	else {
+		A_22 = Q.transpose() * (M_eps + 0.5 * dt * M_sigma) * Q;
+	}
 
 	const Eigen::SparseMatrix<double> Aleft = Eigen::vertcat(A_11, A_21);
 	const Eigen::SparseMatrix<double> Aright = Eigen::vertcat(A_12, A_22);
@@ -106,22 +107,25 @@ void AppmSolverCrankNichol::update_maxwell(const double dt, const double time)
 	B_11 = M_mu;
 	B_12 = -0.5 * dt * P;
 	B_21 = +0.5 * dt * P.transpose();
-#ifdef _APPM_CN_CURRENT_BC_
-	B_22 = Q.transpose() * M_eps * Q;
-#else
-	B_22 = Q.transpose() * (M_eps - 0.5 * dt * M_sigma) * Q;
-#endif
+	if (isMaxwellCurrentSource) {
+		B_22 = Q.transpose() * M_eps * Q;
+	}
+	else {
+		B_22 = Q.transpose() * (M_eps - 0.5 * dt * M_sigma) * Q;
+	}
 
 	const Eigen::SparseMatrix<double> Bleft  = Eigen::vertcat(B_11, B_21);
 	const Eigen::SparseMatrix<double> Bright = Eigen::vertcat(B_12, B_22);
 	B.leftCols(Bleft.cols()) = Bleft;
 	B.rightCols(Bright.cols()) = Bright;
 
-#ifdef _APPM_CN_CURRENT_BC_
-	const int nDirichlet = nVerticesTerminal / 2; // number of fixed values by boundary condition
-#else
-	const int nDirichlet = nVerticesTerminal; // number of fixed values by boundary condition
-#endif
+	int nDirichlet = 0;
+	if (isMaxwellCurrentSource) {
+		nDirichlet = nVerticesTerminal / 2; // number of fixed values by boundary condition
+	}
+	else {
+		nDirichlet = nVerticesTerminal; // number of fixed values by boundary condition
+	}
 	const int nFree = n - nDirichlet; // number of free unknowns 
 
 	const Eigen::SparseMatrix<double> M_f = A.topLeftCorner(nFree, nFree);
@@ -134,23 +138,26 @@ void AppmSolverCrankNichol::update_maxwell(const double dt, const double time)
 	}
 	const Eigen::VectorXd x_d   = electricPotentialTerminals(time); // voltage boundary condition on terminals at new timestep
 	Eigen::VectorXd rhs;  // right hand side of equation
-#ifdef _APPM_CN_CURRENT_BC_
-	assert(M_d.cols() == nDirichlet);
-	rhs = B * prevState;
-	rhs -= M_d * x_d.bottomRows(nDirichlet);
-#else
-	rhs = B * prevState - M_d * x_d;
-#endif
+
+	if (isMaxwellCurrentSource) {
+		assert(M_d.cols() == nDirichlet);
+		rhs = B * prevState;
+		rhs -= M_d * x_d.bottomRows(nDirichlet);
+	}
+	else {
+		rhs = B * prevState - M_d * x_d;
+	}
 
 	const int nx = Q.cols();
 	std::cout << "Q.size: " << Q.rows() << " x " << Q.cols() << std::endl;
 	std::cout << "nFacesInner: " << primalMeshInfo.nEdges << std::endl;
-#ifdef _APPM_CN_CURRENT_BC_
-	const Eigen::VectorXd temp = -1 * dt * Q.transpose() * J_h.topRows(primalMeshInfo.nEdges); // TODO this should be ... + 1/2 * dt * Q^t * (J^(k+1) + J(k))
-	rhs.bottomRows(nx) += temp;
-#else
-	rhs = B * prevState - M_d * x_d;
-#endif
+	if (isMaxwellCurrentSource) {
+		const Eigen::VectorXd temp = -1 * dt * Q.transpose() * J_h.topRows(primalMeshInfo.nEdges); // TODO this should be ... + 1/2 * dt * Q^t * (J^(k+1) + J(k))
+		rhs.bottomRows(nx) += temp;
+	}
+	else {
+		rhs = B * prevState - M_d * x_d;
+	}
 
 
 	const Eigen::VectorXd rhs_f = rhs.topRows(M_f.rows());          // discard equations to terminal vertices
