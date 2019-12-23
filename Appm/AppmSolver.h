@@ -102,7 +102,7 @@ private:
 	std::vector<Eigen::Matrix3d> rt_piolaMatrix;
 	std::vector<Eigen::Vector3d> rt_piolaVector;
 
-	void setTorusCurrent();
+	void setTorusCurrent(const double x1, const double x2, const double z1, const double z2);
 
 };
 

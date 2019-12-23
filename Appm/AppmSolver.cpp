@@ -29,14 +29,18 @@ void AppmSolver::run()
 	// initialize current flow
 	this->isMaxwellCurrentSource = true;
 	if (isMaxwellCurrentSource) {
-		setTorusCurrent();
+		const double x1 = -0.5;
+		const double x2 = 0.5;
+		const double z1 = 0.24;
+		const double z2 = 0.76;
+		setTorusCurrent(x1, x2, z1, z2);
 	}
 
 	writeOutput(iteration, time);
 
 	// Time integration loop
 	//double dT = 0.05;
-	const int maxIteration = 0;
+	const int maxIteration = 100;
 	const double maxTime = 20;
 
 	while (iteration < maxIteration && time < maxTime) {
@@ -381,7 +385,7 @@ void AppmSolver::init_meshes()
 	PrimalMesh::PrimalMeshParams primalParams;
 	primalParams.nAxialLayers = 10;
 	primalParams.nRefinements = 2;
-	primalParams.nOuterLayers = 0;
+	primalParams.nOuterLayers = 2;
 
 	primalMesh = PrimalMesh(primalParams);
 	primalMesh.init();
@@ -1200,18 +1204,15 @@ void AppmSolver::init_RaviartThomasInterpolation()
 	}
 }
 
-void AppmSolver::setTorusCurrent()
+/**
+* Set a toroidal current path in xz-plane through faces that are in xz-plane and pierced by the loop (x,z) 
+*/
+
+void AppmSolver::setTorusCurrent(const double x1, const double x2, const double z1, const double z2)
 {
 	std::cout << "Set torus current" << std::endl;
 	const Eigen::Vector3d center = Eigen::Vector3d(0.0, 0.0, 0.5);
 
-	// Select faces that are in xz-plane (-> y = 0 +/- dy) 
-	// and pierced by the loop (x,z)
-	const double dy = 0.05;
-	const double x1 = -0.5;
-	const double x2 =  0.5;
-	const double z1 = 0.24;
-	const double z2 = 0.76;
 	const double tol = 8*std::numeric_limits<double>::epsilon();
 
 	const int nCells = dualMesh.getNumberOfCells();
@@ -1234,8 +1235,8 @@ void AppmSolver::setTorusCurrent()
 			const int faceIdx = face->getIndex();
 			const Eigen::Vector3d fn = face->getNormal();
 
+			// Skip faces that have a normal vector out of xz plane
 			if (abs(Eigen::Vector3d::UnitY().dot(fn)) > tol) { continue; }
-			
 			
 			// Get vertex coordinates of this face
 			const std::vector<Vertex*> faceVertices = face->getVertexList();
