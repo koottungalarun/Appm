@@ -13,7 +13,7 @@ AppmSolver::~AppmSolver()
 
 void AppmSolver::run()
 {
-	double dt = 0.1;
+	double dt = 0.05;
 	double time = 0;
 	int iteration = 0;
 
@@ -27,27 +27,16 @@ void AppmSolver::run()
 	//interpolateMagneticFluxToPrimalVertices();
 
 	// initialize current flow
-	//const double electrodeRadius = 0.35;
-	//const Eigen::Vector3d currentDensityVector = Eigen::Vector3d::UnitZ();
-	//for (int i = 0; i < dualMeshInfo.nFaces; i++) {
-	//	const Face * dualFace = dualMesh.getFace(i);
-	//	const Eigen::Vector3d fc = dualFace->getCenter();
-	//	const Eigen::Vector3d fn = dualFace->getNormal();
-	//	const double area = dualFace->getArea();
-	//	if (fc.segment(0,2).norm() <= electrodeRadius) {
-	//		J_h(i) = area * fn.dot(currentDensityVector);
-	//	}
-	//	else {
-	//		J_h(i) = 0;
-	//	}
-	//}
-
+	this->isMaxwellCurrentSource = true;
+	if (isMaxwellCurrentSource) {
+		setTorusCurrent();
+	}
 
 	writeOutput(iteration, time);
 
 	// Time integration loop
 	//double dT = 0.05;
-	const int maxIteration = 200;
+	const int maxIteration = 0;
 	const double maxTime = 20;
 
 	while (iteration < maxIteration && time < maxTime) {
@@ -55,6 +44,7 @@ void AppmSolver::run()
 		// Fluid equations
 		// dt = update_fluid();
 		std::cout << "dt = " << dt << std::endl;
+
 		
 		// Maxwell equations
 		update_maxwell(dt, time);
@@ -387,7 +377,13 @@ const Eigen::Matrix3Xd AppmSolver::getPrismReferenceCoords(const int nSamples)
 void AppmSolver::init_meshes()
 {
 	std::cout << "Init primal mesh" << std::endl;
-	primalMesh = PrimalMesh();
+
+	PrimalMesh::PrimalMeshParams primalParams;
+	primalParams.nAxialLayers = 10;
+	primalParams.nRefinements = 2;
+	primalParams.nOuterLayers = 0;
+
+	primalMesh = PrimalMesh(primalParams);
 	primalMesh.init();
 	primalMeshInfo = setMeshInfo(primalMesh);
 	primalMesh.writeToFile();
@@ -986,6 +982,7 @@ XdmfGrid AppmSolver::getOutputDualSurfaceGrid(const int iteration, const double 
 			));
 		grid.addChild(attribute);
 	}
+
 	return grid;
 }
 
@@ -1203,6 +1200,82 @@ void AppmSolver::init_RaviartThomasInterpolation()
 	}
 }
 
+void AppmSolver::setTorusCurrent()
+{
+	std::cout << "Set torus current" << std::endl;
+	const Eigen::Vector3d center = Eigen::Vector3d(0.0, 0.0, 0.5);
+
+	// Select faces that are in xz-plane (-> y = 0 +/- dy) 
+	// and pierced by the loop (x,z)
+	const double dy = 0.05;
+	const double x1 = -0.5;
+	const double x2 =  0.5;
+	const double z1 = 0.24;
+	const double z2 = 0.76;
+	const double tol = 8*std::numeric_limits<double>::epsilon();
+
+	const int nCells = dualMesh.getNumberOfCells();
+
+	for (int i = 0; i < nCells; i++) {
+		const Cell * cell = dualMesh.getCell(i);
+		const Eigen::Vector3d center = cell->getCenter();
+		const std::vector<Face*> cellFaces = cell->getFaceList();		
+		const Eigen::Matrix3Xd cellVertexCoords = cell->getVertexCoordinates();
+		const Eigen::ArrayXd xv = cellVertexCoords.row(0).array(); // x-coordinates of cell vertices
+		const Eigen::ArrayXd yv = cellVertexCoords.row(1).array(); // 1-coordinates of cell vertices
+		const Eigen::ArrayXd zv = cellVertexCoords.row(2).array(); // z-coordinates of cell vertices
+		const bool isXZplane = (yv > 0).any() && (yv < 0).any();
+
+		// Skip cells that are not across xz-plane
+		if (!isXZplane || (xv < x1).all() || (xv > x2).all() || (zv < z1).all() || (zv > z2).all()) { continue; }
+
+		// For each face of this cell
+		for (auto face : cellFaces) {
+			const int faceIdx = face->getIndex();
+			const Eigen::Vector3d fn = face->getNormal();
+
+			if (abs(Eigen::Vector3d::UnitY().dot(fn)) > tol) { continue; }
+			
+			
+			// Get vertex coordinates of this face
+			const std::vector<Vertex*> faceVertices = face->getVertexList();
+			Eigen::Matrix3Xd faceVertexPos(3, faceVertices.size());
+			for (int i = 0; i < faceVertices.size(); i++) {
+				faceVertexPos.col(i) = faceVertices[i]->getPosition();
+			}
+			const Eigen::ArrayXd x = faceVertexPos.row(0).array();
+			const Eigen::ArrayXd z = faceVertexPos.row(2).array();
+			const bool isXnormal = fn.cross(Eigen::Vector3d::UnitX()).norm() < tol;
+			const bool isZnormal = fn.cross(Eigen::Vector3d::UnitZ()).norm() < tol;
+
+			// Determine if face is pierced by one of the loop edges:
+			// edge 1: z = z1, x = [x1,x2]
+			bool isPiercedByEdge1 = isXnormal && (z <= (z1 + tol)).any() && (x >= x1).all() && (x <= x2).all();
+			if (isPiercedByEdge1) {
+				J_h(faceIdx) = fn.dot(Eigen::Vector3d::UnitX());
+			}
+
+			// edge 2: x = x1, z = [z1,z2]
+			bool isPiercedByEdge2 = isZnormal && (x <= (x1 + tol)).any() && (z >= z1).all() && (z <= z2).all();
+			if (isPiercedByEdge2) {
+				J_h(faceIdx) = -fn.dot(Eigen::Vector3d::UnitZ());
+			}
+
+			// edge 3: z = z2, x = [x1,x2]
+			bool isPiercedByEdge3 = isXnormal && (z >= (z2 - tol)).any() && (x >= x1).all() && (x <= x2).all();
+			if (isPiercedByEdge3) {
+				J_h(faceIdx) = -fn.dot(Eigen::Vector3d::UnitX());
+			}
+
+			// edge 4: x = x2, z = [z1,z2]
+			bool isPiercedByEdge4 = isZnormal && (x >= (x2 - tol)).any() && (z >= z1).all() && (z <= z2).all();
+			if (isPiercedByEdge4) {
+				J_h(faceIdx) = fn.dot(Eigen::Vector3d::UnitZ());
+			}
+		}
+	}
+}
+
 Eigen::SparseMatrix<int> AppmSolver::setupOperatorQ()
 {
 	const Eigen::VectorXi vertexTypes = primalMesh.getVertexTypes();
@@ -1287,7 +1360,7 @@ Eigen::VectorXd AppmSolver::electricPotentialTerminals(const double time)
 	assert(n % 2 == 0);
 	const double t0 = 3;
 	const double sigma_t = 1;
-	const double phiA = 10;
+	const double phiA = 0;
 	const double phiB = 0;
 	const double phi1 = phiA * 0.5 * (1 + tanh( (time - t0) / sigma_t));
 	const double phi2 = phiB;

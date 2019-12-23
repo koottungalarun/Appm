@@ -46,6 +46,8 @@ protected:
 	Eigen::MatrixXd fluidStates;
 	Eigen::MatrixXd fluidFluxes;
 
+	bool isMaxwellCurrentSource = false;
+
 	virtual void init_maxwell(const double dt) = 0;
 	virtual void init_maxwell() = 0;
 	virtual void update_maxwell(const double dt, const double time) = 0;
@@ -99,6 +101,8 @@ private:
 
 	std::vector<Eigen::Matrix3d> rt_piolaMatrix;
 	std::vector<Eigen::Vector3d> rt_piolaVector;
+
+	void setTorusCurrent();
 
 };
 
