@@ -13,107 +13,60 @@ AppmSolver::~AppmSolver()
 
 void AppmSolver::run()
 {
-	init_meshes();
-	return;
-
-	const int nDualFaces = dualMesh.getNumberOfFaces();
-
-	// Define data vectors
-	bvec = Eigen::VectorXd::Zero(primalMesh.getNumberOfFaces());
-	dvec = Eigen::VectorXd::Zero(dualMesh.getNumberOfFaces());
-	evec = Eigen::VectorXd::Zero(primalMesh.getNumberOfEdges());
-	hvec = Eigen::VectorXd::Zero(dualMesh.getNumberOfEdges());
-	jvec = Eigen::VectorXd::Zero(dualMesh.getNumberOfFaces());
-
-	// Initialize variables for Maxwell equations
-	// Note: actual values are for testing
-	for (int i = 0; i < nDualFaces; i++) {
-		const Face * face = dualMesh.getFace(i);
-		const Eigen::Vector3d fc = face->getCenter();
-		const Eigen::Vector2d fc_2d = fc.segment(0, 2);
-
-		if (fc_2d.norm() < 0.3) {
-			const Eigen::Vector3d fn = face->getNormal();
-			jvec(i) = 1 * face->getArea() * fn.dot(Eigen::Vector3d(0, 0, 1));
-		}
-	}
-	for (int i = 0; i < primalMesh.getNumberOfEdges(); i++) {
-		const Edge * edge = primalMesh.getEdge(i);
-		const Eigen::Vector3d edgeDir = edge->getDirection();
-		evec(i) = edgeDir.dot(Eigen::Vector3d(0, 0, 1));
-	}
-	for (int i = 0; i < primalMesh.getNumberOfFaces(); i++) {
-		bvec(i) = primalMesh.getFace(i)->getNormal().dot(Eigen::Vector3d(0, 0, 1));
-	}
-	for (int i = 0; i < dualMesh.getNumberOfFaces(); i++) {
-		dvec(i) = dualMesh.getFace(i)->getNormal().dot(Eigen::Vector3d(0, 0, 1));
-	}
-	for (int i = 0; i < dualMesh.getNumberOfEdges(); i++) {
-		const Edge * edge = dualMesh.getEdge(i);
-		const Eigen::Vector3d edgeDir = edge->getDirection();
-		hvec(i) = edgeDir.dot(Eigen::Vector3d(0, 0, 1));
-	}
-
-	// Initialize fluid states
-	init_fluid();
-
+	double dt = 0.05;
 	double time = 0;
 	int iteration = 0;
+
+	init_meshes();  // Initialize primal and dual meshes
+	init_maxwell(); // Initialize Maxwell equations and states
+	init_fluid(); 	// Initialize fluid states
+
+	// For testing of RT interpolation:
+	//setAzimuthalMagneticFluxField();
+	//setUniformMagneticFluxField(Eigen::Vector3d(1,1,1));
+	//interpolateMagneticFluxToPrimalVertices();
+
+	// initialize current flow
+	this->isMaxwellCurrentSource = true;
+	if (isMaxwellCurrentSource) {
+		const double x1 = -0.5;
+		const double x2 = 0.5;
+		const double z1 = 0.24;
+		const double z2 = 0.76;
+		setTorusCurrent(x1, x2, z1, z2);
+	}
+
 	writeOutput(iteration, time);
 
-	const Eigen::SparseMatrix<double> Cprimal = primalMesh.get_f2eMap().cast<double>();
-	const Eigen::SparseMatrix<double> Cdual = dualMesh.get_f2eMap().cast<double>();
-	assert(Cprimal.rows() == bvec.size());
-	assert(Cprimal.cols() == evec.size());
-	assert(Cdual.rows() == dvec.size());
-	assert(Cdual.cols() == hvec.size());
-
-	const int nPrimalFaces = primalMesh.getNumberOfFaces();
-	const int nPrimalEdges = primalMesh.getNumberOfEdges();
-	typedef Eigen::Triplet<double> T;
-	std::vector<T> triplets;
-	for (int i = 0; i < nPrimalFaces; i++) {
-		double value = dualMesh.getEdge(i)->getLength() / primalMesh.getFace(i)->getArea();
-		triplets.push_back(T(i, i, value));
-	}
-	Eigen::SparseMatrix<double> hodgeOp_muInv(nPrimalFaces, nPrimalFaces);
-	hodgeOp_muInv.setFromTriplets(triplets.begin(), triplets.end());
-	hodgeOp_muInv.makeCompressed();
-
-	triplets.resize(0);
-	for (int i = 0; i < nPrimalEdges; i++) {
-		double value = primalMesh.getEdge(i)->getLength() / dualMesh.getFace(i)->getArea();
-		triplets.push_back(T(i, i, value));
-	}
-	Eigen::SparseMatrix<double> hodgeOp_epsInv(nPrimalEdges, nPrimalEdges);
-	hodgeOp_epsInv.setFromTriplets(triplets.begin(), triplets.end());
-	hodgeOp_epsInv.makeCompressed();
-
 	// Time integration loop
-	double dT = 0.05;
-	const int maxIteration = 0;
-	const double maxTime = 10;
+	//double dT = 0.05;
+	const int maxIteration = 100;
+	const double maxTime = 20;
+
 	while (iteration < maxIteration && time < maxTime) {
+		std::cout << "Iteration " << iteration << ",\t time = " << time << std::endl;
 		// Fluid equations
-		dT = update_fluid();
+		// dt = update_fluid();
+		std::cout << "dt = " << dt << std::endl;
 
+		
 		// Maxwell equations
-		//bvec = bvec - dT * Cprimal * evec;
-		//hvec.topRows(hodgeOp_muInv.rows()) = hodgeOp_muInv * bvec;
-		//dvec = dvec + dT * Cdual * hvec - dT * jvec;
-		//evec = hodgeOp_epsInv * dvec.topRows(hodgeOp_epsInv.cols());
+		update_maxwell(dt, time);
+		interpolateMagneticFluxToPrimalVertices();
 
-		assert(bvec.array().isFinite().all());
-		assert(dvec.array().isFinite().all());
-		assert(evec.array().isFinite().all());
-		assert(hvec.array().isFinite().all());
+		//assert(bvec.array().isFinite().all());
+		//assert(dvec.array().isFinite().all());
+		//assert(evec.array().isFinite().all());
+		//assert(hvec.array().isFinite().all());
 
 		iteration++;
-		time += dT;
+		time += dt;
 		writeOutput(iteration, time);
 	}
 	std::cout << "Final time:      " << time << std::endl;
 	std::cout << "Final iteration: " << iteration << std::endl;
+
+	// test_raviartThomas();
 
 	// Use Paraview (version 5.6.0) to visualize.
 	// Light data is given in XDMF files (version 3). 
@@ -128,20 +81,327 @@ void AppmSolver::run()
 	writeXdmfDualVolume();
 }
 
+AppmSolver::MeshInfo AppmSolver::setMeshInfo(const Mesh & mesh)
+{
+	MeshInfo meshInfo;
+
+	// Vertices
+	const Eigen::VectorXi vertexTypes = mesh.getVertexTypes();
+	const int boundaryVertexType = static_cast<int>(Vertex::Type::Boundary);
+	const int terminalVertexType = static_cast<int>(Vertex::Type::Terminal);
+	meshInfo.nVertices = mesh.getNumberOfVertices();
+	meshInfo.nVerticesTerminal = (vertexTypes.array() == terminalVertexType).count();
+	meshInfo.nVerticesBoundary = (vertexTypes.array() == boundaryVertexType).count() + meshInfo.nVerticesTerminal;
+
+	// Edges
+	const Eigen::VectorXi edgeTypes = mesh.getEdgeTypes();
+	const int interiorEdgeType = static_cast<int>(Edge::Type::Interior);
+	const int interiorToBoundaryEdgeType = static_cast<int>(Edge::Type::InteriorToBoundary);
+	const int boundaryEdgeType = static_cast<int>(Edge::Type::Boundary);
+	meshInfo.nEdges = mesh.getNumberOfEdges();
+	meshInfo.nEdgesInner = 
+		(edgeTypes.array() == interiorEdgeType).count() + 
+		(edgeTypes.array() == interiorToBoundaryEdgeType).count();
+
+	// Faces
+	const Eigen::VectorXi faceTypes = mesh.getFaceTypes();
+	const int isBoundaryFace = 1;
+	meshInfo.nFaces = mesh.getNumberOfFaces();
+	meshInfo.nFacesInner = (faceTypes.array() != isBoundaryFace).count();
+
+	// Cells
+	meshInfo.nCells = mesh.getNumberOfCells();
+
+	return meshInfo;
+}
+
+void AppmSolver::interpolateMagneticFluxToPrimalVertices()
+{
+	B_vertex.setZero();
+	// For each cell ...
+	const int nCells = primalMesh.getNumberOfCells();
+	Eigen::VectorXi countVertexVisits = Eigen::VectorXi::Zero(primalMesh.getNumberOfVertices());
+
+	for (int cidx = 0; cidx < nCells; cidx++) {
+		const Cell * cell = primalMesh.getCell(cidx);
+		const std::vector<Face*> cellFaces = cell->getFaceList();
+		const std::vector<Vertex*> bottomVertices = cellFaces[3]->getVertexList();
+		const std::vector<Vertex*> topVertices = cellFaces[4]->getVertexList();
+
+		// Piola map
+		const Eigen::Matrix3d & BK = rt_piolaMatrix[cidx];
+		const Eigen::Vector3d & bK = rt_piolaVector[cidx];
+		const double detBK = BK.determinant();
+
+		// Get prism vertices
+		std::vector<Vertex*> cellVertices(6);
+		for (int i = 0; i < 3; i++) {
+			cellVertices[i] = bottomVertices[i];
+			cellVertices[i + 3] = topVertices[i];
+		}
+
+		//Eigen::Matrix3cd vertexCoords(3, 6);
+		Eigen::MatrixXd refCoords(3, 6);
+		Eigen::VectorXi vertexIdx(6);
+		for (int i = 0; i < 6; i++) {
+			const Vertex * v = cellVertices[i];
+			const Eigen::Vector3d pos = v->getPosition();
+			//vertexCoords.col(i) = pos;
+			vertexIdx(i) = v->getIndex();
+			refCoords.col(i) = BK.inverse() * (pos - bK);
+		}
+		const double tolerance = 16 * std::numeric_limits<double>::epsilon();
+		// Check that reference coordinates are in [0,1]
+		assert((refCoords.array() >= -tolerance).all());
+		assert(((refCoords.array() - 1) <= tolerance).all());
+
+		// Get coefficients for RT interpolation
+		Eigen::VectorXd coeff(5);
+		for (int idx = 0; idx < 5; idx++) {
+			const Face * face = cellFaces[idx];
+			const int faceIncidence = cell->getOrientation(face);
+			const int fidx = face->getIndex();
+			const int factor = 1;// face->isBoundary() ? 2 : 1;
+			coeff(idx) = faceIncidence * B_h(fidx) * factor;
+		}
+
+		// Interpolate B-field with RT-basis functions in actual space
+		Eigen::Matrix3Xd B_vertex_local = Eigen::Matrix3Xd::Zero(3, 6);
+		for (int idx = 0; idx < 5; idx++) {
+			for (int i = 0; i < 6; i++) {
+				const int vIdx = vertexIdx(i);
+				const Eigen::Vector3d refPos = refCoords.col(i);
+				const Eigen::Vector3d rt = Numerics::raviartThomasBasis(idx, refPos);
+				const int directionFactor = (idx >= 3) ? 2 : 1; // Because: prism in z-direction (i.e., face idx < 3) are quads with normal vector perpendicular to z-axis, and face idx >= 3 are triangles. Hence, det(B) acts differently.
+				B_vertex_local.col(i) += directionFactor * coeff(idx) / detBK * BK * rt;
+			}
+		}
+		for (int i = 0; i < 6; i++) {
+			const int vIdx = vertexIdx(i);
+			countVertexVisits(vIdx) += 1;
+			B_vertex.col(vIdx) += B_vertex_local.col(i);
+		}
+	}
+	for (int i = 0; i < primalMesh.getNumberOfVertices(); i++) {
+		B_vertex.col(i) /= countVertexVisits(i);
+	}
+	//Eigen::MatrixXd temp = countVertexVisits.transpose().replicate(3, 1).cast<double>();
+	//B_vertex.cwiseQuotient(temp);
+}
+
+//void AppmSolver::test_raviartThomas()
+//{
+//	std::cout << "Test Raviart Thomas Interpolation" << std::endl;
+//	// setAzimuthalMagneticFluxField();
+//
+//	B_vertex.setZero();
+//
+//
+//
+//	// Primal cells are prisms.
+//	// For each cell, 
+//	// - compute Piola map, 
+//	// - compute reference coordinates of vertices
+//	// - evaluate RT basis functions 
+//	// - map RT basis functions from reference to actual coordinates
+//	// - multiply by magnetic flux B
+//	// - write data to file: B at vertices
+//	const int nCells = primalMeshInfo.nCells;
+//	for (int cidx = 0; cidx < nCells; cidx++) {
+//#ifdef _RT_ONECELL
+//		std::cout << "cidx = " << cidx << std::endl;
+//#endif
+//		const Cell* cell = primalMesh.getCell(cidx);
+//		const std::vector<Face*> cellFaces = cell->getFaceList();
+//		assert(cellFaces.size() == 5); // prism cells
+//		assert(cellFaces[3]->getVertexList().size() == 3); // triangle faces are at end of list
+//		assert(cellFaces[4]->getVertexList().size() == 3);
+//
+//		const Face * bottomFace = cellFaces[3];
+//		const Face * topFace = cellFaces[4];
+//		const std::vector<Vertex*> bottomVertices = bottomFace->getVertexList();
+//		const std::vector<Vertex*> topVertices = topFace->getVertexList();
+//
+//		// check if vertices of triangle faces have same ordering
+//		for (int i = 0; i < 3; i++) {
+//			Eigen::Vector3d v = topVertices[i]->getPosition() - bottomVertices[i]->getPosition();
+//			v.normalize();
+//			assert(v.cross(zUnit).norm() < 10 * std::numeric_limits<double>::epsilon());
+//		}
+//
+//		// check if bottom triangle vertices form a right-handed system
+//		const Eigen::Vector3d fc = bottomFace->getCenter();
+//		for (int i = 0; i < 3; i++) {
+//			const Eigen::Vector3d v0 = bottomVertices[i]->getPosition();
+//			const Eigen::Vector3d v1 = bottomVertices[(i + 1) % 3]->getPosition();
+//			const Eigen::Vector3d a = v0 - fc;
+//			const Eigen::Vector3d b = v1 - v0;
+//			const Eigen::Vector3d n = a.normalized().cross(b.normalized());
+//			assert(n.dot(Eigen::Vector3d::UnitZ()) > 0);
+//		}
+//
+//		std::vector<Vertex*> cellVertices(6);
+//		for (int i = 0; i < 3; i++) {
+//			cellVertices[i] = bottomVertices[i];
+//			cellVertices[i + 3] = topVertices[i];
+//		}
+//
+//		const Eigen::Vector3d v0 = cellVertices[0]->getPosition();
+//		const Eigen::Vector3d v1 = cellVertices[1]->getPosition();
+//		const Eigen::Vector3d v2 = cellVertices[2]->getPosition();
+//		const Eigen::Vector3d v3 = cellVertices[5]->getPosition();
+//
+//		// Piola map: xRef -> x := BK*xRef + bk
+//		Eigen::Matrix3d BK;
+//		BK.col(0) = v0 - v2;
+//		BK.col(1) = v1 - v2;
+//		BK.col(2) = v3 - v2;
+//		const double detBK = BK.determinant();
+//		const Eigen::Vector3d bk = v2;
+//#ifdef _RT_ONECELL
+//		std::cout << "BK: " << BK << std::endl;
+//		std::cout << "det(BK): " << detBK << std::endl;
+//#endif
+//		// vertex coordinates in actual space
+//		Eigen::Matrix3Xd vertexCoords(3, 6);
+//		for (int i = 0; i < 6; i++) {
+//			vertexCoords.col(i) = cellVertices[i]->getPosition();
+//		}
+//		// points in reference coordinates 
+//		const int nSamples = 5;
+//		Eigen::Matrix3Xd refCoords3d(3, 6);
+//		refCoords3d.setZero();
+//#ifdef _RT_ONECELL
+//		refCoords3d = getPrismReferenceCoords(nSamples);
+//#else
+//		// Reference coordinates of cell vertices
+//		for (int i = 0; i < 6; i++) {
+//			const Eigen::Vector3d pos = vertexCoords.col(i);
+//			const Eigen::Vector3d refPos = BK.inverse() * (pos - bk);
+//			refCoords3d.col(i) = refPos;
+//		}
+//#endif
+//		const double tolerance = 16 * std::numeric_limits<double>::epsilon();
+//		assert((refCoords3d.array() >= -1 * std::numeric_limits<double>::epsilon()).all());
+//		if ( ( (refCoords3d.array() - 1) > tolerance ).any() ) {
+//			std::cout << "max value: " << (refCoords3d.array() - 1).maxCoeff() << std::endl;
+//		}
+//		assert((refCoords3d.array() - 1 <= tolerance).all());
+//
+//		for (int i = 0; i < cellFaces.size(); i++) {
+//			const Face * face = cellFaces[i];
+//			const Eigen::Vector3d fn = face->getNormal();
+//			const Eigen::Vector3d fc = face->getCenter();
+//
+//#ifdef _RT_ONECELL
+//			std::cout << "Face " << i << ": ";
+//			std::cout << "fc: " << fc.transpose() << "\t ";
+//			std::cout << "fn: " << fn.transpose() << "\t "; 
+//			std::cout << "incid: " << cell->getOrientation(face) << "\t ";
+//			std::cout << std::endl;
+//#endif
+//		}
+//
+//		Eigen::VectorXd coeff = Eigen::VectorXd::Zero(5);
+//		Eigen::VectorXd B_h_loc(5);
+//		for (int i = 0; i < 5; i++) {
+//			const Face * face = cellFaces[i];
+//			const int fidx = face->getIndex();
+//			const int orientation = cell->getOrientation(face);
+//			B_h_loc(i) = B_h(fidx);
+//			coeff(i) = orientation * B_h(fidx);
+//		}
+//#ifdef _RT_ONECELL
+//		std::cout << "B_h_loc: " << B_h_loc << std::endl;
+//		std::cout << "coeff: " << coeff << std::endl;
+//#endif
+//		
+//		// for each vertex
+//		Eigen::Matrix3Xd Btest(3, refCoords3d.cols());
+//		Eigen::Matrix3Xd xCoords3d(3, refCoords3d.cols());
+//		for (int i = 0; i < refCoords3d.cols(); i++) {
+//			const Eigen::Vector3d refPos = refCoords3d.col(i);
+//			Eigen::Vector3d Bv;
+//			Bv.setZero();
+//			// for each basis function
+//			for (int idx = 0; idx < 5; idx++) {
+//				const Eigen::Vector3d rt = Numerics::raviartThomasBasis(idx, refPos);
+//				Bv += coeff(idx) / detBK * BK * rt;
+//			}
+//#ifdef _RT_ONECELL
+//			Btest.col(i) = Bv;
+//			xCoords3d.col(i) = BK * refPos + bk;
+//#else
+//			const int vIdx = cellVertices[i]->getIndex();
+//			B_vertex.col(vIdx) += Bv;
+//#endif
+//		}
+//#ifdef _RT_ONECELL
+//		H5Writer tempwriter("temp.h5");
+//		tempwriter.writeData(refCoords3d, "/refCoords3d");
+//		tempwriter.writeData(Btest, "/Btest");
+//		tempwriter.writeData(xCoords3d, "/xCoords3d");
+//		break;
+//#endif
+//	}
+//
+//	H5Writer h5writer("rt.h5");
+//	h5writer.writeData(B_vertex, "/Bvertex");
+//}
+
+const Eigen::Matrix3Xd AppmSolver::getPrismReferenceCoords(const int nSamples)
+{
+	Eigen::Matrix3Xd refCoords(3, (nSamples + 2) * (nSamples + 1) / 2);
+	int sIdx = 0;
+	for (int i = 0; i <= nSamples; i++) {
+		if (i == 0) {
+			refCoords.col(sIdx++) = Eigen::Vector3d(0, 0, 0);
+			continue;
+		}
+		Eigen::Vector3d a, b;
+		a = 1.0*i / nSamples * Eigen::Vector3d(1, 0, 0);
+		b = 1.0*i / nSamples * Eigen::Vector3d(0, 1, 0);
+		Eigen::Vector3d d = b - a;
+		const Eigen::VectorXd samples = Eigen::VectorXd::LinSpaced(i + 1, 0., 1.);
+		for (int k = 0; k < samples.size(); k++) {
+			const Eigen::Vector3d v = a + samples(k) * (b - a);
+			refCoords.col(sIdx++) = v;
+		}
+	}
+	assert(sIdx == refCoords.cols());
+	const int n = refCoords.cols();
+	Eigen::Matrix3Xd refCoords3d = refCoords.replicate(1, nSamples + 1);
+	for (int i = 0; i <= nSamples; i++) {
+		const int startCol = i * n;
+		refCoords3d.block(2, startCol, 1, n).array() = 1.0 * i / nSamples;
+	}
+	return refCoords3d;
+}
+
 void AppmSolver::init_meshes()
 {
 	std::cout << "Init primal mesh" << std::endl;
-	primalMesh = PrimalMesh();
+
+	PrimalMesh::PrimalMeshParams primalParams;
+	primalParams.nAxialLayers = 10;
+	primalParams.nRefinements = 2;
+	primalParams.nOuterLayers = 2;
+
+	primalMesh = PrimalMesh(primalParams);
 	primalMesh.init();
+	primalMeshInfo = setMeshInfo(primalMesh);
 	primalMesh.writeToFile();
 	primalMesh.writeXdmf();
 	primalMesh.check();
 
+
 	std::cout << "Init dual mesh" << std::endl;
 	dualMesh = DualMesh();
 	dualMesh.init_dualMesh(primalMesh);
+	dualMeshInfo = setMeshInfo(dualMesh);
 	dualMesh.writeToFile();
 	dualMesh.writeXdmf();
+
 }
 
 void AppmSolver::init_fluid()
@@ -182,61 +442,125 @@ void AppmSolver::init_fluid()
 
 		fluidStates.col(i) = (cellCenter(2) < 0.5) ? qL_vec : qR_vec;
 	}
+
+	std::cout << "Test for fluid flux: " << std::endl;
+	double dt_loc = 0;
+	Eigen::VectorXd fluidFlux = Numerics::fluidFlux_rusanov(qL_vec, qR_vec, Eigen::Vector3d(0, 0, 1), 1, dt_loc);
+	std::cout << "Flux: " << fluidFlux.transpose() << std::endl;
+	std::cout << "dt_loc: " << dt_loc << std::endl;
 }
+
+/** Initialize Maxwell objects that are independent of timestep. */
+void AppmSolver::init_maxwell()
+{
+	// Define data vectors
+	B_h = Eigen::VectorXd::Zero(primalMesh.getNumberOfFaces());
+	E_h = Eigen::VectorXd::Zero(primalMesh.getNumberOfEdges());
+	H_h = Eigen::VectorXd::Zero(dualMesh.getNumberOfEdges());
+	J_h = Eigen::VectorXd::Zero(dualMesh.getNumberOfFaces());
+
+	B_vertex = Eigen::Matrix3Xd::Zero(3, primalMesh.getNumberOfVertices());
+	init_RaviartThomasInterpolation();
+}
+
+/** Initialize Maxwell objects. */
+void AppmSolver::init_maxwell(const double dt)
+{
+	init_maxwell();
+}
+
 
 const double AppmSolver::update_fluid()
 {
-	return;
 	const int nDualFaces = dualMesh.getNumberOfFaces();
-	const int nDualCells = dualMesh.getNumberOfCells();
-
 	Eigen::VectorXd dt_local(nDualFaces);
-
-	Eigen::MatrixXd dU = Eigen::MatrixXd::Zero(fluidStates.rows(), fluidStates.cols());
-	
+	Eigen::MatrixXd dq = Eigen::MatrixXd::Zero(fluidStates.rows(), fluidStates.cols());
 
 	// Compute fluid fluxes at faces
 	for (int i = 0; i < nDualFaces; i++) {
-		// TODO
-		// Rusanov flux: F = 0.5 * (f(qL) + f(qR)) - 0.5 * max(sL, sR) * (qR - qL)
-		// with s(q) = max eigenvalue of f(q)
-
 		const Face * face = dualMesh.getFace(i);
 		const Eigen::Vector3d faceNormal = face->getNormal();
+		const double faceArea = face->getArea();
 
-		// get cell index of left and right cells that are adjacient to this face
-		const int idxL = 0;
-		const int idxR = 0;
+		if (face->isBoundary()) {
+			const std::vector<Cell*> faceCells = face->getCellList();
+			assert(faceCells.size() == 1);
+			Cell * cell = faceCells[0];
+			const int idxC = cell->getIndex();
+			const int orientation = (face->getCenter() - cell->getCenter()).dot(faceNormal) > 0 ? 1 : -1;
 
-		// get fluid state in 1d in direction of face normal
-		const Eigen::VectorXd qL = fluidStates.col(idxL);
-		const Eigen::VectorXd qR = fluidStates.col(idxR);
+			Eigen::VectorXd qL, qR;
+			// TODO open boundary conditions
+			if (orientation > 0) {
+				qL = fluidStates.col(idxC);
+				qR = qL;
+				qR.segment(1, 3) *= -1;
+			}
+			else {
+				qR = fluidStates.col(idxC);
+				qL = qR;
+				qL.segment(1, 3) *= -1;
+			}
+			const Eigen::Vector3d cc = cell->getCenter();
+			const Eigen::Vector3d fc = face->getCenter();
+			const double dx = std::abs((fc - cc).dot(faceNormal));
+			double dt_loc = 0;
+			const Eigen::VectorXd flux = Numerics::fluidFlux_rusanov(qL, qR, faceNormal, dx, dt_loc);
+			assert(dt_loc > 0);
+			dt_local(i) = dt_loc;
+			dq.col(idxC) += orientation * faceArea * flux;
+		}
+		else {
+			// Get left and right cell of this face
+			std::vector<Cell*> faceCells = face->getCellList();
+			assert(faceCells.size() == 2);
+			const Cell * cell = faceCells[0];
+			const int orientation = (face->getCenter() - cell->getCenter()).dot(faceNormal) > 0 ? 1 : -1;
+			Cell * leftCell = nullptr;
+			Cell * rightCell = nullptr;
+			if (orientation > 0) {
+				leftCell  = faceCells[0];
+				rightCell = faceCells[1];
+			}
+			else {
+				leftCell  = faceCells[1];
+				rightCell = faceCells[0];
+			}
+			const int idxL = leftCell->getIndex();
+			const int idxR = rightCell->getIndex();
 
-		// get max eigenvalue and fluid flux for left and right state
-		const double sL = 0;
-		const double sR = 0;
-		const Eigen::VectorXd fluxL;
-		const Eigen::VectorXd fluxR;
-		
-		const Eigen::VectorXd faceFlux_1d = 0.5 * (fluxL + fluxR) - 0.5 * std::max(sL, sR) * (qR - qL);
-		const Eigen::VectorXd faceFlux_3d; // get face flux in 3D
-		fluidFluxes.col(i) = faceFlux_3d;
+			// distance between cell center and face center
+			const Eigen::Vector3d fc = face->getCenter();
+			const Eigen::Vector3d ccL = leftCell->getCenter();
+			const Eigen::Vector3d ccR = rightCell->getCenter();
+			const double dxL = std::abs((fc - ccL).dot(faceNormal));
+			const double dxR = std::abs((fc - ccR).dot(faceNormal));
+			const double dx = std::min(dxL, dxR); // minimum distance between cell center and face center
+			assert(dx > 0);
+			const Eigen::VectorXd qL = fluidStates.col(idxL);
+			const Eigen::VectorXd qR = fluidStates.col(idxR);
 
-		// TODO set update of cell states
-		dU.col(idxL);
-		dU.col(idxR);
+			double dt_loc = 0;
+			const Eigen::VectorXd faceFlux = Numerics::fluidFlux_rusanov(qL, qR, faceNormal, dx, dt_loc);
+			assert(dt_loc > 0);
+			dt_local(i) = dt_loc;
 
-		// get local timestep size
-		dt_local(i) = 0.;
+			dq.col(idxL) += faceFlux * faceArea;
+			dq.col(idxR) -= faceFlux * faceArea;
+		}
 	}
-
-	assert((dt_local.array() > 0).all());
+	bool allPositive = (dt_local.array() > 0.).all();
+	assert(allPositive);
 
 	// get global timestep size
 	const double dt = dt_local.minCoeff();
 	assert(dt > 0);
 
-	fluidStates += dt * dU;
+	for (int i = 0; i < dualMesh.getNumberOfCells(); i++) {
+		dq.col(i) *= 1./(dualMesh.getCell(i)->getVolume());
+	}
+
+	fluidStates -= dt * dq;
 
 	return dt;
 }
@@ -359,42 +683,44 @@ void AppmSolver::writeOutput(const int iteration, const double time)
 
 
 	// Maxwell states
-	h5writer.writeData(bvec, "/bvec");
-	h5writer.writeData(dvec, "/dvec");
-	h5writer.writeData(evec, "/evec");
-	h5writer.writeData(hvec, "/hvec");
-	h5writer.writeData(jvec, "/jvec");
+	h5writer.writeData(B_h, "/bvec");
+	h5writer.writeData(E_h, "/evec");
+	h5writer.writeData(H_h, "/hvec");
+	h5writer.writeData(J_h, "/jvec");
 
 	Eigen::Matrix3Xd B(3, nPrimalFaces);
-	Eigen::Matrix3Xd D(3, nDualFaces);
-	Eigen::Matrix3Xd J(3, nDualFaces);
 	Eigen::Matrix3Xd H(3, nDualEdges);
-
+	Eigen::Matrix3Xd J(3, nDualFaces);
+	
 	for (int i = 0; i < nPrimalFaces; i++) {
 		const Eigen::Vector3d fn = primalMesh.getFace(i)->getNormal();
-		B.col(i) = bvec(i) * fn;
-	}
-	for (int i = 0; i < nDualEdges; i++) {
-		const Edge * edge = dualMesh.getEdge(i);
-		H.col(i) = hvec(i) / edge->getLength() * edge->getDirection();
+		const double fA = primalMesh.getFace(i)->getArea();
+		B.col(i) = (B_h(i) / fA) * fn;
 	}
 	for (int i = 0; i < nDualFaces; i++) {
 		const Eigen::Vector3d fn = dualMesh.getFace(i)->getNormal();
-		D.col(i) = dvec(i) * fn;
-		J.col(i) = jvec(i) * fn;
+		const double fA = dualMesh.getFace(i)->getArea();
+		J.col(i) = J_h(i) / fA * fn;
 	}
 	h5writer.writeData(B, "/B");
-	h5writer.writeData(D, "/D");
 	h5writer.writeData(J, "/J");
-	h5writer.writeData(H, "/H");
-
+	
 	const int nPrimalEdges = primalMesh.getNumberOfEdges();
 	Eigen::Matrix3Xd E(3, nPrimalEdges);
 	for (int i = 0; i < nPrimalEdges; i++) {
 		const Edge * edge = primalMesh.getEdge(i);
-		E.col(i) = evec(i) / edge->getLength() * edge->getDirection();
+		E.col(i) = E_h(i) / edge->getLength() * edge->getDirection();
 	}
 	h5writer.writeData(E, "/E");
+
+	for (int i = 0; i < nDualEdges; i++) {
+		const Edge * edge = dualMesh.getEdge(i);
+		H.col(i) = H_h(i) / edge->getLength() * edge->getDirection();
+	}
+	h5writer.writeData(H, "/H");
+
+	// Interpolated values of B-field to primal vertices
+	h5writer.writeData(B_vertex, "/Bvertex");
 
 	Eigen::VectorXd timeVec(1);
 	timeVec(0) = time;
@@ -512,6 +838,22 @@ XdmfGrid AppmSolver::getOutputPrimalSurfaceGrid(const int iteration, const doubl
 			(std::stringstream() << dataFilename << ":/B").str()
 		));
 	primalSurfaceGrid.addChild(BfieldAttribute);
+
+	{
+		// Attribute: Magnetic flux B
+		XdmfAttribute attribute(
+			XdmfAttribute::Tags("Magnetic Flux Interpolated", XdmfAttribute::Type::Vector, XdmfAttribute::Center::Node)
+		);
+		attribute.addChild(
+			XdmfDataItem(XdmfDataItem::Tags(
+				{ primalMesh.getNumberOfVertices(), 3 },
+				XdmfDataItem::NumberType::Float,
+				XdmfDataItem::Format::HDF),
+				(std::stringstream() << dataFilename << ":/Bvertex").str()
+			));
+		primalSurfaceGrid.addChild(attribute);
+
+	}
 	return primalSurfaceGrid;
 }
 
@@ -615,20 +957,20 @@ XdmfGrid AppmSolver::getOutputDualSurfaceGrid(const int iteration, const double 
 		));
 	grid.addChild(faceIndexAttribute);
 
-	// Attribute: Displacement Field D
-	{
-		XdmfAttribute attribute(
-			XdmfAttribute::Tags("Displacement Field", XdmfAttribute::Type::Vector, XdmfAttribute::Center::Cell)
-		);
-		attribute.addChild(
-			XdmfDataItem(XdmfDataItem::Tags(
-				{ dualMesh.getNumberOfFaces(), 3 },
-				XdmfDataItem::NumberType::Float,
-				XdmfDataItem::Format::HDF),
-				(std::stringstream() << dataFilename << ":/D").str()
-			));
-		grid.addChild(attribute);
-	}
+	//// Attribute: Displacement Field D
+	//{
+	//	XdmfAttribute attribute(
+	//		XdmfAttribute::Tags("Displacement Field", XdmfAttribute::Type::Vector, XdmfAttribute::Center::Cell)
+	//	);
+	//	attribute.addChild(
+	//		XdmfDataItem(XdmfDataItem::Tags(
+	//			{ dualMesh.getNumberOfFaces(), 3 },
+	//			XdmfDataItem::NumberType::Float,
+	//			XdmfDataItem::Format::HDF),
+	//			(std::stringstream() << dataFilename << ":/D").str()
+	//		));
+	//	grid.addChild(attribute);
+	//}
 
 	// Attribute: Electric current J
 	{
@@ -644,6 +986,7 @@ XdmfGrid AppmSolver::getOutputDualSurfaceGrid(const int iteration, const double 
 			));
 		grid.addChild(attribute);
 	}
+
 	return grid;
 }
 
@@ -690,6 +1033,21 @@ XdmfGrid AppmSolver::getOutputDualVolumeGrid(const int iteration, const double t
 		));
 	grid.addChild(cellIndexAttribute);
 
+	// Attribute: B-field at primal vertices = dual cell centers
+	{
+		XdmfAttribute attribute(
+			XdmfAttribute::Tags("Magnetic Flux", XdmfAttribute::Type::Vector, XdmfAttribute::Center::Node)
+		);
+		attribute.addChild(
+			XdmfDataItem(XdmfDataItem::Tags(
+				{ dualMesh.getNumberOfVertices(), 3 },
+				XdmfDataItem::NumberType::Float,
+				XdmfDataItem::Format::HDF),
+				(std::stringstream() << dataFilename << ":/Bvertex").str()
+			));
+		grid.addChild(attribute);
+	}
+
 	// Attribute: Density
 	XdmfAttribute densityAttribute(
 		XdmfAttribute::Tags("Density", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell)
@@ -703,6 +1061,409 @@ XdmfGrid AppmSolver::getOutputDualVolumeGrid(const int iteration, const double t
 		));
 	grid.addChild(densityAttribute);
 
+	// Attribute: Pressure
+	XdmfAttribute pressureAttribute(
+		XdmfAttribute::Tags("Pressure", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell)
+	);
+	pressureAttribute.addChild(
+		XdmfDataItem(XdmfDataItem::Tags(
+			{ dualMesh.getNumberOfCells() },
+			XdmfDataItem::NumberType::Float,
+			XdmfDataItem::Format::HDF),
+			(std::stringstream() << dataFilename << ":/pressure").str()
+		));
+	grid.addChild(pressureAttribute);
+
+	// Attribute: velocity
+	XdmfAttribute velocityAttribute(
+		XdmfAttribute::Tags("Velocity", XdmfAttribute::Type::Vector, XdmfAttribute::Center::Cell)
+	);
+	velocityAttribute.addChild(
+		XdmfDataItem(XdmfDataItem::Tags(
+			{ dualMesh.getNumberOfCells(), 3 },
+			XdmfDataItem::NumberType::Float,
+			XdmfDataItem::Format::HDF),
+			(std::stringstream() << dataFilename << ":/velocity").str()
+		));
+	grid.addChild(velocityAttribute);
 	return grid;
 }
 
+/**
+* Define magnetic flux to be an azimuthal field. Useful for testing.
+*/
+void AppmSolver::setAzimuthalMagneticFluxField()
+{
+	const int nFaces = primalMeshInfo.nFaces;
+	for (int i = 0; i < nFaces; i++) {
+		const Face * face = primalMesh.getFace(i);
+		const double fa = face->getArea();
+		const Eigen::Vector3d fn = face->getNormal();
+		if (fn.cross(Eigen::Vector3d::UnitZ()).norm() > 0.99) {
+			// azimuthal field
+			Eigen::Vector3d fc = face->getCenter();
+			fc(2) = 0;
+			fc.normalize();
+			B_h(i) = fn.dot(fc.cross(Eigen::Vector3d::UnitZ()));
+		}
+		else {
+			B_h(i) = 0;
+		}
+	}
+}
+
+void AppmSolver::setUniformMagneticFluxField(const Eigen::Vector3d & fieldVector)
+{
+	const int nFaces = primalMeshInfo.nFaces;
+	for (int i = 0; i < nFaces; i++) {
+		const Face * face = primalMesh.getFace(i);
+		const double area = face->getArea();
+		const Eigen::Vector3d fn = face->getNormal();
+		B_h(i) = area * fn.dot(fieldVector);
+	}
+}
+
+//void AppmSolver::setAxialMagneticFluxField()
+//{
+//	const int nFaces = primalMeshInfo.nFaces;
+//	for (int i = 0; i < nFaces; i++) {
+//		const Face * face = primalMesh.getFace(i);
+//		const double fa = face->getArea();
+//		const Eigen::Vector3d fn = face->getNormal();
+//		if (fn.cross(Eigen::Vector3d::UnitZ()).norm() < 0.01) {
+//			// axial field in z-direction
+//			B_h(i) = face->getArea() * fn.normalized().dot(Eigen::Vector3d::UnitZ());
+//		}
+//		else {
+//			B_h(i) = 0;
+//		}
+//	}
+//}
+
+void AppmSolver::init_RaviartThomasInterpolation()
+{
+	const int nCells = primalMesh.getNumberOfCells();
+	rt_piolaMatrix.reserve(nCells);
+	rt_piolaVector.reserve(nCells);
+
+	for (int cidx = 0; cidx < nCells; cidx++) {
+		const Cell * cell = primalMesh.getCell(cidx);
+		const std::vector<Face*> cellFaces = cell->getFaceList();
+		assert(cellFaces.size() == 5); // prism cells
+
+		// get top and bottom face of prism
+		const Face * bottomFace = cellFaces[3];
+		const Face * topFace = cellFaces[4];
+		assert(bottomFace->getVertexList().size() == 3); // check if faces are triangular
+		assert(topFace->getVertexList().size() == 3);
+
+		// get vertices of triangle faces
+		const std::vector<Vertex*> bottomVertices = bottomFace->getVertexList();
+		const std::vector<Vertex*> topVertices = topFace->getVertexList();
+
+		// check if vertices of triangle faces have same ordering
+		for (int i = 0; i < 3; i++) {
+			const Eigen::Vector3d v = topVertices[i]->getPosition() - bottomVertices[i]->getPosition();
+			assert(v.normalized().cross(Eigen::Vector3d::UnitZ()).norm() < 16 * std::numeric_limits<double>::epsilon());
+		}
+
+		// check if bottom triangle vertices form a right-handed system
+		const Eigen::Vector3d fc = bottomFace->getCenter();
+		for (int i = 0; i < 3; i++) {
+			const Eigen::Vector3d v0 = bottomVertices[i]->getPosition();
+			const Eigen::Vector3d v1 = bottomVertices[(i + 1) % 3]->getPosition();
+			const Eigen::Vector3d a = v0 - fc;
+			const Eigen::Vector3d b = v1 - v0;
+			const Eigen::Vector3d n = a.normalized().cross(b.normalized());
+			assert(n.dot(Eigen::Vector3d::UnitZ()) > 0);
+		}
+
+		// Collect prism vertices in standard topology format
+		std::vector<Vertex*> cellVertices(6);
+		for (int i = 0; i < 3; i++) {
+			const int offset = 3;
+			cellVertices[i] = bottomVertices[i];
+			cellVertices[i + offset] = topVertices[i];
+		}
+
+		// Vertex positions of prism
+		const Eigen::Vector3d A = cellVertices[0]->getPosition();
+		const Eigen::Vector3d B = cellVertices[1]->getPosition();
+		const Eigen::Vector3d C = cellVertices[2]->getPosition();
+		const Eigen::Vector3d F = cellVertices[5]->getPosition();
+
+		// Define Piola map: xRef  -->  BK * xRef + bK
+		const Eigen::Vector3d bK = C;
+		Eigen::Matrix3d BK;
+		BK.col(0) = A - C;
+		BK.col(1) = B - C;
+		BK.col(2) = F - C;
+		rt_piolaMatrix.emplace_back(BK);
+		rt_piolaVector.emplace_back(bK);
+
+	}
+}
+
+/**
+* Set a toroidal current path in xz-plane through faces that are in xz-plane and pierced by the loop (x,z) 
+*/
+
+void AppmSolver::setTorusCurrent(const double x1, const double x2, const double z1, const double z2)
+{
+	std::cout << "Set torus current" << std::endl;
+	const Eigen::Vector3d center = Eigen::Vector3d(0.0, 0.0, 0.5);
+
+	const double tol = 8*std::numeric_limits<double>::epsilon();
+
+	const int nCells = dualMesh.getNumberOfCells();
+
+	for (int i = 0; i < nCells; i++) {
+		const Cell * cell = dualMesh.getCell(i);
+		const Eigen::Vector3d center = cell->getCenter();
+		const std::vector<Face*> cellFaces = cell->getFaceList();		
+		const Eigen::Matrix3Xd cellVertexCoords = cell->getVertexCoordinates();
+		const Eigen::ArrayXd xv = cellVertexCoords.row(0).array(); // x-coordinates of cell vertices
+		const Eigen::ArrayXd yv = cellVertexCoords.row(1).array(); // 1-coordinates of cell vertices
+		const Eigen::ArrayXd zv = cellVertexCoords.row(2).array(); // z-coordinates of cell vertices
+		const bool isXZplane = (yv > 0).any() && (yv < 0).any();
+
+		// Skip cells that are not across xz-plane
+		if (!isXZplane || (xv < x1).all() || (xv > x2).all() || (zv < z1).all() || (zv > z2).all()) { continue; }
+
+		// For each face of this cell
+		for (auto face : cellFaces) {
+			const int faceIdx = face->getIndex();
+			const Eigen::Vector3d fn = face->getNormal();
+
+			// Skip faces that have a normal vector out of xz plane
+			if (abs(Eigen::Vector3d::UnitY().dot(fn)) > tol) { continue; }
+			
+			// Get vertex coordinates of this face
+			const std::vector<Vertex*> faceVertices = face->getVertexList();
+			Eigen::Matrix3Xd faceVertexPos(3, faceVertices.size());
+			for (int i = 0; i < faceVertices.size(); i++) {
+				faceVertexPos.col(i) = faceVertices[i]->getPosition();
+			}
+			const Eigen::ArrayXd x = faceVertexPos.row(0).array();
+			const Eigen::ArrayXd z = faceVertexPos.row(2).array();
+			const bool isXnormal = fn.cross(Eigen::Vector3d::UnitX()).norm() < tol;
+			const bool isZnormal = fn.cross(Eigen::Vector3d::UnitZ()).norm() < tol;
+
+			// Determine if face is pierced by one of the loop edges:
+			// edge 1: z = z1, x = [x1,x2]
+			bool isPiercedByEdge1 = isXnormal && (z <= (z1 + tol)).any() && (x >= x1).all() && (x <= x2).all();
+			if (isPiercedByEdge1) {
+				J_h(faceIdx) = fn.dot(Eigen::Vector3d::UnitX());
+			}
+
+			// edge 2: x = x1, z = [z1,z2]
+			bool isPiercedByEdge2 = isZnormal && (x <= (x1 + tol)).any() && (z >= z1).all() && (z <= z2).all();
+			if (isPiercedByEdge2) {
+				J_h(faceIdx) = -fn.dot(Eigen::Vector3d::UnitZ());
+			}
+
+			// edge 3: z = z2, x = [x1,x2]
+			bool isPiercedByEdge3 = isXnormal && (z >= (z2 - tol)).any() && (x >= x1).all() && (x <= x2).all();
+			if (isPiercedByEdge3) {
+				J_h(faceIdx) = -fn.dot(Eigen::Vector3d::UnitX());
+			}
+
+			// edge 4: x = x2, z = [z1,z2]
+			bool isPiercedByEdge4 = isZnormal && (x >= (x2 - tol)).any() && (z >= z1).all() && (z <= z2).all();
+			if (isPiercedByEdge4) {
+				J_h(faceIdx) = fn.dot(Eigen::Vector3d::UnitZ());
+			}
+		}
+	}
+}
+
+Eigen::SparseMatrix<int> AppmSolver::setupOperatorQ()
+{
+	const Eigen::VectorXi vertexTypes = primalMesh.getVertexTypes();
+	const Eigen::VectorXi edgeTypes = primalMesh.getEdgeTypes();
+
+	const int boundaryVertexType = static_cast<int>(Vertex::Type::Boundary);
+	const int terminalVertexType = static_cast<int>(Vertex::Type::Terminal);
+	const int innerVertexType = static_cast<int>(Vertex::Type::Inner);
+	
+	const int boundaryEdgeType = static_cast<int>(Edge::Type::Boundary);
+	const int interiorToBoundaryEdgeType = static_cast<int>(Edge::Type::InteriorToBoundary);
+	const int interiorEdgeType = static_cast<int>(Edge::Type::Interior);
+
+	const int nPv = primalMesh.getNumberOfVertices();
+	const int nPvb = (vertexTypes.array() == boundaryVertexType).count() + (vertexTypes.array() == terminalVertexType).count();
+	const int nPvi = (vertexTypes.array() == innerVertexType).count();
+	const int nPe = primalMesh.getNumberOfEdges();
+	const int nPei = (edgeTypes.array() == interiorEdgeType).count() + (edgeTypes.array() == interiorToBoundaryEdgeType).count();
+	const int nPeb = (edgeTypes.array() == boundaryEdgeType).count();
+
+	assert(nPe == nPei + nPeb);
+
+	Eigen::SparseMatrix<int> X(nPv, nPvb);
+	typedef Eigen::Triplet<int> T;
+	std::vector<T> triplets;
+	for (int i = 0; i < nPvb; i++) {
+		triplets.push_back(T(nPvi + i, i, 1));
+	}
+	X.setFromTriplets(triplets.begin(), triplets.end());
+	X.makeCompressed();
+
+	const Eigen::SparseMatrix<int> G = primalMesh.get_e2vMap();
+	Eigen::SparseMatrix<int> GX = G * X;
+
+	assert(nPei < nPe);
+	Eigen::SparseMatrix<int> id(nPe, nPei);
+	//id.setIdentity(); // only for square matrices
+	for (int i = 0; i < nPei; i++) {
+		id.coeffRef(i, i) = 1;
+	}
+
+	// Number of degrees of freedom
+	const int nDof = id.cols() + GX.cols();
+	assert(nDof == id.cols() + GX.cols());
+	Eigen::SparseMatrix<int> Q = Eigen::SparseMatrix<int>(nPe, nDof);
+	Q.leftCols(id.cols()) = id;
+	Q.rightCols(GX.cols()) = GX;
+	assert(Q.rows() == nPe);
+	assert(Q.cols() == nDof);
+	return Q;
+}
+
+Eigen::SparseMatrix<double> AppmSolver::setupOperatorMeps()
+{
+	const int nPe = primalMesh.getNumberOfEdges();
+	Eigen::SparseMatrix<double> Meps(nPe, nPe);
+	Meps.setIdentity();
+	for (int i = 0; i < nPe; i++) {
+		const double dualFaceArea = dualMesh.getFace(i)->getArea();
+		const double primalEdgeLength = primalMesh.getEdge(i)->getLength();
+		Meps.coeffRef(i, i) = dualFaceArea / primalEdgeLength;
+	}
+	return Meps;
+}
+
+Eigen::SparseMatrix<double> AppmSolver::setupOperatorMnu()
+{
+	const int nPf = primalMesh.getNumberOfFaces();
+	Eigen::SparseMatrix<double> Mnu(nPf, nPf);
+	Mnu.setIdentity();
+	for (int i = 0; i < nPf; i++) {
+		const double dualEdgeLength = dualMesh.getEdge(i)->getLength();
+		const double primalFaceArea = primalMesh.getFace(i)->getArea();
+		Mnu.coeffRef(i, i) = dualEdgeLength / primalFaceArea;
+	}
+	return Mnu;
+}
+
+Eigen::VectorXd AppmSolver::electricPotentialTerminals(const double time)
+{
+	const int n = primalMeshInfo.nVerticesTerminal;
+	assert(n % 2 == 0);
+	const double t0 = 3;
+	const double sigma_t = 1;
+	const double phiA = 0;
+	const double phiB = 0;
+	const double phi1 = phiA * 0.5 * (1 + tanh( (time - t0) / sigma_t));
+	const double phi2 = phiB;
+	Eigen::VectorXd phi_terminals(n);
+	phi_terminals.topRows(n / 2).array() = phi1;
+	phi_terminals.bottomRows(n / 2).array() = phi2;
+	return phi_terminals;
+}
+
+Eigen::SparseMatrix<double> AppmSolver::speye(const int rows, const int cols)
+{
+	assert(rows > 0);
+	assert(cols > 0);
+	const int n = std::min(rows, cols);
+
+	typedef Eigen::Triplet<double> TripletType;
+	std::vector<TripletType> triplets;
+	triplets.reserve(n);
+	for (int i = 0; i < n; i++) {
+		triplets.emplace_back(TripletType(i, i, 1.0));
+	}
+	Eigen::SparseMatrix<double> M(rows, cols);
+	M.setFromTriplets(triplets.begin(), triplets.end());
+	return M;
+}
+
+Eigen::SparseMatrix<double> AppmSolver::hodgeOperatorPrimalEdgeToDualFace()
+{
+	const int nEdges = primalMeshInfo.nEdges;
+	assert(nEdges > 0);
+
+	typedef Eigen::Triplet<double> T;
+	std::vector<T> triplets;
+	triplets.reserve(nEdges);
+	for (int i = 0; i < nEdges; i++) {
+		const double fA = dualMesh.getFace(i)->getArea();
+		const double eL = primalMesh.getEdge(i)->getLength();
+		const double value = fA / eL;
+		triplets.emplace_back(T(i, i, value));
+	}
+	Eigen::SparseMatrix<double> M(nEdges, nEdges);
+	M.setFromTriplets(triplets.begin(), triplets.end());
+	M.makeCompressed();
+	return M;
+}
+
+Eigen::SparseMatrix<double> AppmSolver::hodgeOperatorDualEdgeToPrimalFace()
+{
+	const int nFacesInner = primalMeshInfo.nFacesInner;
+	assert(nFacesInner > 0);
+	
+	typedef Eigen::Triplet<double> T;
+	std::vector<T> triplets;
+	triplets.reserve(nFacesInner);
+	for (int i = 0; i < nFacesInner; i++) {
+		const double fA = primalMesh.getFace(i)->getArea();
+		const double eL = dualMesh.getEdge(i)->getLength();
+		const double value = fA / eL;
+		triplets.emplace_back(T(i, i, value));
+	}
+	Eigen::SparseMatrix<double> M(nFacesInner, nFacesInner);
+	M.setFromTriplets(triplets.begin(), triplets.end());
+	M.makeCompressed();
+	return M;
+}
+
+Eigen::SparseMatrix<double> AppmSolver::hodgeOperatorElectricalConductivity()
+{
+	const int n = primalMeshInfo.nEdges;
+	typedef Eigen::Triplet<double> T;
+	std::vector<T> triplets;
+	triplets.reserve(n);
+	for (int i = 0; i < n; i++) {
+		const double sigma = 1; // TODO <<<<----------------------------------------
+		const double fA = dualMesh.getFace(i)->getArea();
+		const double eL = primalMesh.getEdge(i)->getLength();
+		const double value = fA / eL * sigma;
+		triplets.emplace_back(T(i, i, value));
+	}
+	Eigen::SparseMatrix<double> M(n, n);
+	M.setFromTriplets(triplets.begin(), triplets.end());
+	M.makeCompressed();
+	return M;
+}
+
+Eigen::SparseMatrix<double> AppmSolver::inclusionOperatorBoundaryVerticesToAllVertices()
+{
+	const int nVertices = primalMeshInfo.nVertices;
+	const int nVerticesBoundary = primalMeshInfo.nVerticesBoundary;
+	assert(nVerticesBoundary > 0);
+	assert(nVertices > nVerticesBoundary);
+
+	typedef Eigen::Triplet<double> TripletType;
+	std::vector<TripletType> triplets;
+	triplets.reserve(nVerticesBoundary);
+
+	for (int i = 0; i < nVerticesBoundary; i++) {
+		const int offset = nVertices - nVerticesBoundary;
+		triplets.emplace_back(TripletType(offset + i, i, 1.0));
+	}
+	Eigen::SparseMatrix<double> X(nVertices, nVerticesBoundary);
+	X.setFromTriplets(triplets.begin(), triplets.end());
+	X.makeCompressed();
+	return X;
+}

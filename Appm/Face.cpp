@@ -6,24 +6,13 @@ Face::Face()
 {
 }
 
-//Face::Face(const std::vector<Vertex*> faceVertices)
-//{
-//	const int nVertices = faceVertices.size();
-//	assert(nVertices >= 3);
-//	this->vertexList = faceVertices;
-//	edgeList = std::vector<Edge*>();
-//	for (int i = 0; i < nVertices; i++) {
-//		Vertex * A = faceVertices[i];
-//		assert(A != nullptr);
-//		Vertex * B = faceVertices[(i + 1) % nVertices];
-//		assert(B != nullptr);
-//		Edge * edge = A->getAdjacientEdge(B);
-//		assert(edge != nullptr);
-//		edgeList.push_back(edge);
-//	}
-//
-//	init();
-//}
+Face::Face(const std::vector<Vertex*> & faceVertices)
+{
+	const int nVertices = faceVertices.size();
+	assert(nVertices >= 3);
+	this->vertexList = faceVertices;
+	init();
+}
 
 Face::Face(const std::vector<Edge*> & faceEdges)
 {
@@ -31,67 +20,7 @@ Face::Face(const std::vector<Edge*> & faceEdges)
 		assert(edge != nullptr);
 	}
 	this->edgeList = faceEdges;
-	for (auto edge : edgeList) {
-		edge->setAdjacient(this);
-	}
-
-	// Determine face vertices:
-	//     e0       e1      e2 
-	// A ------ B ----- C ------ ...
-	vertexList = std::vector<Vertex*>();
-	// TODO: Choose initial vector appropriately
-	//Vertex * V = edgeList[0]->getVertexA();
-	Vertex * V = edgeList.front()->getCoincidentVertex(edgeList.back());
-	for (auto edge : edgeList) {
-		vertexList.push_back(V);
-		V = edge->getOppositeVertex(V);
-	}
-	assert(vertexList.size() == edgeList.size());
-	// Check if vertices are unique
-	std::vector<int> vertexIdx;
-	std::vector<int>::iterator it;
-	for (auto v : vertexList) {
-		vertexIdx.push_back(v->getIndex());
-	}
-	std::sort(vertexIdx.begin(), vertexIdx.end());
-	it = std::unique(vertexIdx.begin(), vertexIdx.end());
-	assert(it == vertexIdx.end());
-
-	if (edgeList.size() == 3) {
-		center = getCircumCenter();
-	}
-	else {
-		// arithmetic mean of face vertices
-		center = Eigen::Vector3d::Zero();
-		std::vector<Vertex*> vertexList = getVertexList();
-		for (auto v : vertexList) {
-			center += v->getPosition();
-		}
-		center /= vertexList.size();
-
-		//std::cout << "face vertices and face center";
-		//for (auto vertex : vertexList) {
-		//	std::cout << vertex->getIndex() << ",";
-		//}
-		//std::cout << std::endl;
-		//Eigen::Matrix3Xd M(3, vertexList.size() + 1);
-		//for (int i = 0; i < vertexList.size(); i++) {
-		//	M.col(i) = vertexList[i]->getPosition();
-		//}
-		//M.col(vertexList.size()) = center;
-		//std::cout << M << std::endl;
-		
-	}
-
-	// Determine face normal from face center and vector of first edge
-	const Eigen::Vector3d posA = edgeList[0]->getVertexA()->getPosition();
-	const Eigen::Vector3d posB = edgeList[0]->getVertexB()->getPosition();
-	const Eigen::Vector3d a = (posA - center).normalized();
-	const Eigen::Vector3d b = (posB - center).normalized();
-	faceNormal = (a.cross(b)).normalized();
-	assert(faceNormal.norm() > 0);	
-
-	this->area = computeArea();
+	init();
 }
 
 
@@ -298,16 +227,124 @@ void Face::setNormal(const Eigen::Vector3d & fn)
 
 void Face::init()
 {
+	assert((edgeList.size() > 0) ^ (vertexList.size() > 0));  // boolean XOR operator: a ^ b
+
+	if (edgeList.size() == 0) {
+		const int nVertices = vertexList.size();
+		assert(nVertices >= 3);
+		for (int i = 0; i < nVertices; i++) {
+			Vertex * A = vertexList[i];
+			Vertex * B = vertexList[(i + 1) % nVertices];
+			assert(A != nullptr);
+			assert(B != nullptr);
+			Edge * edge = A->getAdjacientEdge(B);
+			assert(edge != nullptr);
+			edgeList.push_back(edge);
+		}
+	}
+
+	if (vertexList.size() == 0) {
+		// Determine face vertices:
+		//     e0       e1      e2 
+		// A ------ B ----- C ------ ...
+		vertexList = std::vector<Vertex*>();
+		// Choose initial vector appropriately
+		//Vertex * V = edgeList[0]->getVertexA();
+		Vertex * V = edgeList.front()->getCoincidentVertex(edgeList.back());
+		for (auto edge : edgeList) {
+			vertexList.push_back(V);
+			V = edge->getOppositeVertex(V);
+		}
+		assert(vertexList.size() == edgeList.size());
+	}
+
+	// If this face is a triangle: 
+	// - check if its vertices form a right-handed system, 
+	// - and their normal vector is parallel to z-axis
 	if (vertexList.size() == 3) {
+		Eigen::Vector3d center;
+		center.setZero();
+		for (int i = 0; i < 3; i++) {
+			center += vertexList[i]->getPosition();
+		}
+		center *= 1./3.;
+
+		for (int i = 0; i < 3; i++) {
+			const Eigen::Vector3d v0 = vertexList[i]->getPosition();
+			const Eigen::Vector3d v1 = vertexList[(i + 1) % 3]->getPosition();
+
+			const Eigen::Vector3d a = v0 - center;
+			const Eigen::Vector3d b = v1 - v0;
+			const Eigen::Vector3d n = a.normalized().cross(b.normalized());
+			assert(n.dot(Eigen::Vector3d::UnitZ()) > 0);
+		}
+	}
+
+	assert(edgeList.size() >= 3);
+	assert(vertexList.size() >= 3);
+	assert(edgeList.size() == vertexList.size());
+	assert(isListOfVerticesUnique());
+	assert(isListOfEdgesUnique());
+
+	// Register this face being adjacient to edges
+	for (auto edge : edgeList) {
+		edge->setAdjacient(this);
+	}
+
+	if (edgeList.size() == 3) {
 		center = getCircumCenter();
 	}
 	else {
-		center = Eigen::Vector3d(0, 0, 0);
+		// arithmetic mean of face vertices
+		center = Eigen::Vector3d::Zero();
+		std::vector<Vertex*> vertexList = getVertexList();
 		for (auto v : vertexList) {
 			center += v->getPosition();
 		}
 		center /= vertexList.size();
 	}
+
+	// Determine face normal from face center and vector of first edge
+	const Eigen::Vector3d posA = edgeList[0]->getVertexA()->getPosition();
+	const Eigen::Vector3d posB = edgeList[0]->getVertexB()->getPosition();
+	const Eigen::Vector3d a = (posA - center).normalized();
+	const Eigen::Vector3d b = (posB - center).normalized();
+	faceNormal = (a.cross(b)).normalized();
+	assert(faceNormal.norm() > 0);
+
+	this->area = computeArea();
+}
+
+/** 
+ * Check if vertices are unique. 
+ */
+bool Face::isListOfVerticesUnique() const
+{
+	assert(vertexList.size() >= 3);
+	std::vector<int> vertexIdx;
+	std::vector<int>::iterator it;
+	for (auto v : vertexList) {
+		vertexIdx.push_back(v->getIndex());
+	}
+	std::sort(vertexIdx.begin(), vertexIdx.end());
+	it = std::unique(vertexIdx.begin(), vertexIdx.end());
+	return it == vertexIdx.end();
+}
+
+/** 
+ * Check if list of edges is unique.
+ */
+bool Face::isListOfEdgesUnique() const
+{
+	assert(edgeList.size() >= 3);
+	std::vector<int> edgeIdx;
+	std::vector<int>::iterator it;
+	for (auto e : edgeList) {
+		edgeIdx.push_back(e->getIndex());
+	}
+	std::sort(edgeIdx.begin(), edgeIdx.end());
+	it = std::unique(edgeIdx.begin(), edgeIdx.end());
+	return it == edgeIdx.end();
 }
 
 const Eigen::Vector3d Face::getCircumCenter() const

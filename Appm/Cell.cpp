@@ -56,6 +56,18 @@ Cell::Cell(const std::vector<Face*>& faces)
 	this->center = Eigen::Vector3d::Zero();
 	center = 1. / 2. * (zFaces[0]->getCenter() + zFaces[1]->getCenter());
 
+	// Set cell volume
+	volume = 0;
+	for (auto face : faceList) {
+		const double fA = face->getArea();
+		const Eigen::Vector3d fn = face->getNormal();
+		double h = std::abs(fn.dot(center - face->getCenter()));
+		double dV = 1. / 3. * fA * h;
+		assert(dV > 0);
+		volume += dV;
+	}
+	assert(volume > 0);
+
 	//Eigen::Matrix3d M;
 	//M.col(0) = zFaces[0]->getCenter();
 	//M.col(1) = zFaces[1]->getCenter();
@@ -109,4 +121,26 @@ const int Cell::getOrientation(const Face * face) const
 const Eigen::Vector3d & Cell::getCenter() const
 {
 	return center;
+}
+
+const Eigen::Matrix3Xd Cell::getVertexCoordinates() const
+{
+	std::vector<Vertex*> vertexList;
+	for (auto face : faceList) {
+		for (auto vertex : face->getVertexList()) {
+			vertexList.push_back(vertex);
+		}
+	}
+	std::sort(vertexList.begin(), vertexList.end());
+	std::vector<Vertex*>::iterator it;
+	it = std::unique(vertexList.begin(), vertexList.end());
+	int nVertices = std::distance(vertexList.begin(), it);
+	assert(nVertices >= 4);
+
+	Eigen::Matrix3Xd coords(3, nVertices);
+	for (int i = 0; i < nVertices; i++) {
+		const Vertex * vertex = vertexList[i];
+		coords.col(i) = vertex->getPosition();
+	}
+	return coords;
 }

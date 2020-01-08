@@ -80,6 +80,13 @@ void Mesh::writeToFile()
 	}
 	h5writer.writeData(isBoundaryVertex, "/isBoundaryVertex");
 
+	//Eigen::VectorXi vertexType(nVertices);
+	//for (int i = 0; i < nVertices; i++) {
+	//	vertexType(i) = static_cast<int>(getVertex(i)->getType());
+	//}
+	Eigen::VectorXi vertexType = getVertexTypes();
+	h5writer.writeData(vertexType, "/vertexType");
+
 	//file = std::ofstream(this->meshPrefix + "-coords.dat");
 	//file << vertexCoordinates.transpose() << std::endl;
 
@@ -126,12 +133,17 @@ void Mesh::writeToFile()
 		std::vector<Vertex*> faceVertices = face->getVertexList();
 		const int nFaceVertices = faceVertices.size();
 		if (nFaceVertices > f2v.rows()) {
+			const int nRowsOld = f2v.rows();
 			f2v.conservativeResize(nFaceVertices, f2v.cols());
+			f2v.bottomRows(nFaceVertices - nRowsOld).array() = -1;
 		}
 		for (int k = 0; k < nFaceVertices; k++) {
 			f2v(k, j) = faceVertices[k]->getIndex();
 		}
 	}
+	const int f2v_maxCoeff = f2v.array().abs().maxCoeff();
+	//std::cout << "f2v max: " << f2v_maxCoeff << std::endl;
+	//assert(f2v_maxCoeff == getNumberOfVertices() - 1);
 	file = std::ofstream(this->meshPrefix + "-f2v.dat");
 	file << f2v.transpose() << std::endl;
 
@@ -146,12 +158,12 @@ void Mesh::writeToFile()
 		faceIdx(i) = getFace(i)->getIndex();
 		faceBoundary(i) = getFace(i)->isBoundary();
 		faceArea(i) = getFace(i)->getArea();
-		assert(faceArea(i) > 1e-3);
 	}
 	h5writer.writeData(fc, "/faceCenter");
 	h5writer.writeData(faceIdx, "/faceIndex");
 	h5writer.writeData(faceBoundary, "/isFaceBoundary");
 	h5writer.writeData(fn, "/faceNormal");
+	assert((faceArea.array() > 0).all());
 	h5writer.writeData(faceArea, "/faceArea");
 
 	const std::vector<int> face2vertexIdx = getXdmfTopology_face2vertexIndices();
@@ -172,6 +184,12 @@ void Mesh::writeToFile()
 
 	const std::vector<int> c2vIdx = getXdmfTopology_cell2vertexIndices();
 	h5writer.writeData(c2vIdx, "/cell2vertex");
+
+	Eigen::VectorXd cellVolume(nCells);
+	for (int i = 0; i < nCells; i++) {
+		cellVolume(i) = getCell(i)->getVolume();
+	}
+	h5writer.writeData(cellVolume, "/cellVolume");
 
 
 	//file = std::ofstream(this->meshPrefix + "-cellCenter.dat");
@@ -248,34 +266,37 @@ Face * Mesh::addFace(const std::vector<Edge*> & faceEdges)
 	}
 	else {
 		Face * face = getFace(faceEdges);
+		assert(face != nullptr);
 		return face;
 	}
 	return nullptr;
 }
-//Face * Mesh::addFace(const std::vector<Vertex*> & faceVertices)
-//{
-//	assert(faceVertices.size() >= 3);
-//	std::vector<Edge*> faceEdges;
-//	const int nVertices = faceVertices.size();
-//	for (int i = 0; i < nVertices; i++) {
-//		Vertex * A = faceVertices[i];
-//		Vertex * B = faceVertices[(i + 1) % nVertices];
-//		Edge * edge = getEdge(A, B);
-//		assert(edge != nullptr);
-//		faceEdges.push_back(edge);
-//	}
-//	if (!isConnected(faceEdges)) {
-//		Face * face = new Face(faceVertices);
-//		face->setIndex(faceList.size());
-//		faceList.push_back(face);
-//		return face;
-//	}
-//	else {
-//		Face * face = getFace(faceEdges);
-//		return face;
-//	}
-//	return nullptr;
-//}
+
+Face * Mesh::addFace(const std::vector<Vertex*> & faceVertices)
+{
+	assert(faceVertices.size() >= 3);
+	std::vector<Edge*> faceEdges;
+	const int nVertices = faceVertices.size();
+	for (int i = 0; i < nVertices; i++) {
+		Vertex * A = faceVertices[i];
+		Vertex * B = faceVertices[(i + 1) % nVertices];
+		Edge * edge = getEdge(A, B);
+		assert(edge != nullptr);
+		faceEdges.push_back(edge);
+	}
+	if (!isConnected(faceEdges)) {
+		Face * face = new Face(faceEdges);
+		face->setIndex(faceList.size());
+		faceList.push_back(face);
+		return face;
+	}
+	else {
+		Face * face = getFace(faceEdges);
+		assert(face != nullptr);
+		return face;
+	}
+	return nullptr;
+}
 
 
 
@@ -729,7 +750,6 @@ XdmfGrid Mesh::getXdmfVertexGrid() const
 	);
 	vertexGrid.addChild(vertexIdxAttribute);
 
-
 	return vertexGrid;
 }
 
@@ -904,19 +924,19 @@ XdmfGrid Mesh::getXdmfVolumeGrid() const
 		volumeGrid.addChild(attribute);
 	}
 
-	// Attribute: cell volume (does not yet exist)
-	//{
-	//	XdmfAttribute attribute(XdmfAttribute::Tags("Cell Volume", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
-	//	std::string bodyString = (std::stringstream() << this->meshPrefix << "-mesh.h5:/cellVolume").str();
-	//	attribute.addChild(
-	//		XdmfDataItem(
-	//			XdmfDataItem::Tags(
-	//				{ getNumberOfCells() },
-	//				XdmfDataItem::NumberType::Float,
-	//				XdmfDataItem::Format::HDF),
-	//			bodyString));
-	//	volumeGrid.addChild(attribute);
-	//}
+	// Attribute: cell volume
+	{
+		XdmfAttribute attribute(XdmfAttribute::Tags("Cell Volume", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
+		std::string bodyString = (std::stringstream() << this->meshPrefix << "-mesh.h5:/cellVolume").str();
+		attribute.addChild(
+			XdmfDataItem(
+				XdmfDataItem::Tags(
+					{ getNumberOfCells() },
+					XdmfDataItem::NumberType::Float,
+					XdmfDataItem::Format::HDF),
+				bodyString));
+		volumeGrid.addChild(attribute);
+	}
 
 	return volumeGrid;
 }
@@ -931,6 +951,38 @@ void Mesh::writeXdmfVolumeMesh() const
 	std::ofstream file(this->meshPrefix + "-volume.xdmf");
 	file << root << std::endl;
 }
+
+
+const Eigen::VectorXi Mesh::getVertexTypes() const
+{
+	const int nV = getNumberOfVertices();
+	Eigen::VectorXi types(nV);
+	for (int i = 0; i < nV; i++) {
+		types(i) = static_cast<int>(getVertex(i)->getType());
+	}
+	return types;
+}
+
+const Eigen::VectorXi Mesh::getEdgeTypes() const
+{
+	const int nE = getNumberOfEdges();
+	Eigen::VectorXi types(nE);
+	for (int i = 0; i < nE; i++) {
+		types(i) = static_cast<int>(getEdge(i)->getType());
+	}
+	return types;
+}
+
+const Eigen::VectorXi Mesh::getFaceTypes() const
+{
+	const int nF = getNumberOfFaces();
+	Eigen::VectorXi types(nF);
+	for (int i = 0; i < nF; i++) {
+		types(i) = getFace(i)->isBoundary();
+	}
+	return types;
+}
+
 
 //void Mesh::writeXdmf_volume()
 //{

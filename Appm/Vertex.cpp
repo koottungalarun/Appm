@@ -75,6 +75,16 @@ bool Vertex::isBoundary() const
 	return false;
 }
 
+void Vertex::setType(const Vertex::Type & type)
+{
+	this->type = type;
+}
+
+const Vertex::Type Vertex::getType() const
+{
+	return this->type;
+}
+
 std::ostream & operator<<(std::ostream & os, const Vertex & obj)
 {
 	os << "Vertex idx: " << obj.getIndex() << "; ";

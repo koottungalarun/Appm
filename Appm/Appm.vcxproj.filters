@@ -87,6 +87,15 @@
     <ClInclude Include="FluidState.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Numerics.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AppmSolverLeapfrog.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AppmSolverCrankNichol.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -156,6 +165,15 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="FluidState.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Numerics.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AppmSolverLeapfrog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AppmSolverCrankNichol.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

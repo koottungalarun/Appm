@@ -8,6 +8,11 @@ class Vertex
 	: public GeometryItem
 {
 public:
+
+	enum class Type {
+		Undefined, Boundary, Terminal, Inner
+	};
+
 	Vertex();
 	Vertex(const int index);
 	Vertex(const Eigen::Vector3d & position);
@@ -26,8 +31,12 @@ public:
 
 	bool isBoundary() const;
 
+	void setType(const Type & type);
+	const Type getType() const;
+
 private:
 	Eigen::Vector3d position;
 	std::vector<Edge*> adjacientEdges;
+	Type type;
 };
 

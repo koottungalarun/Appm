@@ -11,7 +11,7 @@ class Face :
 public:
 	Face();
 	Face(const std::vector<Edge*> & faceEdges);
-	//Face(const std::vector<Vertex*> faceVertices);
+	Face(const std::vector<Vertex*> & faceVertices);
 	~Face();
 
 	std::vector<Edge*> getEdgeList() const;
@@ -49,6 +49,8 @@ private:
 	double area = 0;
 
 	void init();
+	bool isListOfVerticesUnique() const;
+	bool isListOfEdgesUnique() const;
 
 	const Eigen::Vector3d getCircumCenter() const;
 	const double computeArea() const;
