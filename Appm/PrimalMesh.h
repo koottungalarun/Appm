@@ -17,6 +17,7 @@ public:
 		const int getAxialLayers() const;
 		const int getOuterLayers() const;
 		const double getElectrodeRadius() const;
+		const double getZmax() const;
 
 		friend std::ostream & operator<<(std::ostream & os, const PrimalMeshParams & obj);
 
@@ -25,6 +26,7 @@ public:
 		int nRefinements = 2;
 		int nOuterLayers = 2;
 		double electrodeRadius = 0.35;
+		double zmax = 1;
 
 		void readParameters(const std::string & filename);
 	};
@@ -40,7 +42,7 @@ private:
 	// Mesh parameters
 	PrimalMeshParams params;
 
-	void init_hexagon();
+	void init_hexagon(const double zValue);
 	void init_triangle();
 	void refineMesh(const int nRefinements);
 	void outerMeshExtrude(const int nLayers);
@@ -58,5 +60,6 @@ private:
 	void sortFaces();
 
 	void validateParameters();
+	void check_zCoord(const double z0);
 };
 

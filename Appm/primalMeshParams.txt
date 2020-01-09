@@ -1,3 +1,4 @@
 axialLayers: 50
 refinements: 2
-outerLayers: 2
+outerLayers: 1
+zMax: 5;

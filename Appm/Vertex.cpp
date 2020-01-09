@@ -27,6 +27,13 @@ Vertex::~Vertex()
 {
 }
 
+
+
+void Vertex::setPosition(const Eigen::Vector3d & pos)
+{
+	this->position = pos;
+}
+
 const Eigen::Vector3d Vertex::getPosition() const
 {
 	return this->position;

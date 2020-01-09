@@ -88,7 +88,7 @@ void FluidSolver::init()
 		const double idxC = cell->getIndex();
 		const Eigen::Vector3d cellCenter = cell->getCenter();
 
-		fluidStates.col(i) = (cellCenter(2) < 0.5) ? qL_vec : qR_vec;
+		fluidStates.col(i) = (cellCenter(2) < 0) ? qL_vec : qR_vec;
 	}
 
 	std::cout << "Test for fluid flux: " << std::endl;

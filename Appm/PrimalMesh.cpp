@@ -28,33 +28,43 @@ PrimalMesh::~PrimalMesh()
 
 void PrimalMesh::init()
 {
-	init_hexagon();
-
 	validateParameters();
+	const double zmax = params.getZmax();
+
+	const double z0 = -0.5 * zmax;
+	init_hexagon(z0);
+	check_zCoord(z0);
 
 	assert(getNumberOfVertices() > 0);
 	refineMesh(params.getRefinements());
+	check_zCoord(z0);
 
 	outerMeshExtrude(params.getOuterLayers());
-
-	const double zmax = 1;
-	extrudeMesh(params.getAxialLayers(), zmax);
+	check_zCoord(z0);
+	
+	const int axialLayers = params.getAxialLayers();
+	extrudeMesh(axialLayers, zmax);
 
 	sortVertices(params.getElectrodeRadius());
 	sortEdges();
 	sortFaces();
 }
 
-void PrimalMesh::init_hexagon()
+void PrimalMesh::init_hexagon(const double zValue)
 {
 	std::cout << "Initialize with hexagon" << std::endl;
-	Vertex * origin = addVertex(Eigen::Vector3d(0, 0, 0));
+	Vertex * origin = addVertex(Eigen::Vector3d(0, 0, zValue));
 	const int corners = 6;
 	for (int k = 0; k < corners; k++) {
 		const double phi = 2 * M_PI * k / corners;
-		const Eigen::Vector3d pos(cos(phi), sin(phi), 0);
+		const Eigen::Vector3d pos(cos(phi), sin(phi), zValue);
 		Vertex * v = addVertex(pos);
 		addEdge(origin, v);
+	}
+	const int nV = getNumberOfVertices();
+	vertexCoordinates = Eigen::Matrix3Xd(3, nV);
+	for (int k = 0; k < nV; k++) {
+		vertexCoordinates.col(k) = getVertex(k)->getPosition();
 	}
 
 	for (int k = 0; k < corners; k++) {
@@ -113,6 +123,11 @@ void PrimalMesh::refineMesh(const int nRefinements)
 		file << f2v.transpose() << std::endl;
 
 		//if (level == 1) { break; }
+
+		const double tol = 16 * std::numeric_limits<double>::epsilon();
+		const double zPosMax = vertexCoordinates.row(2).maxCoeff();
+		const double zPosMin = vertexCoordinates.row(2).minCoeff();
+		assert(abs(zPosMax - zPosMin) < tol);
 
 		// clear mesh elements
 		for (auto v : vertexList) {
@@ -211,7 +226,7 @@ void PrimalMesh::outerMeshExtrude()
 		const Edge * edge = edgeList[idxE];
 		assert(edge != nullptr);
 		Eigen::Vector3d pos = edge->getHalfwayPosition();
-		pos *= 1.25;
+		pos.segment(0,2) *= 1.25;
 		boundaryEdgeVertexCoord.col(idx++) = pos;
 		boundaryEdgeVertexIdx.coeffRef(edge->getIndex()) = i + offset_E;
 
@@ -233,7 +248,7 @@ void PrimalMesh::outerMeshExtrude()
 		boundaryVertexVertexIdx.coeffRef(idxV) = i + offset_V;
 		const Vertex * vertex = getVertex(idxV);
 		Eigen::Vector3d pos = vertex->getPosition();
-		pos *= 1.5;
+		pos.segment(0,2) *= 1.5;
 		boundaryVertexVertexCoord.col(idx++) = pos;
 
 		const Vertex * V = addVertex(pos);
@@ -346,7 +361,6 @@ void PrimalMesh::extrudeMesh(const int nLayers, const double zmax)
 	// Reserve memory
 	cellList.reserve(nFaces_2d * nLayers);
 
-
 	// Create vertices
 	for (int layer = 1; layer <= nLayers; layer++) {
 		for (int i = 0; i < nVertices_2d; i++) {
@@ -356,6 +370,7 @@ void PrimalMesh::extrudeMesh(const int nLayers, const double zmax)
 	}
 
 	for (int layer = 1; layer <= nLayers; layer++) {
+		std::cout << "Mesh layer: " << layer << std::endl;
 		// Create edges: parallel to z_unit
 		for (int i = 0; i < nVertices_2d; i++) {
 			const Vertex * vRef = getVertex(i);
@@ -431,9 +446,12 @@ Eigen::Matrix3Xi PrimalMesh::refine_triangles()
 	for (int i = 0; i < nEdges; i++) {
 		const Edge * edge = edgeList[i];
 		Eigen::Vector3d pos = edge->getHalfwayPosition();
+		Eigen::Vector2d pos2d = pos.segment(0, 2);
 		if (edge->isBoundary()) {
-			pos /= pos.norm();
+			//pos.segment(0,2) /= pos.segment(0,2).norm();
+			pos2d /= pos2d.norm();
 		}
+		pos.segment(0, 2) = pos2d;
 		edgeMidpoints.col(i) = pos;
 	}
 	vertexCoordinates.conservativeResize(3, nVertices + nEdges);
@@ -479,6 +497,8 @@ Eigen::Matrix3Xi PrimalMesh::refine_triangles()
 
 Eigen::Matrix3Xi PrimalMesh::refine_triangles_specialCorners()
 {
+	// TODO: check that vertices are created at zMaxPos! (create in 2d!)
+
 	const int nVertices = vertexList.size();
 	assert(nVertices > 0);
 	const int nEdges = edgeList.size();
@@ -519,7 +539,9 @@ Eigen::Matrix3Xi PrimalMesh::refine_triangles_specialCorners()
 		if (specialEdges(i)) {
 			Eigen::Vector3d pos = A + 0.5 * edgeVector;
 			if (edge->isBoundary()) {
-				pos /= pos.norm();
+				Eigen::Vector2d pos2d = pos.segment(0, 2);
+				pos2d.normalize();
+				pos.segment(0, 2) = pos2d;
 			}
 			edgeInnerCoords.col(idx) = pos;
 			edge2innerVertices(0, i) = nVertices + idx++;
@@ -594,6 +616,8 @@ Eigen::Matrix3Xi PrimalMesh::refine_triangles_specialCorners()
 			const Eigen::Vector3d a = temp1 - center;
 			const Eigen::Vector3d b = temp2 - temp1;
 			const Eigen::Vector3d n = a.normalized().cross(b.normalized());
+			const double tol = 16 * std::numeric_limits<double>::epsilon();
+			assert(n.segment(0, 2).norm() < tol);
 			// If the normal vector is anti-parallel to z-axis, flip edge1 and edge2
 			if (n.dot(Eigen::Vector3d::UnitZ()) < 0) {
 				Edge * tempEdge = edge1;
@@ -836,7 +860,20 @@ void PrimalMesh::validateParameters()
 	if (params.getOuterLayers() > 0) {
 		assert(params.getRefinements() > 1);
 	}
+	assert(params.getZmax() > 0);
+}
 
+/** 
+* Check that all vertices have z-coordinate equal to z0.
+*/
+void PrimalMesh::check_zCoord(const double z0)
+{
+	const double zmaxValue = vertexCoordinates.row(2).maxCoeff();
+	const double zminValue = vertexCoordinates.row(2).minCoeff();
+
+	const double tol = 16 * std::numeric_limits<double>::epsilon();
+	assert(abs(zmaxValue - z0) < tol);
+	assert(abs(zminValue - z0) < tol);
 }
 
 PrimalMesh::PrimalMeshParams::PrimalMeshParams()
@@ -868,6 +905,11 @@ const double PrimalMesh::PrimalMeshParams::getElectrodeRadius() const
 	return electrodeRadius;
 }
 
+const double PrimalMesh::PrimalMeshParams::getZmax() const
+{
+	return zmax;
+}
+
 void PrimalMesh::PrimalMeshParams::readParameters(const std::string & filename)
 {
 	if (filename.size() <= 0) {
@@ -887,28 +929,24 @@ void PrimalMesh::PrimalMeshParams::readParameters(const std::string & filename)
 		int pos = line.find(delim);
 		// if delimiter is not found, skip this line
 		if (pos == std::string::npos) {
-			std::cout << "delimiter (delim = " << delim << ") not found in line: " << line << std::endl;
+			std::cout << "delimiter (delim = " << delim << ") not found in line: " << line << "; skip this line" << std::endl;
 			continue;
 		}
-
-		int value = 0;
 		std::string tag = line.substr(0, pos);
-		std::stringstream(line.substr(pos + 1)) >> value;
-
-		//std::cout << "tag:   |" << tag   << "|" << std::endl;
-		//std::cout << "value: |" << value << "|" << std::endl;
-
+		
 		if (tag == "axialLayers") {
-			this->nAxialLayers = value;
+			std::stringstream(line.substr(pos + 1)) >> this->nAxialLayers;
 		}
 		if (tag == "refinements") {
-			this->nRefinements = value;
+			std::stringstream(line.substr(pos + 1)) >> this->nRefinements;
 		}
 		if (tag == "outerLayers") {
-			this->nOuterLayers = value;
+			std::stringstream(line.substr(pos + 1)) >> this->nOuterLayers;
+		}
+		if (tag == "zMax") {
+			std::stringstream(line.substr(pos + 1)) >> this->zmax;
 		}
 	}
-
 }
 
 std::ostream & operator<<(std::ostream & os, const PrimalMesh::PrimalMeshParams & obj)
@@ -917,5 +955,6 @@ std::ostream & operator<<(std::ostream & os, const PrimalMesh::PrimalMeshParams 
 	os << "refinements:      " << obj.nRefinements << std::endl;
 	os << "axial layers:     " << obj.nAxialLayers << std::endl;
 	os << "outer layers:     " << obj.nOuterLayers << std::endl;
+	os << "zMax:             " << obj.zmax << std::endl;
 	return os;
 }

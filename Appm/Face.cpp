@@ -269,6 +269,13 @@ void Face::init()
 		}
 		center *= 1./3.;
 
+		Eigen::Matrix3d vertexPos;
+		for (int i = 0; i < 3; i++) {
+			vertexPos.col(i) = vertexList[i]->getPosition();
+		}
+		//std::cout << "Face vertex pos: " << std::endl << vertexPos.transpose() << std::endl;
+		//std::cout << "Face center: " << center.transpose() << std::endl;
+
 		for (int i = 0; i < 3; i++) {
 			const Eigen::Vector3d v0 = vertexList[i]->getPosition();
 			const Eigen::Vector3d v1 = vertexList[(i + 1) % 3]->getPosition();
@@ -276,7 +283,10 @@ void Face::init()
 			const Eigen::Vector3d a = v0 - center;
 			const Eigen::Vector3d b = v1 - v0;
 			const Eigen::Vector3d n = a.normalized().cross(b.normalized());
-			assert(n.dot(Eigen::Vector3d::UnitZ()) > 0);
+			//std::cout << "n = " << n.transpose() << std::endl;
+			const double n_dot_z = n.dot(Eigen::Vector3d::UnitZ());
+			assert(n_dot_z > 0);
+			//assert(n.segment(0, 2).norm() < 16 * std::numeric_limits<double>::epsilon());
 		}
 	}
 

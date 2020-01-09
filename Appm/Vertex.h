@@ -19,6 +19,7 @@ public:
 	Vertex(const Eigen::Vector3d & position, const int index);
 	~Vertex();
 
+	void setPosition(const Eigen::Vector3d & pos);
 	const Eigen::Vector3d getPosition() const;
 
 	void setAdjacient(Edge * edge);
