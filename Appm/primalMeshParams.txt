@@ -1,0 +1,3 @@
+axialLayers: 50
+refinements: 2
+outerLayers: 2

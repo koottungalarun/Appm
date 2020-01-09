@@ -22,6 +22,9 @@ Main::~Main()
 
 void Main::run()
 {
-	AppmSolver appm;
+	PrimalMesh::PrimalMeshParams primalMeshParams;
+	primalMeshParams = PrimalMesh::PrimalMeshParams("primalMeshParams.txt");
+
+	AppmSolver appm(primalMeshParams);
 	appm.run();	
 }

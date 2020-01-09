@@ -33,14 +33,14 @@ void PrimalMesh::init()
 	validateParameters();
 
 	assert(getNumberOfVertices() > 0);
-	refineMesh(params.nRefinements);
+	refineMesh(params.getRefinements());
 
-	outerMeshExtrude(params.nOuterLayers);
+	outerMeshExtrude(params.getOuterLayers());
 
 	const double zmax = 1;
-	extrudeMesh(params.nAxialLayers, zmax);
+	extrudeMesh(params.getAxialLayers(), zmax);
 
-	sortVertices(params.electrodeRadius);
+	sortVertices(params.getElectrodeRadius());
 	sortEdges();
 	sortFaces();
 }
@@ -829,10 +829,93 @@ void PrimalMesh::sortFaces()
 
 void PrimalMesh::validateParameters()
 {
-	assert(params.nAxialLayers >= 1);
-	assert(params.nRefinements >= 1);
-	if (params.nOuterLayers > 0) {
-		assert(params.nRefinements > 1);
+	std::cout << "Primal mesh parameters: " << std::endl;
+	std::cout << params << std::endl;
+	assert(params.getAxialLayers() >= 1);
+	assert(params.getRefinements() >= 1);
+	if (params.getOuterLayers() > 0) {
+		assert(params.getRefinements() > 1);
 	}
 
+}
+
+PrimalMesh::PrimalMeshParams::PrimalMeshParams()
+{
+}
+
+PrimalMesh::PrimalMeshParams::PrimalMeshParams(const std::string & filename)
+{
+	readParameters(filename);
+}
+
+const int PrimalMesh::PrimalMeshParams::getRefinements() const
+{
+	return nRefinements;
+}
+
+const int PrimalMesh::PrimalMeshParams::getAxialLayers() const
+{
+	return nAxialLayers;
+}
+
+const int PrimalMesh::PrimalMeshParams::getOuterLayers() const
+{
+	return nOuterLayers;
+}
+
+const double PrimalMesh::PrimalMeshParams::getElectrodeRadius() const
+{
+	return electrodeRadius;
+}
+
+void PrimalMesh::PrimalMeshParams::readParameters(const std::string & filename)
+{
+	if (filename.size() <= 0) {
+		std::cout << "Filename of PrimalMeshParameters not valid: " << filename << std::endl;
+	}
+	std::ifstream file(filename);
+	if (!file.is_open()) {
+		std::cout << "File is not open: " << filename << std::endl;
+	}
+
+	std::string line;
+	const char delim = ':';
+	while (std::getline(file, line)) {
+		std::cout << line << std::endl;
+
+		// find position of delimiter
+		int pos = line.find(delim);
+		// if delimiter is not found, skip this line
+		if (pos == std::string::npos) {
+			std::cout << "delimiter (delim = " << delim << ") not found in line: " << line << std::endl;
+			continue;
+		}
+
+		int value = 0;
+		std::string tag = line.substr(0, pos);
+		std::stringstream(line.substr(pos + 1)) >> value;
+
+		//std::cout << "tag:   |" << tag   << "|" << std::endl;
+		//std::cout << "value: |" << value << "|" << std::endl;
+
+		if (tag == "axialLayers") {
+			this->nAxialLayers = value;
+		}
+		if (tag == "refinements") {
+			this->nRefinements = value;
+		}
+		if (tag == "outerLayers") {
+			this->nOuterLayers = value;
+		}
+	}
+
+}
+
+std::ostream & operator<<(std::ostream & os, const PrimalMesh::PrimalMeshParams & obj)
+{
+	os << "electrode radius: " << obj.electrodeRadius << std::endl;
+	os << "refinements:      " << obj.nRefinements << std::endl;
+	os << "axial layers:     " << obj.nAxialLayers << std::endl;
+	os << "outer layers:     " << obj.nOuterLayers << std::endl;
+	return os;
 }

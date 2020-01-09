@@ -22,6 +22,7 @@ class AppmSolver
 
 public:
 	AppmSolver();
+	AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams);
 	~AppmSolver();
 
 	void run();
@@ -45,7 +46,7 @@ private:
 
 	std::vector<double> timeStamps;
 
-	void init_meshes();
+	void init_meshes(const PrimalMesh::PrimalMeshParams & primalParams);
 
 	void writeXdmf();
 	void writeXdmfDualVolume();

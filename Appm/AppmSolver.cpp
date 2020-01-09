@@ -2,9 +2,14 @@
 
 
 
-AppmSolver::AppmSolver()
+AppmSolver::AppmSolver() 
+	: AppmSolver(PrimalMesh::PrimalMeshParams())
 {
-	init_meshes();  // Initialize primal and dual meshes
+}
+
+AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
+{
+	init_meshes(primalMeshParams);  // Initialize primal and dual meshes
 
 	std::cout << "Dual mesh has " << dualMesh.getNumberOfVertices() << " vertices" << std::endl;
 
@@ -345,14 +350,9 @@ const Eigen::Matrix3Xd AppmSolver::getPrismReferenceCoords(const int nSamples)
 	return refCoords3d;
 }
 
-void AppmSolver::init_meshes()
+void AppmSolver::init_meshes(const PrimalMesh::PrimalMeshParams & primalParams)
 {
 	std::cout << "Init primal mesh" << std::endl;
-
-	PrimalMesh::PrimalMeshParams primalParams;
-	primalParams.nAxialLayers = 10;
-	primalParams.nRefinements = 2;
-	primalParams.nOuterLayers = 2;
 
 	primalMesh = PrimalMesh(primalParams);
 	primalMesh.init();

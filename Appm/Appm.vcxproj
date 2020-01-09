@@ -194,6 +194,9 @@
     <ClCompile Include="XdmfTopology.cpp" />
     <ClCompile Include="XmlElement.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="primalMeshParams.txt" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

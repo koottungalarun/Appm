@@ -8,11 +8,25 @@ class PrimalMesh :
 	public Mesh
 {
 public:
-	struct PrimalMeshParams {
-		int nRefinements = 0;
-		int nAxialLayers = 1;
-		int nOuterLayers = 0;
+	class PrimalMeshParams {
+	public:
+		PrimalMeshParams();
+		PrimalMeshParams(const std::string & filename);
+
+		const int getRefinements() const;
+		const int getAxialLayers() const;
+		const int getOuterLayers() const;
+		const double getElectrodeRadius() const;
+
+		friend std::ostream & operator<<(std::ostream & os, const PrimalMeshParams & obj);
+
+	private:
+		int nAxialLayers = 10;
+		int nRefinements = 2;
+		int nOuterLayers = 2;
 		double electrodeRadius = 0.35;
+
+		void readParameters(const std::string & filename);
 	};
 
 	PrimalMesh();
