@@ -17,11 +17,11 @@ FluidSolver::~FluidSolver()
 {
 }
 
-const double FluidSolver::updateFluidState()
-{
-	std::cout << "You should call the inherited function instead of this one" << std::endl;
-	return 0.0;
-}
+//const double FluidSolver::updateFluidState()
+//{
+//	std::cout << "You should call the inherited function instead of this one" << std::endl;
+//	return 0.0;
+//}
 
 void FluidSolver::writeStates(H5Writer & writer) const
 {

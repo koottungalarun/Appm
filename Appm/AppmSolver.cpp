@@ -13,8 +13,8 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 
 	std::cout << "Dual mesh has " << dualMesh.getNumberOfVertices() << " vertices" << std::endl;
 
-	maxwellSolver = MaxwellSolverCrankNicholson(&primalMesh, &dualMesh);
-	fluidSolver = SingleFluidSolver(&dualMesh);
+	maxwellSolver = new MaxwellSolverCrankNicholson(&primalMesh, &dualMesh);
+	fluidSolver = new SingleFluidSolver(&dualMesh);
 
 	B_vertex = Eigen::Matrix3Xd::Zero(3, primalMesh.getNumberOfVertices());
 	init_RaviartThomasInterpolation();
@@ -23,6 +23,11 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 
 AppmSolver::~AppmSolver()
 {
+	delete fluidSolver;
+	fluidSolver = nullptr;
+
+	delete maxwellSolver;
+	maxwellSolver = nullptr;
 }
 
 void AppmSolver::run()
@@ -39,31 +44,35 @@ void AppmSolver::run()
 
 	// initialize current flow
 	this->isMaxwellCurrentSource = true;
-	maxwellSolver.isMaxwellCurrentSource = isMaxwellCurrentSource;
+	maxwellSolver->isMaxwellCurrentSource = isMaxwellCurrentSource;
 	if (isMaxwellCurrentSource) {
 		const double x1 = -0.5;
 		const double x2 = 0.5;
 		const double z1 = 0.24;
 		const double z2 = 0.76;
-		maxwellSolver.setTorusCurrent(x1, x2, z1, z2);
+		maxwellSolver->setTorusCurrent(x1, x2, z1, z2);
 	}
 
 	writeOutput(iteration, time);
 
 	// Time integration loop
 	//double dT = 0.05;
-	const int maxIteration = 0;
+	const int maxIteration = 20;
 	const double maxTime = 20;
 
 	while (iteration < maxIteration && time < maxTime) {
 		std::cout << "Iteration " << iteration << ",\t time = " << time << std::endl;
 		// Fluid equations
-		dt = fluidSolver.updateFluidState();
+		if (isFluidEnabled) {
+			dt = fluidSolver->updateFluidState();
+		}
 		std::cout << "dt = " << dt << std::endl;
-		
+
 		// Maxwell equations
-		maxwellSolver.updateMaxwellState(dt, time);
-		interpolateMagneticFluxToPrimalVertices();
+		if (isMaxwellEnabled) {
+			maxwellSolver->updateMaxwellState(dt, time);
+			interpolateMagneticFluxToPrimalVertices();
+		}
 
 		iteration++;
 		time += dt;
@@ -94,7 +103,7 @@ void AppmSolver::interpolateMagneticFluxToPrimalVertices()
 	const int nCells = primalMesh.getNumberOfCells();
 	Eigen::VectorXi countVertexVisits = Eigen::VectorXi::Zero(primalMesh.getNumberOfVertices());
 
-	const Eigen::VectorXd B_h = maxwellSolver.getBstate();
+	const Eigen::VectorXd B_h = maxwellSolver->getBstate();
 
 	for (int cidx = 0; cidx < nCells; cidx++) {
 		const Cell * cell = primalMesh.getCell(cidx);
@@ -463,10 +472,10 @@ void AppmSolver::writeOutput(const int iteration, const double time)
 	H5Writer h5writer(filename);
 
 	// Fluid states
-	fluidSolver.writeStates(h5writer);
+	fluidSolver->writeStates(h5writer);
 
 	// Maxwell states
-	maxwellSolver.writeStates(h5writer);
+	maxwellSolver->writeStates(h5writer);
 
 	// Interpolated values of B-field to primal vertices
 	h5writer.writeData(B_vertex, "/Bvertex");

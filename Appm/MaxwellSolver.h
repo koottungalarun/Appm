@@ -16,7 +16,7 @@ public:
 	bool isMaxwellCurrentSource = false;
 
 
-	virtual void updateMaxwellState(const double dt, const double time);
+	virtual void updateMaxwellState(const double dt, const double time) = 0;
 
 	void writeStates(H5Writer & writer) const;
 

@@ -199,5 +199,8 @@
     <Text Include="primalMeshParams.txt">
       <Filter>Resource Files</Filter>
     </Text>
+    <Text Include="AppmSolverParams.txt">
+      <Filter>Resource Files</Filter>
+    </Text>
   </ItemGroup>
 </Project>

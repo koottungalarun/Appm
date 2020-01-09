@@ -20,10 +20,10 @@ MaxwellSolver::~MaxwellSolver()
 {
 }
 
-void MaxwellSolver::updateMaxwellState(const double dt, const double time)
-{
-	std::cout << "You should call the inherited function, not this one" << std::endl;
-}
+//void MaxwellSolver::updateMaxwellState(const double dt, const double time)
+//{
+//	std::cout << "You should call the inherited function, not this one" << std::endl;
+//}
 
 void MaxwellSolver::writeStates(H5Writer & writer) const
 {

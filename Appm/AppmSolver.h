@@ -31,14 +31,18 @@ protected:
 	PrimalMesh primalMesh;
 	DualMesh dualMesh;
 
-	FluidSolver fluidSolver;
-	MaxwellSolver maxwellSolver;
+	FluidSolver * fluidSolver;
+	MaxwellSolver * maxwellSolver;
 
 	Eigen::Matrix3Xd B_vertex;
 
 	bool isMaxwellCurrentSource = false;
 
 private:
+	bool isMaxwellEnabled = false;
+	bool isFluidEnabled = true;
+
+
 	void interpolateMagneticFluxToPrimalVertices();
 
 	// void test_raviartThomas();

@@ -14,7 +14,7 @@ public:
 	FluidSolver(const DualMesh * mesh);
 	~FluidSolver();
 
-	virtual const double updateFluidState();
+	virtual const double updateFluidState() = 0;
 
 	void writeStates(H5Writer & writer) const;
 
