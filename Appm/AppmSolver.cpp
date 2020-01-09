@@ -381,79 +381,113 @@ void AppmSolver::init_meshes(const PrimalMesh::PrimalMeshParams & primalParams)
 void AppmSolver::writeXdmf()
 {
 	const int nTimesteps = timeStamps.size();
-	const std::string filename = "appm.xdmf";
-	XdmfRoot root;
-	XdmfDomain domain;
-	XdmfGrid timeGrid(
-		XdmfGrid::Tags(
-			"Time Grid", 
-			XdmfGrid::GridType::Collection, 
-			XdmfGrid::CollectionType::Temporal
-		)
-	);
-	for (int iteration = 0; iteration < nTimesteps; iteration++) {
-		const std::string datafilename = (std::stringstream() << "appm-" << iteration << ".h5").str();
-		XdmfGrid gridOfGrids(XdmfGrid::Tags("Grid of Grids", XdmfGrid::GridType::Tree));
+	{
+		const std::string filename = "appm.xdmf";
+		std::string gridPrimalEdges;
+		std::string gridPrimalFaces;
+		std::string gridDualEdges;
+		std::string gridDualFaces;
 
-		const double timeValue = this->timeStamps[iteration];
-		gridOfGrids.addChild(XdmfTime(timeValue));
+		std::ofstream file(filename);
+		file << "<?xml version = \"1.0\" ?>" << std::endl;
+		file << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << std::endl;
+		file << "<Xdmf Version=\"3.0\" xmlns:xi=\"[http://www.w3.org/2001/XInclude]\">" << std::endl;
+		file << "<Domain>" << std::endl;
+		file << "<Grid Name=\"Time Grid\" GridType=\"Collection\" CollectionType=\"Temporal\">" << std::endl;
+		for (int i = 0; i < nTimesteps; i++) {
+			const double time = this->timeStamps[i];
 
-		// Primal edge grid
-		XdmfGrid primalEdgeGrid = getOutputPrimalEdgeGrid(iteration, timeValue, datafilename);
-		gridOfGrids.addChild(primalEdgeGrid);
-
-		// Primal surface grid
-		XdmfGrid primalSurfaceGrid = getOutputPrimalSurfaceGrid(iteration, timeValue, datafilename);
-		gridOfGrids.addChild(primalSurfaceGrid);
-
-		// Dual edge grid
-		XdmfGrid dualEdgeGrid = getOutputDualEdgeGrid(iteration, timeValue, datafilename);
-		gridOfGrids.addChild(dualEdgeGrid);
-
-		// Dual surface grid
-		XdmfGrid dualSurfaceGrid = getOutputDualSurfaceGrid(iteration, timeValue, datafilename);
-		gridOfGrids.addChild(dualSurfaceGrid);
-
-		//// Dual volume grid
-		//XdmfGrid dualVolumeGrid;
-
-		timeGrid.addChild(gridOfGrids);
+			file << "<Grid Name=\"Grid of Grids\" GridType=\"Tree\">" << std::endl;
+			file << "<Time Value=\"" << time << "\" />" << std::endl;
+			file << xdmf_GridPrimalEdges(i) << std::endl;
+			file << xdmf_GridPrimalFaces(i) << std::endl;
+			file << xdmf_GridDualEdges(i) << std::endl;
+			file << xdmf_GridDualFaces(i) << std::endl;
+			file << "</Grid>" << std::endl;
+		}
+		file << "</Grid>" << std::endl;
+		file << "</Domain>" << std::endl;
+		file << "</Xdmf>" << std::endl;
 	}
-	domain.addChild(timeGrid);
-	root.addChild(domain);
-	std::ofstream file(filename);
-	file << root << std::endl;
+	return;
+
+	{
+		const std::string filename = "appm.xdmf";
+		XdmfRoot root;
+		XdmfDomain domain;
+		XdmfGrid timeGrid(
+			XdmfGrid::Tags(
+				"Time Grid", 
+				XdmfGrid::GridType::Collection, 
+				XdmfGrid::CollectionType::Temporal
+			)
+		);
+		for (int iteration = 0; iteration < nTimesteps; iteration++) {
+			const std::string datafilename = (std::stringstream() << "appm-" << iteration << ".h5").str();
+			XdmfGrid gridOfGrids(XdmfGrid::Tags("Grid of Grids", XdmfGrid::GridType::Tree));
+
+			const double timeValue = this->timeStamps[iteration];
+			gridOfGrids.addChild(XdmfTime(timeValue));
+
+			// Primal edge grid
+			XdmfGrid primalEdgeGrid = getOutputPrimalEdgeGrid(iteration, timeValue, datafilename);
+			gridOfGrids.addChild(primalEdgeGrid);
+
+			// Primal surface grid
+			XdmfGrid primalSurfaceGrid = getOutputPrimalSurfaceGrid(iteration, timeValue, datafilename);
+			gridOfGrids.addChild(primalSurfaceGrid);
+
+			// Dual edge grid
+			XdmfGrid dualEdgeGrid = getOutputDualEdgeGrid(iteration, timeValue, datafilename);
+			gridOfGrids.addChild(dualEdgeGrid);
+
+			// Dual surface grid
+			XdmfGrid dualSurfaceGrid = getOutputDualSurfaceGrid(iteration, timeValue, datafilename);
+			gridOfGrids.addChild(dualSurfaceGrid);
+
+			//// Dual volume grid
+			//XdmfGrid dualVolumeGrid;
+
+			timeGrid.addChild(gridOfGrids);
+		}
+		domain.addChild(timeGrid);
+		root.addChild(domain);
+		std::ofstream file(filename);
+		file << root << std::endl;
+	}
 }
 
 void AppmSolver::writeXdmfDualVolume()
 {
 	const int nTimesteps = timeStamps.size();
-	const std::string filename = "appm-volume.xdmf";
-	XdmfRoot root;
-	XdmfDomain domain;
-	XdmfGrid timeGrid(
-		XdmfGrid::Tags(
-			"Time Grid",
-			XdmfGrid::GridType::Collection,
-			XdmfGrid::CollectionType::Temporal
-		)
-	);
-	for (int iteration = 0; iteration < nTimesteps; iteration++) {
-		const std::string datafilename = (std::stringstream() << "appm-" << iteration << ".h5").str();
+	{
+		const std::string filename = "appm-volume.xdmf";
+		XdmfRoot root;
+		XdmfDomain domain;
+		XdmfGrid timeGrid(
+			XdmfGrid::Tags(
+				"Time Grid",
+				XdmfGrid::GridType::Collection,
+				XdmfGrid::CollectionType::Temporal
+			)
+		);
+		for (int iteration = 0; iteration < nTimesteps; iteration++) {
+			const std::string datafilename = (std::stringstream() << "appm-" << iteration << ".h5").str();
 
-		const double timeValue = this->timeStamps[iteration];
-		timeGrid.addChild(XdmfTime(timeValue));
+			const double timeValue = this->timeStamps[iteration];
+			timeGrid.addChild(XdmfTime(timeValue));
 
-		// Dual volume grid
-		XdmfGrid dualVolumeGrid;
-		dualVolumeGrid = getOutputDualVolumeGrid(iteration, timeValue, datafilename);
+			// Dual volume grid
+			XdmfGrid dualVolumeGrid;
+			dualVolumeGrid = getOutputDualVolumeGrid(iteration, timeValue, datafilename);
 
-		timeGrid.addChild(dualVolumeGrid);
+			timeGrid.addChild(dualVolumeGrid);
+		}
+		domain.addChild(timeGrid);
+		root.addChild(domain);
+		std::ofstream file(filename);
+		file << root << std::endl;
 	}
-	domain.addChild(timeGrid);
-	root.addChild(domain);
-	std::ofstream file(filename);
-	file << root << std::endl;
 }
 
 
@@ -944,4 +978,161 @@ void AppmSolver::readParameters(const std::string & filename)
 	std::cout << "=======================" << std::endl;
 }
 
+const std::string AppmSolver::xdmf_GridPrimalEdges(const int iteration) const
+{
+	std::stringstream ss;
+	ss << "<Grid Name=\"Primal Edges\">" << std::endl;
+	ss << "<Topology TopologyType=\"Polyline\""
+		<< " NumberOfElements=\"" << primalMesh.getNumberOfEdges() << "\""
+		<< " NodesPerElement=\"2\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << 2 * primalMesh.getNumberOfEdges() << "\" DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
+	ss << "primal-mesh.h5:/edge2vertex" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Topology>" << std::endl;
 
+	ss << "<Geometry GeometryType=\"XYZ\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfVertices() << " 3\"" 
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "primal-mesh.h5:/vertexPos" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Geometry>" << std::endl;
+
+	ss << "<Attribute Name=\"Edge index\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfEdges() << "\""
+		<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
+	ss << "primal-mesh.h5:/edgeIdx" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Electric field\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfEdges() << " 3\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/E" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+	ss << "</Grid>";
+	return ss.str();
+}
+
+const std::string AppmSolver::xdmf_GridPrimalFaces(const int iteration) const
+{
+	H5Reader h5reader;
+	h5reader = H5Reader("primal-mesh.h5");
+	const int nElements = h5reader.readDataSize("/face2vertex");
+	assert(nElements > 0);
+
+	std::stringstream ss;
+	ss << "<Grid Name=\"Primal Faces\">" << std::endl;
+	ss << "<Topology TopologyType=\"Mixed\""
+		<< " NumberOfElements=\"" << primalMesh.getNumberOfFaces() << "\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << nElements << "\" DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
+	ss << "primal-mesh.h5:/face2vertex" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Topology>" << std::endl;
+
+	ss << "<Geometry GeometryType=\"XYZ\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfVertices() << " 3\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "primal-mesh.h5:/vertexPos" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Geometry>" << std::endl;
+
+	ss << "<Attribute Name=\"Face index\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfFaces() << "\""
+		<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
+	ss << "primal-mesh.h5:/faceIndex" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Magnetic flux\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfFaces() << " 3\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/B" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Magnetic flux interpolated\" AttributeType=\"Vector\" Center=\"Node\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfVertices() << " 3\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/Bvertex" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+	ss << "</Grid>";
+	return ss.str();
+}
+
+const std::string AppmSolver::xdmf_GridDualEdges(const int iteration) const
+{
+	std::stringstream ss;
+	ss << "<Grid Name=\"Dual Edges\">" << std::endl;
+	ss << "<Topology TopologyType=\"Polyline\""
+		<< " NumberOfElements=\"" << dualMesh.getNumberOfEdges() << "\"" 
+		<< " NodesPerElement=\"2\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << 2 * dualMesh.getNumberOfEdges() << "\" DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
+	ss << "dual-mesh.h5:/edge2vertex" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Topology>" << std::endl;
+
+	ss << "<Geometry GeometryType=\"XYZ\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfVertices() << " 3\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "dual-mesh.h5:/vertexPos" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Geometry>" << std::endl;
+
+	ss << "<Attribute Name=\"Edge index\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfEdges() << "\""
+		<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
+	ss << "dual-mesh.h5:/edgeIdx" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Magnetic field\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfEdges() << " 3\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/H" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+	ss << "</Grid>" << std::endl;
+	return ss.str();
+}
+
+const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
+{
+	H5Reader h5reader;
+	h5reader = H5Reader("dual-mesh.h5");
+	const int nElements = h5reader.readDataSize("/face2vertex");
+	assert(nElements > 0);
+
+	std::stringstream ss;
+	ss << "<Grid Name=\"Dual Faces\">" << std::endl;
+	ss << "<Topology TopologyType=\"Mixed\""
+		<< " NumberOfElements=\"" << dualMesh.getNumberOfFaces() << "\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << nElements << "\" DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
+	ss << "dual-mesh.h5:/face2vertex" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Topology>" << std::endl;
+
+	ss << "<Geometry GeometryType=\"XYZ\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfVertices() << " 3\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "dual-mesh.h5:/vertexPos" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Geometry>" << std::endl;
+
+	ss << "<Attribute Name=\"Face index\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
+		<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
+	ss << "dual-mesh.h5:/faceIndex" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Electric Current\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/J" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+	ss << "</Grid>" << std::endl;
+	return ss.str();
+}

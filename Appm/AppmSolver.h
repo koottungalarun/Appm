@@ -74,5 +74,11 @@ private:
 	std::vector<Eigen::Vector3d> rt_piolaVector;
 
 	void readParameters(const std::string & filename);
+
+	const std::string xdmf_GridPrimalEdges(const int iteration) const;
+	const std::string xdmf_GridPrimalFaces(const int iteration) const;
+	const std::string xdmf_GridDualEdges(const int iteration) const;
+	const std::string xdmf_GridDualFaces(const int iteration) const;
+
 };
 
