@@ -2,7 +2,6 @@
 
 #include <iostream>
 #include "AppmSolver.h"
-#include "AppmSolverCrankNichol.h"
 
 class Main
 {

@@ -983,6 +983,44 @@ const Eigen::VectorXi Mesh::getFaceTypes() const
 	return types;
 }
 
+Mesh::MeshInfo Mesh::getMeshInfo() const
+{
+	MeshInfo meshInfo;
+	assert(getNumberOfVertices() > 0);
+	assert(getNumberOfEdges() > 0);
+	assert(getNumberOfFaces() > 0);
+	assert(getNumberOfCells() > 0);
+
+	// Vertices
+	const Eigen::VectorXi vertexTypes = getVertexTypes();
+	const int boundaryVertexType = static_cast<int>(Vertex::Type::Boundary);
+	const int terminalVertexType = static_cast<int>(Vertex::Type::Terminal);
+	meshInfo.nVertices = getNumberOfVertices();
+	meshInfo.nVerticesTerminal = (vertexTypes.array() == terminalVertexType).count();
+	meshInfo.nVerticesBoundary = (vertexTypes.array() == boundaryVertexType).count() + meshInfo.nVerticesTerminal;
+
+	// Edges
+	const Eigen::VectorXi edgeTypes = getEdgeTypes();
+	const int interiorEdgeType = static_cast<int>(Edge::Type::Interior);
+	const int interiorToBoundaryEdgeType = static_cast<int>(Edge::Type::InteriorToBoundary);
+	const int boundaryEdgeType = static_cast<int>(Edge::Type::Boundary);
+	meshInfo.nEdges = getNumberOfEdges();
+	meshInfo.nEdgesInner =
+		(edgeTypes.array() == interiorEdgeType).count() +
+		(edgeTypes.array() == interiorToBoundaryEdgeType).count();
+
+	// Faces
+	const Eigen::VectorXi faceTypes = getFaceTypes();
+	const int isBoundaryFace = 1;
+	meshInfo.nFaces = getNumberOfFaces();
+	meshInfo.nFacesInner = (faceTypes.array() != isBoundaryFace).count();
+
+	// Cells
+	meshInfo.nCells = getNumberOfCells();
+
+	return meshInfo;
+}
+
 
 //void Mesh::writeXdmf_volume()
 //{

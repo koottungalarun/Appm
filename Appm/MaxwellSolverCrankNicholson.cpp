@@ -1,52 +1,48 @@
-#include "AppmSolverCrankNichol.h"
+#include "MaxwellSolverCrankNicholson.h"
 
 
 
-AppmSolverCrankNichol::AppmSolverCrankNichol()
+MaxwellSolverCrankNicholson::MaxwellSolverCrankNicholson()
 {
 }
 
-
-AppmSolverCrankNichol::~AppmSolverCrankNichol()
+MaxwellSolverCrankNicholson::MaxwellSolverCrankNicholson(const PrimalMesh * primal, const DualMesh * dual)
+	: MaxwellSolver(primal, dual)
 {
-}
+	const Eigen::VectorXi vertexTypes = primal->getVertexTypes();
+	const int boundaryVertexType = static_cast<int>(Vertex::Type::Boundary);
+	const int terminalVertexType = static_cast<int>(Vertex::Type::Terminal);
+	const int nVerticesTerminal = (vertexTypes.array() == terminalVertexType).count();
+	const int nVerticesBoundary = (vertexTypes.array() == boundaryVertexType).count() + nVerticesTerminal;
 
-void AppmSolverCrankNichol::init_maxwell()
-{
-	// number of degrees of freedom
+	const Eigen::VectorXi edgeTypes = primal->getEdgeTypes();
+	const int interiorEdgeType = static_cast<int>(Edge::Type::Interior);
+	const int interiorToBoundaryEdgeType = static_cast<int>(Edge::Type::InteriorToBoundary);
+	const int boundaryEdgeType = static_cast<int>(Edge::Type::Boundary);
+	const int nEdges = primal->getNumberOfEdges();
+	const int nEdgesInner =
+		(edgeTypes.array() == interiorEdgeType).count() +
+		(edgeTypes.array() == interiorToBoundaryEdgeType).count();
+
+	const Eigen::VectorXi faceTypes = primal->getFaceTypes();
+	const int isBoundaryFace = 1;
+	const int nFaces = primal->getNumberOfFaces();
+	const int nFacesInner = (faceTypes.array() != isBoundaryFace).count();
+
 	const int ndof =
-		primalMeshInfo.nFacesInner
-		+ primalMeshInfo.nEdgesInner
-		+ primalMeshInfo.nVerticesBoundary;
+		nFacesInner + 
+		nEdgesInner +
+		nVerticesBoundary;
 	maxwellState = Eigen::VectorXd::Zero(ndof);
 
-	// Call function of base class
-	AppmSolver::init_maxwell();
-
-	// Extend initialization for Maxwell equations
-
-
-
 }
 
 
-void AppmSolverCrankNichol::init_maxwell(const double dt)
+MaxwellSolverCrankNicholson::~MaxwellSolverCrankNicholson()
 {
-	// number of degrees of freedom
-	const int ndof =
-		primalMeshInfo.nFacesInner
-		+ primalMeshInfo.nEdgesInner
-		+ primalMeshInfo.nVerticesBoundary;
-	maxwellState = Eigen::VectorXd::Zero(ndof);
-
-	// Call function of base class
-	AppmSolver::init_maxwell(dt);
-
-	// Extend initialization for Maxwell equations
-
 }
 
-void AppmSolverCrankNichol::update_maxwell(const double dt, const double time)
+void MaxwellSolverCrankNicholson::updateMaxwellState(const double dt, const double time)
 {
 	const Eigen::VectorXd prevState = maxwellState;
 
@@ -60,21 +56,24 @@ void AppmSolverCrankNichol::update_maxwell(const double dt, const double time)
 	const int nVertices = primalMeshInfo.nVertices;
 
 	// Discrete Operators
-	const Eigen::SparseMatrix<double> M_mu    = hodgeOperatorDualEdgeToPrimalFace();
-	const Eigen::SparseMatrix<double> M_eps   = hodgeOperatorPrimalEdgeToDualFace();
-	const Eigen::SparseMatrix<double> M_sigma = hodgeOperatorElectricalConductivity();
+	const Eigen::SparseMatrix<double> M_mu = get_Mnu();
+	const Eigen::SparseMatrix<double> M_eps = get_Meps();
+	const Eigen::SparseMatrix<double> M_sigma = get_Msigma();
 
-	const Eigen::SparseMatrix<double> G = primalMesh.get_e2vMap().cast<double>();
-	const Eigen::SparseMatrix<double> C = primalMesh.get_f2eMap().cast<double>();
+	const Eigen::SparseMatrix<double> G = primal->get_e2vMap().cast<double>();
+	const Eigen::SparseMatrix<double> C = primal->get_f2eMap().cast<double>();
 
-	const Eigen::SparseMatrix<double> X = inclusionOperatorBoundaryVerticesToAllVertices();
-	
+	const Eigen::SparseMatrix<double> X = get_bndryInclOp();
+
 	// Boundary gradient operator
 	const Eigen::SparseMatrix<double> GX = G * X;
 
 	// Operator from inner edges and boundary vertices to all edges
 	const int nRowsQ = nEdgesInterior + nVerticesBoundary;
-	Eigen::SparseMatrix<double> Q = speye(nEdges, nRowsQ);
+	const int nQ = std::max(nEdges, nRowsQ);
+	Eigen::SparseMatrix<double> id(nQ, nQ);
+	id.setIdentity();
+	Eigen::SparseMatrix<double> Q = id.topLeftCorner(nEdges, nRowsQ); 
 	Q.rightCols(GX.cols()) = -GX;
 
 	// Curl operator in interior (inner faces, inner edges)
@@ -83,10 +82,10 @@ void AppmSolverCrankNichol::update_maxwell(const double dt, const double time)
 	assert(C_inner.cols() == nEdgesInterior);
 	Eigen::SparseMatrix<double> P(nFacesInterior, nEdgesInterior + nVerticesBoundary);
 	P.leftCols(C_inner.cols()) = C_inner;
-	
+
 	// Solve system of equations: A*u(k+1) = B*u(k) for u(k+1)
-	Eigen::SparseMatrix<double> A(n,n);
-	Eigen::SparseMatrix<double> B(n,n);
+	Eigen::SparseMatrix<double> A(n, n);
+	Eigen::SparseMatrix<double> B(n, n);
 	Eigen::SparseMatrix<double> A_11, A_12, A_21, A_22;
 	A_11 = M_mu;
 	A_12 = +0.5 * dt * P;
@@ -114,7 +113,7 @@ void AppmSolverCrankNichol::update_maxwell(const double dt, const double time)
 		B_22 = Q.transpose() * (M_eps - 0.5 * dt * M_sigma) * Q;
 	}
 
-	const Eigen::SparseMatrix<double> Bleft  = Eigen::vertcat(B_11, B_21);
+	const Eigen::SparseMatrix<double> Bleft = Eigen::vertcat(B_11, B_21);
 	const Eigen::SparseMatrix<double> Bright = Eigen::vertcat(B_12, B_22);
 	B.leftCols(Bleft.cols()) = Bleft;
 	B.rightCols(Bright.cols()) = Bright;
@@ -136,7 +135,7 @@ void AppmSolverCrankNichol::update_maxwell(const double dt, const double time)
 	if (maxwellSolver.info() != Eigen::Success) {
 		std::cout << "Maxwell solver failed to setup the system of equations" << std::endl;
 	}
-	const Eigen::VectorXd x_d   = electricPotentialTerminals(time); // voltage boundary condition on terminals at new timestep
+	const Eigen::VectorXd x_d = electricPotentialTerminals(time); // voltage boundary condition on terminals at new timestep
 	Eigen::VectorXd rhs;  // right hand side of equation
 
 	if (isMaxwellCurrentSource) {
@@ -168,8 +167,8 @@ void AppmSolverCrankNichol::update_maxwell(const double dt, const double time)
 	}
 
 	// assign solution to state vector
-	maxwellState.topRows(nFree) = x_f; 
-	maxwellState.bottomRows(nDirichlet) = x_d.bottomRows(nDirichlet); 
+	maxwellState.topRows(nFree) = x_f;
+	maxwellState.bottomRows(nDirichlet) = x_d.bottomRows(nDirichlet);
 
 	// map data to vectors
 	const int nH = primalMeshInfo.nFacesInner;
@@ -178,4 +177,3 @@ void AppmSolverCrankNichol::update_maxwell(const double dt, const double time)
 
 	B_h.topRows(M_mu.rows()) = M_mu * H_h.topRows(M_mu.cols());
 }
-

@@ -1,43 +1,39 @@
-#include "AppmSolverLeapfrog.h"
+#include "MaxwellSolverLeapFrog.h"
 
 
 
-AppmSolverLeapfrog::AppmSolverLeapfrog()
+MaxwellSolverLeapFrog::MaxwellSolverLeapFrog()
 {
 }
 
-
-AppmSolverLeapfrog::~AppmSolverLeapfrog()
+MaxwellSolverLeapFrog::MaxwellSolverLeapFrog(const PrimalMesh * primal, const DualMesh * dual)
+	: MaxwellSolver(primal, dual)
 {
-}
-
-void AppmSolverLeapfrog::init_maxwell(const double dt)
-{
-
-	const Eigen::VectorXi vertexType = primalMesh.getVertexTypes();
-	const Eigen::VectorXi edgeType = primalMesh.getEdgeTypes();
-	const Eigen::VectorXi faceType = primalMesh.getFaceTypes();
+	const Eigen::VectorXi vertexType = primal->getVertexTypes();
+	const Eigen::VectorXi edgeType = primal->getEdgeTypes();
+	const Eigen::VectorXi faceType = primal->getFaceTypes();
 
 	// Number of primal vertices
-	const int nPv = primalMesh.getNumberOfVertices();
+	const int nPv = primal->getNumberOfVertices();
 	// Number of primal vertices on boundary
 	const int nPvb = (vertexType.array() == static_cast<int>(Vertex::Type::Boundary)).count()
 		+ (vertexType.array() == static_cast<int>(Vertex::Type::Terminal)).count();
 	// Number of primal vertices in interior
 	const int nPvi = (vertexType.array() == static_cast<int>(Vertex::Type::Inner)).count();
 	// Number of primal vertrices at terminals
-	const int nPvt = (vertexType.array() == static_cast<int>(Vertex::Type::Terminal)).count();
+	
+	this->nPvt = (vertexType.array() == static_cast<int>(Vertex::Type::Terminal)).count();
 	assert((nPvb + nPvi) == nPv);
 
 	// Number of primal edges
-	const int nPe = primalMesh.getNumberOfEdges();
+	const int nPe = primal->getNumberOfEdges();
 
 	// Number of primal edges in interior
 	const int nPei = (edgeType.array() == static_cast<int>(Edge::Type::Interior)).count()
 		+ (edgeType.array() == static_cast<int>(Edge::Type::InteriorToBoundary)).count();
 
 	// Number of primal faces
-	const int nPf = primalMesh.getNumberOfFaces();
+	const int nPf = primal->getNumberOfFaces();
 	const int nPfi = (faceType.array() == 0).count();
 
 	const int nDof = nPei + nPvb;
@@ -54,7 +50,7 @@ void AppmSolverLeapfrog::init_maxwell(const double dt)
 
 	// Curl operator on primal mesh
 	Eigen::SparseMatrix<int> C;
-	C = primalMesh.get_f2eMap();
+	C = primal->get_f2eMap();
 	this->C = C.cast<double>();
 
 	// Curl operator for inner-faces and inner-edges
@@ -65,12 +61,21 @@ void AppmSolverLeapfrog::init_maxwell(const double dt)
 	P = Eigen::SparseMatrix<double>(nPfi, nPei + nPvb);
 	P.leftCols(Cii.cols()) = Cii.cast<double>();
 
-	Eigen::SparseMatrix<double> B;
 	A = Q.transpose() * Meps * Q;
 	B = P.transpose() * Mnu * P;
 	assert(A.rows() == B.rows());
 	assert(A.cols() == B.cols());
 
+
+}
+
+
+MaxwellSolverLeapFrog::~MaxwellSolverLeapFrog()
+{
+}
+
+void MaxwellSolverLeapFrog::updateMaxwellState(const double dt, const double time)
+{
 	// System of equations
 	assert(dt > 0);
 	assert(isfinite(dt));
@@ -85,10 +90,8 @@ void AppmSolverLeapfrog::init_maxwell(const double dt)
 		std::cout << "Solver initialization failed" << std::endl;
 		exit(-1);
 	}
-}
 
-void AppmSolverLeapfrog::update_maxwell(const double dt, const double time)
-{
+
 	const int nDof = x_m.size();
 
 	// Vector of degrees of freedom (dof)
@@ -98,8 +101,7 @@ void AppmSolverLeapfrog::update_maxwell(const double dt, const double time)
 	rhs = A * (2 * x_m - x_mm1) + pow(dt, 2) * rhs;
 
 	const int nPvt = M_d.cols();
-	const int nFreeIdx = M.rows() - nPvt;
-
+	
 	// Electric potential at terminal vertices
 	Eigen::VectorXd phi_t(nPvt);
 	double phi1 = 0;
@@ -115,8 +117,8 @@ void AppmSolverLeapfrog::update_maxwell(const double dt, const double time)
 	Eigen::VectorXd x_f(nFreeIdx);
 	x_f = maxwellSolver.solve(rhs_f);
 	if (maxwellSolver.info() != Eigen::Success) {
-	std::cout << "Solver solution failed" << std::endl;
-	exit(-1);
+		std::cout << "Solver solution failed" << std::endl;
+		exit(-1);
 	}
 	x.topRows(x_f.size()) = x_f;
 	x.bottomRows(x_d.size()) = x_d;
@@ -130,4 +132,8 @@ void AppmSolverLeapfrog::update_maxwell(const double dt, const double time)
 	// Update state vectors
 	x_mm1 = x_m;
 	x_m = x;
+
+
+
+
 }

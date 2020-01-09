@@ -73,7 +73,7 @@
     <IncludePath>$(HDF_INC);$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>C:\Program Files\HDF_Group\HDF5\1.10.4\include;$(ICIncludeDir);$(IncludePath)</IncludePath>
+    <IncludePath>$(HDF_INC);$(ICIncludeDir);$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -127,27 +127,30 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <SubSystem>Console</SubSystem>
-      <AdditionalLibraryDirectories>C:\Program Files\HDF_Group\HDF5\1.10.4\lib;</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(HDF_LIB);</AdditionalLibraryDirectories>
       <AdditionalDependencies>szip.lib;zlib.lib;hdf5.lib;hdf5_cpp.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="AppmSolver.h" />
-    <ClInclude Include="AppmSolverCrankNichol.h" />
-    <ClInclude Include="AppmSolverLeapfrog.h" />
     <ClInclude Include="Cell.h" />
     <ClInclude Include="DualMesh.h" />
     <ClInclude Include="Edge.h" />
     <ClInclude Include="EigenAuxiliaries.h" />
     <ClInclude Include="Face.h" />
+    <ClInclude Include="FluidSolver.h" />
     <ClInclude Include="FluidState.h" />
     <ClInclude Include="GeometryItem.h" />
     <ClInclude Include="H5Reader.h" />
     <ClInclude Include="H5Writer.h" />
     <ClInclude Include="Main.h" />
+    <ClInclude Include="MaxwellSolver.h" />
+    <ClInclude Include="MaxwellSolverCrankNicholson.h" />
+    <ClInclude Include="MaxwellSolverLeapFrog.h" />
     <ClInclude Include="Mesh.h" />
     <ClInclude Include="Numerics.h" />
     <ClInclude Include="PrimalMesh.h" />
+    <ClInclude Include="SingleFluidSolver.h" />
     <ClInclude Include="TriPrism.h" />
     <ClInclude Include="Vertex.h" />
     <ClInclude Include="XdmfAttribute.h" />
@@ -162,20 +165,23 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AppmSolver.cpp" />
-    <ClCompile Include="AppmSolverCrankNichol.cpp" />
-    <ClCompile Include="AppmSolverLeapfrog.cpp" />
     <ClCompile Include="Cell.cpp" />
     <ClCompile Include="DualMesh.cpp" />
     <ClCompile Include="Edge.cpp" />
     <ClCompile Include="Face.cpp" />
+    <ClCompile Include="FluidSolver.cpp" />
     <ClCompile Include="FluidState.cpp" />
     <ClCompile Include="GeometryItem.cpp" />
     <ClCompile Include="H5Reader.cpp" />
     <ClCompile Include="H5Writer.cpp" />
     <ClCompile Include="Main.cpp" />
+    <ClCompile Include="MaxwellSolver.cpp" />
+    <ClCompile Include="MaxwellSolverCrankNicholson.cpp" />
+    <ClCompile Include="MaxwellSolverLeapFrog.cpp" />
     <ClCompile Include="Mesh.cpp" />
     <ClCompile Include="Numerics.cpp" />
     <ClCompile Include="PrimalMesh.cpp" />
+    <ClCompile Include="SingleFluidSolver.cpp" />
     <ClCompile Include="TriPrism.cpp" />
     <ClCompile Include="Vertex.cpp" />
     <ClCompile Include="XdmfAttribute.cpp" />

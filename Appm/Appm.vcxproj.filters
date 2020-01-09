@@ -90,10 +90,19 @@
     <ClInclude Include="Numerics.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="AppmSolverLeapfrog.h">
+    <ClInclude Include="FluidSolver.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="AppmSolverCrankNichol.h">
+    <ClInclude Include="MaxwellSolver.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SingleFluidSolver.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MaxwellSolverCrankNicholson.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MaxwellSolverLeapFrog.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -170,10 +179,19 @@
     <ClCompile Include="Numerics.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="AppmSolverLeapfrog.cpp">
+    <ClCompile Include="FluidSolver.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="AppmSolverCrankNichol.cpp">
+    <ClCompile Include="MaxwellSolver.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SingleFluidSolver.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MaxwellSolverCrankNicholson.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MaxwellSolverLeapFrog.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

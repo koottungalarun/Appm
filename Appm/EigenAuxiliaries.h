@@ -2,6 +2,8 @@
 
 #include <vector>
 #include <Eigen/Sparse>
+#include <iostream>
+#include <fstream>
 
 namespace Eigen {
 	template <typename T>
@@ -25,6 +27,8 @@ namespace Eigen {
 			}
 		}
 	}
+
+
 
 	/** 
 	* Get a sparse identitiy matrix of non-square shape. (See also speye() in Matlab)

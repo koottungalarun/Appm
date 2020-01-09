@@ -1,5 +1,6 @@
 #pragma once
 
+#include "EigenAuxiliaries.h"
 #include "Mesh.h"
 #include "PrimalMesh.h"
 

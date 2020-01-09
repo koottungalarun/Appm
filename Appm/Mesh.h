@@ -34,6 +34,22 @@
 class Mesh
 {
 public:
+	struct MeshInfo {
+		int nVertices = 0;         // number of vertices
+		int nVerticesBoundary = 0; // number of vertices on domain boundary
+		int nVerticesTerminal = 0; // number of degrees of freedom with Dirichlet conditions
+
+		int nEdges = 0;      // number of edges
+		int nEdgesInner = 0; // number of edges in interior of domain
+
+		int nFaces = 0;      // number of faces
+		int nFacesInner = 0; // number of faces in interior of domain
+
+		int nCells = 0; // number of cells
+	};
+
+
+
 	Mesh();
 	Mesh(const std::string & meshPrefix);
 	~Mesh();
@@ -79,6 +95,8 @@ public:
 	const Eigen::VectorXi getVertexTypes() const;
 	const Eigen::VectorXi getEdgeTypes() const;
 	const Eigen::VectorXi getFaceTypes() const;
+
+	MeshInfo getMeshInfo() const;
 
 
 protected:
