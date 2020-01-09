@@ -9,6 +9,7 @@ AppmSolver::AppmSolver()
 
 AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 {
+	readParameters("AppmSolverParams.txt");
 	init_meshes(primalMeshParams);  // Initialize primal and dual meshes
 
 	std::cout << "Dual mesh has " << dualMesh.getNumberOfVertices() << " vertices" << std::endl;
@@ -57,10 +58,8 @@ void AppmSolver::run()
 
 	// Time integration loop
 	//double dT = 0.05;
-	const int maxIteration = 20;
-	const double maxTime = 20;
 
-	while (iteration < maxIteration && time < maxTime) {
+	while (iteration < maxIterations && time < maxTime) {
 		std::cout << "Iteration " << iteration << ",\t time = " << time << std::endl;
 		// Fluid equations
 		if (isFluidEnabled) {
@@ -912,6 +911,37 @@ void AppmSolver::init_RaviartThomasInterpolation()
 		rt_piolaVector.emplace_back(bK);
 
 	}
+}
+
+void AppmSolver::readParameters(const std::string & filename)
+{
+	std::ifstream file(filename);
+	if (!file.is_open()) {
+		std::cout << "File not opened: " << filename;
+		exit(-1);
+	}
+
+	std::string line;
+	const char delim = ':';
+
+	while (std::getline(file, line)) {
+		int pos = line.find(delim);
+		std::string tag = line.substr(0, pos);
+
+		if (tag == "maxIterations") {
+			std::istringstream(line.substr(pos + 1)) >> this->maxIterations;
+		}
+		if (tag == "maxTime") {
+			std::istringstream(line.substr(pos + 1)) >> this->maxTime;
+		}
+	}
+
+	std::cout << std::endl;
+	std::cout << "Appm Solver parameters:" << std::endl;
+	std::cout << "======================="  << std::endl;
+	std::cout << "maxIterations: " << maxIterations << std::endl;
+	std::cout << "maxTime:       " << maxTime << std::endl;
+	std::cout << "=======================" << std::endl;
 }
 
 

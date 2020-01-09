@@ -42,6 +42,10 @@ private:
 	bool isMaxwellEnabled = false;
 	bool isFluidEnabled = true;
 
+	int maxIterations = 0;
+	double maxTime = 0;
+
+
 
 	void interpolateMagneticFluxToPrimalVertices();
 
@@ -69,6 +73,6 @@ private:
 	std::vector<Eigen::Matrix3d> rt_piolaMatrix;
 	std::vector<Eigen::Vector3d> rt_piolaVector;
 
-
+	void readParameters(const std::string & filename);
 };
 
