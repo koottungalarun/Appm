@@ -102,6 +102,9 @@
     <ClInclude Include="MaxwellSolverLeapFrog.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="TwoFluidSolver.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -186,6 +189,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="MaxwellSolverLeapFrog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TwoFluidSolver.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

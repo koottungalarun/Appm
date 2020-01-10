@@ -5,6 +5,7 @@
 #include "Numerics.h"
 #include "FluidSolver.h"
 #include "SingleFluidSolver.h"
+#include "TwoFluidSolver.h"
 
 #include "MaxwellSolver.h"
 #include "MaxwellSolverCrankNicholson.h"

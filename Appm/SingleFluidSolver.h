@@ -11,7 +11,7 @@ public:
 
 	const std::string getXdmfOutput(const int iteration) const override;
 	void writeStates(H5Writer & writer) const override;
-	void init();
+	void init() override;
 
 protected:
 	/** 

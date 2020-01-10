@@ -15,7 +15,8 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	std::cout << "Dual mesh has " << dualMesh.getNumberOfVertices() << " vertices" << std::endl;
 
 	maxwellSolver = new MaxwellSolverCrankNicholson(&primalMesh, &dualMesh);
-	fluidSolver = new SingleFluidSolver(&dualMesh);
+	//fluidSolver = new SingleFluidSolver(&dualMesh);
+	fluidSolver = new TwoFluidSolver(&dualMesh);
 	fluidSolver->init();
 
 
