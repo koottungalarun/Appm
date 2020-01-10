@@ -2,7 +2,6 @@
 
 #include "PrimalMesh.h"
 #include "DualMesh.h"
-#include "FluidState.h"
 #include "Numerics.h"
 #include "FluidSolver.h"
 #include "SingleFluidSolver.h"
