@@ -10,119 +10,105 @@ FluidSolver::FluidSolver()
 FluidSolver::FluidSolver(const DualMesh * mesh)
 {
 	this->mesh = mesh;
-	init();
 }
 
 FluidSolver::~FluidSolver()
 {
 }
 
-//const double FluidSolver::updateFluidState()
-//{
-//	std::cout << "You should call the inherited function instead of this one" << std::endl;
-//	return 0.0;
-//}
-
-void FluidSolver::writeStates(H5Writer & writer) const
+const double FluidSolver::updateFluidState()
 {
-	const int nDualCells = mesh->getNumberOfCells();
+	const int nDualFaces = mesh->getNumberOfFaces();
+	Eigen::VectorXd dt_local(nDualFaces);
+	Eigen::MatrixXd dq = Eigen::MatrixXd::Zero(fluidStates.rows(), fluidStates.cols());
 
-	Eigen::VectorXd q_density = fluidStates.row(0);
-	Eigen::MatrixXd q_momentum = fluidStates.middleRows(1, 3);
-	Eigen::VectorXd q_energy = fluidStates.row(4);
-	writer.writeData(q_density, "/qDensity");
-	writer.writeData(q_momentum, "/qMomentum");
-	writer.writeData(q_energy, "/qEnergy");
+	// Compute fluid fluxes at faces
+	for (int i = 0; i < nDualFaces; i++) {
+		const Face * face = mesh->getFace(i);
+		const Eigen::Vector3d faceNormal = face->getNormal();
+		const double faceArea = face->getArea();
 
-	// Fluid states in primitive variables
-	Eigen::VectorXd pressure(nDualCells);
-	Eigen::VectorXd density(nDualCells);
-	Eigen::Matrix3Xd velocity(3, nDualCells);
-	for (int i = 0; i < nDualCells; i++) {
-		const FluidPrimitiveState primitiveState = FluidState(fluidStates.col(i)).getPrimitiveState();
-		pressure(i) = primitiveState.p;
-		density(i) = primitiveState.rho;
-		velocity.col(i) = primitiveState.u;
+		if (face->isBoundary()) {
+			const std::vector<Cell*> faceCells = face->getCellList();
+			assert(faceCells.size() == 1);
+			Cell * cell = faceCells[0];
+			const int idxC = cell->getIndex();
+			const int orientation = (face->getCenter() - cell->getCenter()).dot(faceNormal) > 0 ? 1 : -1;
+
+			Eigen::VectorXd qL, qR;
+			// TODO open boundary conditions
+			if (orientation > 0) {
+				qL = fluidStates.col(idxC);
+				qR = qL;
+				qR.segment(1, 3) *= -1;
+			}
+			else {
+				qR = fluidStates.col(idxC);
+				qL = qR;
+				qL.segment(1, 3) *= -1;
+			}
+			const Eigen::Vector3d cc = cell->getCenter();
+			const Eigen::Vector3d fc = face->getCenter();
+			const double dx = std::abs((fc - cc).dot(faceNormal));
+			double dt_loc = 0;
+			//const Eigen::VectorXd flux = Numerics::fluidFlux_rusanov(qL, qR, faceNormal, dx, dt_loc);
+			const Eigen::VectorXd flux = getRusanovFlux(qL, qR, faceNormal, dx, dt_loc);
+			assert(dt_loc > 0);
+			dt_local(i) = dt_loc;
+			dq.col(idxC) += orientation * faceArea * flux;
+		}
+		else {
+			// Get left and right cell of this face
+			std::vector<Cell*> faceCells = face->getCellList();
+			assert(faceCells.size() == 2);
+			const Cell * cell = faceCells[0];
+			const int orientation = (face->getCenter() - cell->getCenter()).dot(faceNormal) > 0 ? 1 : -1;
+			Cell * leftCell = nullptr;
+			Cell * rightCell = nullptr;
+			if (orientation > 0) {
+				leftCell = faceCells[0];
+				rightCell = faceCells[1];
+			}
+			else {
+				leftCell = faceCells[1];
+				rightCell = faceCells[0];
+			}
+			const int idxL = leftCell->getIndex();
+			const int idxR = rightCell->getIndex();
+
+			// distance between cell center and face center
+			const Eigen::Vector3d fc = face->getCenter();
+			const Eigen::Vector3d ccL = leftCell->getCenter();
+			const Eigen::Vector3d ccR = rightCell->getCenter();
+			const double dxL = std::abs((fc - ccL).dot(faceNormal));
+			const double dxR = std::abs((fc - ccR).dot(faceNormal));
+			const double dx = std::min(dxL, dxR); // minimum distance between cell center and face center
+			assert(dx > 0);
+			const Eigen::VectorXd qL = fluidStates.col(idxL);
+			const Eigen::VectorXd qR = fluidStates.col(idxR);
+
+			double dt_loc = 0;
+			//const Eigen::VectorXd faceFlux = Numerics::fluidFlux_rusanov(qL, qR, faceNormal, dx, dt_loc);
+			const Eigen::VectorXd faceFlux = getRusanovFlux(qL, qR, faceNormal, dx, dt_loc);
+			assert(dt_loc > 0);
+			dt_local(i) = dt_loc;
+
+			dq.col(idxL) += faceFlux * faceArea;
+			dq.col(idxR) -= faceFlux * faceArea;
+		}
 	}
-	writer.writeData(pressure, "/pressure");
-	writer.writeData(density, "/density");
-	writer.writeData(velocity, "/velocity");
-}
+	bool allPositive = (dt_local.array() > 0.).all();
+	assert(allPositive);
 
-const std::string FluidSolver::getXdmfOutput(const int iteration) const
-{
-	std::stringstream ss;
+	// get global timestep size
+	const double dt = dt_local.minCoeff();
+	assert(dt > 0);
 
-	ss << "<Attribute Name=\"Density\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
-	ss << "<DataItem Dimensions=\"" << mesh->getNumberOfCells() << "\""
-		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << "appm-" << iteration << ".h5:/density" << std::endl;
-	ss << "</DataItem>" << std::endl;
-	ss << "</Attribute>" << std::endl;
-
-	ss << "<Attribute Name=\"Pressure\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
-	ss << "<DataItem Dimensions=\"" << mesh->getNumberOfCells() << "\""
-		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << "appm-" << iteration << ".h5:/pressure" << std::endl;
-	ss << "</DataItem>" << std::endl;
-	ss << "</Attribute>" << std::endl;
-
-	ss << "<Attribute Name=\"Velocity\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
-	ss << "<DataItem Dimensions=\"" << mesh->getNumberOfCells() << " 3\""
-		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << "appm-" << iteration << ".h5:/velocity" << std::endl;
-	ss << "</DataItem>" << std::endl;
-	ss << "</Attribute>" << std::endl;
-
-	return ss.str();
-}
-
-void FluidSolver::init()
-{
-	const int nCells = mesh->getNumberOfCells();
-	assert(nCells > 0);
-
-	fluidStates = Eigen::MatrixXd::Zero(5, nCells);
-	fluidFluxes = Eigen::MatrixXd::Zero(5, nCells);
-
-	const double rho_L = 1.0;
-	const double p_L = 1.0;
-	const double rho_R = 0.125;
-	const double p_R = 0.1;
-	const Eigen::Vector3d uZero = Eigen::Vector3d::Zero();
-
-	FluidPrimitiveState primitiveL;
-	primitiveL.rho = rho_L;
-	primitiveL.p = p_L;
-	primitiveL.u = uZero;
-
-	FluidPrimitiveState primitiveR;
-	primitiveR.rho = rho_R;
-	primitiveR.p = p_R;
-	primitiveR.u = uZero;
-
-	const FluidState qL(primitiveL);
-	const FluidState qR(primitiveR);
-
-	const Eigen::VectorXd qL_vec = qL.getVecState();
-	const Eigen::VectorXd qR_vec = qR.getVecState();
-
-	std::cout << "qL: " << qL_vec.transpose() << std::endl;
-	std::cout << "qR: " << qR_vec.transpose() << std::endl;
-	std::cout << std::endl;
-
-	for (int i = 0; i < nCells; i++) {
-		const Cell * cell = mesh->getCell(i);
-		const double idxC = cell->getIndex();
-		const Eigen::Vector3d cellCenter = cell->getCenter();
-
-		fluidStates.col(i) = (cellCenter(2) < 0) ? qL_vec : qR_vec;
+	for (int i = 0; i < mesh->getNumberOfCells(); i++) {
+		dq.col(i) *= 1. / (mesh->getCell(i)->getVolume());
 	}
 
-	std::cout << "Test for fluid flux: " << std::endl;
-	double dt_loc = 0;
-	Eigen::VectorXd fluidFlux = Numerics::fluidFlux_rusanov(qL_vec, qR_vec, Eigen::Vector3d(0, 0, 1), 1, dt_loc);
-	std::cout << "Flux: " << fluidFlux.transpose() << std::endl;
-	std::cout << "dt_loc: " << dt_loc << std::endl;
-	
+	fluidStates -= dt * dq;
+
+	return dt;
 }

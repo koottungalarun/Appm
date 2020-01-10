@@ -3,7 +3,6 @@
 #include <Eigen/Dense>
 
 #include "DualMesh.h"
-#include "FluidState.h"
 #include "Numerics.h"
 #include "H5Writer.h"
 
@@ -14,20 +13,25 @@ public:
 	FluidSolver(const DualMesh * mesh);
 	~FluidSolver();
 
-	virtual const double updateFluidState() = 0;
+	const double updateFluidState();
 
-	void writeStates(H5Writer & writer) const;
+	virtual void writeStates(H5Writer & writer) const = 0;
 
-	const std::string getXdmfOutput(const int iteration) const;
+	virtual const std::string getXdmfOutput(const int iteration) const = 0;
+
+	virtual void init() = 0;
 
 protected:
+	bool isWriteStates = false;
 	const DualMesh * mesh = nullptr;
 
 	Eigen::MatrixXd fluidStates;
 	Eigen::MatrixXd fluidFluxes;
 
+	virtual Eigen::VectorXd getRusanovFlux(const Eigen::VectorXd & qL, const Eigen::VectorXd & qR, const Eigen::Vector3d & fn, const double dx, double & dt_loc) = 0;
+
+
 
 private:
-	void init();
 };
 

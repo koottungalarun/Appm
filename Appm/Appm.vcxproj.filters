@@ -84,9 +84,6 @@
     <ClInclude Include="XdmfAttribute.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="FluidState.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Numerics.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -171,9 +168,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="XdmfAttribute.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="FluidState.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Numerics.cpp">

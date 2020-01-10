@@ -139,7 +139,6 @@
     <ClInclude Include="EigenAuxiliaries.h" />
     <ClInclude Include="Face.h" />
     <ClInclude Include="FluidSolver.h" />
-    <ClInclude Include="FluidState.h" />
     <ClInclude Include="GeometryItem.h" />
     <ClInclude Include="H5Reader.h" />
     <ClInclude Include="H5Writer.h" />
@@ -170,7 +169,6 @@
     <ClCompile Include="Edge.cpp" />
     <ClCompile Include="Face.cpp" />
     <ClCompile Include="FluidSolver.cpp" />
-    <ClCompile Include="FluidState.cpp" />
     <ClCompile Include="GeometryItem.cpp" />
     <ClCompile Include="H5Reader.cpp" />
     <ClCompile Include="H5Writer.cpp" />

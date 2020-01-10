@@ -16,6 +16,8 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 
 	maxwellSolver = new MaxwellSolverCrankNicholson(&primalMesh, &dualMesh);
 	fluidSolver = new SingleFluidSolver(&dualMesh);
+	fluidSolver->init();
+
 
 	B_vertex = Eigen::Matrix3Xd::Zero(3, primalMesh.getNumberOfVertices());
 	init_RaviartThomasInterpolation();
