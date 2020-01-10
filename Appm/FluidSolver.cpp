@@ -49,6 +49,34 @@ void FluidSolver::writeStates(H5Writer & writer) const
 	writer.writeData(velocity, "/velocity");
 }
 
+const std::string FluidSolver::getXdmfOutput(const int iteration) const
+{
+	std::stringstream ss;
+
+	ss << "<Attribute Name=\"Density\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << mesh->getNumberOfCells() << "\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/density" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Pressure\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << mesh->getNumberOfCells() << "\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/pressure" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Velocity\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << mesh->getNumberOfCells() << " 3\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/velocity" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	return ss.str();
+}
+
 void FluidSolver::init()
 {
 	const int nCells = mesh->getNumberOfCells();

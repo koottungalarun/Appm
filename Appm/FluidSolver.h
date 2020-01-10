@@ -18,6 +18,7 @@ public:
 
 	void writeStates(H5Writer & writer) const;
 
+	const std::string getXdmfOutput(const int iteration) const;
 
 protected:
 	const DualMesh * mesh = nullptr;

@@ -1,2 +1,2 @@
-maxIterations: 0
+maxIterations: 50
 maxTime: 10

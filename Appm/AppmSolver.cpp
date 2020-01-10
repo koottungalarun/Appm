@@ -381,113 +381,53 @@ void AppmSolver::init_meshes(const PrimalMesh::PrimalMeshParams & primalParams)
 void AppmSolver::writeXdmf()
 {
 	const int nTimesteps = timeStamps.size();
-	{
-		const std::string filename = "appm.xdmf";
-		std::string gridPrimalEdges;
-		std::string gridPrimalFaces;
-		std::string gridDualEdges;
-		std::string gridDualFaces;
+	
+	const std::string filename = "appm.xdmf";
+	std::string gridPrimalEdges;
+	std::string gridPrimalFaces;
+	std::string gridDualEdges;
+	std::string gridDualFaces;
 
-		std::ofstream file(filename);
-		file << "<?xml version = \"1.0\" ?>" << std::endl;
-		file << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << std::endl;
-		file << "<Xdmf Version=\"3.0\" xmlns:xi=\"[http://www.w3.org/2001/XInclude]\">" << std::endl;
-		file << "<Domain>" << std::endl;
-		file << "<Grid Name=\"Time Grid\" GridType=\"Collection\" CollectionType=\"Temporal\">" << std::endl;
-		for (int i = 0; i < nTimesteps; i++) {
-			const double time = this->timeStamps[i];
+	std::ofstream file(filename);
+	file << "<?xml version = \"1.0\" ?>" << std::endl;
+	file << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << std::endl;
+	file << "<Xdmf Version=\"3.0\" xmlns:xi=\"[http://www.w3.org/2001/XInclude]\">" << std::endl;
+	file << "<Domain>" << std::endl;
+	file << "<Grid Name=\"Time Grid\" GridType=\"Collection\" CollectionType=\"Temporal\">" << std::endl;
+	for (int i = 0; i < nTimesteps; i++) {
+		const double time = this->timeStamps[i];
 
-			file << "<Grid Name=\"Grid of Grids\" GridType=\"Tree\">" << std::endl;
-			file << "<Time Value=\"" << time << "\" />" << std::endl;
-			file << xdmf_GridPrimalEdges(i) << std::endl;
-			file << xdmf_GridPrimalFaces(i) << std::endl;
-			file << xdmf_GridDualEdges(i) << std::endl;
-			file << xdmf_GridDualFaces(i) << std::endl;
-			file << "</Grid>" << std::endl;
-		}
+		file << "<Grid Name=\"Grid of Grids\" GridType=\"Tree\">" << std::endl;
+		file << "<Time Value=\"" << time << "\" />" << std::endl;
+		file << xdmf_GridPrimalEdges(i) << std::endl;
+		file << xdmf_GridPrimalFaces(i) << std::endl;
+		file << xdmf_GridDualEdges(i) << std::endl;
+		file << xdmf_GridDualFaces(i) << std::endl;
 		file << "</Grid>" << std::endl;
-		file << "</Domain>" << std::endl;
-		file << "</Xdmf>" << std::endl;
 	}
-	return;
-
-	{
-		const std::string filename = "appm.xdmf";
-		XdmfRoot root;
-		XdmfDomain domain;
-		XdmfGrid timeGrid(
-			XdmfGrid::Tags(
-				"Time Grid", 
-				XdmfGrid::GridType::Collection, 
-				XdmfGrid::CollectionType::Temporal
-			)
-		);
-		for (int iteration = 0; iteration < nTimesteps; iteration++) {
-			const std::string datafilename = (std::stringstream() << "appm-" << iteration << ".h5").str();
-			XdmfGrid gridOfGrids(XdmfGrid::Tags("Grid of Grids", XdmfGrid::GridType::Tree));
-
-			const double timeValue = this->timeStamps[iteration];
-			gridOfGrids.addChild(XdmfTime(timeValue));
-
-			// Primal edge grid
-			XdmfGrid primalEdgeGrid = getOutputPrimalEdgeGrid(iteration, timeValue, datafilename);
-			gridOfGrids.addChild(primalEdgeGrid);
-
-			// Primal surface grid
-			XdmfGrid primalSurfaceGrid = getOutputPrimalSurfaceGrid(iteration, timeValue, datafilename);
-			gridOfGrids.addChild(primalSurfaceGrid);
-
-			// Dual edge grid
-			XdmfGrid dualEdgeGrid = getOutputDualEdgeGrid(iteration, timeValue, datafilename);
-			gridOfGrids.addChild(dualEdgeGrid);
-
-			// Dual surface grid
-			XdmfGrid dualSurfaceGrid = getOutputDualSurfaceGrid(iteration, timeValue, datafilename);
-			gridOfGrids.addChild(dualSurfaceGrid);
-
-			//// Dual volume grid
-			//XdmfGrid dualVolumeGrid;
-
-			timeGrid.addChild(gridOfGrids);
-		}
-		domain.addChild(timeGrid);
-		root.addChild(domain);
-		std::ofstream file(filename);
-		file << root << std::endl;
-	}
+	file << "</Grid>" << std::endl;
+	file << "</Domain>" << std::endl;
+	file << "</Xdmf>" << std::endl;
 }
 
 void AppmSolver::writeXdmfDualVolume()
 {
 	const int nTimesteps = timeStamps.size();
-	{
-		const std::string filename = "appm-volume.xdmf";
-		XdmfRoot root;
-		XdmfDomain domain;
-		XdmfGrid timeGrid(
-			XdmfGrid::Tags(
-				"Time Grid",
-				XdmfGrid::GridType::Collection,
-				XdmfGrid::CollectionType::Temporal
-			)
-		);
-		for (int iteration = 0; iteration < nTimesteps; iteration++) {
-			const std::string datafilename = (std::stringstream() << "appm-" << iteration << ".h5").str();
-
-			const double timeValue = this->timeStamps[iteration];
-			timeGrid.addChild(XdmfTime(timeValue));
-
-			// Dual volume grid
-			XdmfGrid dualVolumeGrid;
-			dualVolumeGrid = getOutputDualVolumeGrid(iteration, timeValue, datafilename);
-
-			timeGrid.addChild(dualVolumeGrid);
-		}
-		domain.addChild(timeGrid);
-		root.addChild(domain);
-		std::ofstream file(filename);
-		file << root << std::endl;
+	const std::string filename = "appm-volume.xdmf";
+	std::ofstream file(filename);
+	file << "<?xml version = \"1.0\" ?>" << std::endl;
+	file << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << std::endl;
+	file << "<Xdmf Version=\"3.0\" xmlns:xi=\"[http://www.w3.org/2001/XInclude]\">" << std::endl;
+	file << "<Domain>" << std::endl;
+	file << "<Grid Name=\"Time Grid\" GridType=\"Collection\" CollectionType=\"Temporal\">" << std::endl;
+	for (int i = 0; i < nTimesteps; i++) {
+		const double time = this->timeStamps[i];
+		file << "<Time Value=\"" << time << "\" />" << std::endl;
+		file << xdmf_GridDualCells(i) << std::endl;
 	}
+	file << "</Grid>" << std::endl;
+	file << "</Domain>" << std::endl;
+	file << "</Xdmf>" << std::endl;
 }
 
 
@@ -1134,5 +1074,47 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 	ss << "</Grid>" << std::endl;
+	return ss.str();
+}
+
+const std::string AppmSolver::xdmf_GridDualCells(const int iteration) const
+{
+	H5Reader h5reader;
+	h5reader = H5Reader("dual-mesh.h5");
+	const int nElements = h5reader.readDataSize("/cell2vertex");
+	assert(nElements > 0);
+
+	std::stringstream ss;
+	ss << "<Grid Name=\"Dual Cells\">" << std::endl;
+	ss << "<Topology TopologyType=\"Mixed\""
+		<< " NumberOfElements=\"" << dualMesh.getNumberOfCells() << "\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << nElements << "\" DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
+	ss << "dual-mesh.h5:/cell2vertex" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Topology>" << std::endl;
+
+	ss << "<Geometry GeometryType=\"XYZ\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfVertices() << " 3\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "dual-mesh.h5:/vertexPos" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Geometry>" << std::endl;
+
+	ss << "<Attribute Name=\"Cell index\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << "\""
+		<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
+	ss << "dual-mesh.h5:/cellIndex" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Magnetic Flux Interpolated\" AttributeType=\"Vector\" Center=\"Node\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfVertices() << " 3\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/Bvertex" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << fluidSolver->getXdmfOutput(iteration);
+	ss << "</Grid>";
 	return ss.str();
 }
