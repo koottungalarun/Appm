@@ -21,11 +21,11 @@ void TwoFluidSolver::writeStates(H5Writer & writer) const
 	const int nDualCells = mesh->getNumberOfCells();
 
 	Eigen::VectorXd pressure_A(nDualCells);
-	Eigen::VectorXd density_A(nDualCells);
+	Eigen::VectorXd numberDensity_A(nDualCells);
 	Eigen::Matrix3Xd velocity_A(3, nDualCells);
 	
 	Eigen::VectorXd pressure_B(nDualCells);
-	Eigen::VectorXd density_B(nDualCells);
+	Eigen::VectorXd numberDensity_B(nDualCells); 
 	Eigen::Matrix3Xd velocity_B(3, nDualCells);
 
 	for (int i = 0; i < nDualCells; i++) {
@@ -33,25 +33,88 @@ void TwoFluidSolver::writeStates(H5Writer & writer) const
 		const PrimitiveState primitive = getPrimitiveState(state);
 
 		pressure_A(i) = primitive.p_a;
-		density_A(i) = massRatio_a * primitive.n_a;
+		numberDensity_A(i) = primitive.n_a;
 		velocity_A.col(i) = primitive.u_a;
 
 		pressure_B(i) = primitive.p_b;
-		density_B(i) = massRatio_b * primitive.n_b;
+		numberDensity_B(i) = massRatio_b * primitive.n_b;
 		velocity_B.col(i) = primitive.u_b;
 	}
+	Eigen::VectorXd density_A = massRatio_a * numberDensity_A;
+	Eigen::VectorXd density_B = massRatio_b * numberDensity_B;
+
 	writer.writeData(pressure_A, "/pressureA");
+	writer.writeData(numberDensity_A, "/numberDensityA");
 	writer.writeData(density_A, "/densityA");
 	writer.writeData(velocity_A, "/velocityA");
+	
 	writer.writeData(pressure_B, "/pressureB");
+	writer.writeData(numberDensity_B, "/numberDensityB");
 	writer.writeData(density_B, "/densityB");
 	writer.writeData(velocity_B, "/velocityB");
 }
 
 const std::string TwoFluidSolver::getXdmfOutput(const int iteration) const
 {
-	// TODO
-	return std::string();
+	std::stringstream ss;
+
+	ss << "<Attribute Name=\"Density A\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << mesh->getNumberOfCells() << "\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/densityA" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Number Density A\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << mesh->getNumberOfCells() << "\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/numberDensityA" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Pressure A\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << mesh->getNumberOfCells() << "\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/pressureA" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Velocity A\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << mesh->getNumberOfCells() << " 3\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/velocityA" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Density B\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << mesh->getNumberOfCells() << "\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/densityB" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Number Density B\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << mesh->getNumberOfCells() << "\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/numberDensityB" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Pressure B\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << mesh->getNumberOfCells() << "\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/pressureB" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Velocity B\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << mesh->getNumberOfCells() << " 3\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/velocityB" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	return ss.str();
 }
 
 void TwoFluidSolver::init()
@@ -82,14 +145,52 @@ void TwoFluidSolver::init()
 
 Eigen::VectorXd TwoFluidSolver::getRusanovFlux(const Eigen::VectorXd & qL, const Eigen::VectorXd & qR, const Eigen::Vector3d & fn, const double dx, double & dt_loc)
 {
-	// TODO
-	return Eigen::VectorXd();
+	const int nFluids = 2;
+	Eigen::VectorXd flux(nFluids * 5);
+	flux.setZero();
+	assert(flux.size() == this->stateVectorLength);
+
+	Eigen::VectorXd maxWavespeed(nFluids);
+	for (int fidx = 0; fidx < nFluids; fidx++) {
+		const Eigen::VectorXd qL_singleFluid = qL.segment(5 * fidx, 5);
+		const Eigen::VectorXd qR_singleFluid = qR.segment(5 * fidx, 5);
+
+		Eigen::Vector3d qL_1d;
+		qL_1d(0) = qL_singleFluid(0);
+		qL_1d(1) = qL_singleFluid.segment(1,3).dot(fn);
+		qL_1d(2) = qL_singleFluid(4);
+
+		Eigen::Vector3d qR_1d;
+		qR_1d(0) = qR_singleFluid(0);
+		qR_1d(1) = qR_singleFluid.segment(1, 3).dot(fn);
+		qR_1d(2) = qR_singleFluid(4);
+
+		const double sL = maxWaveSpeed(qL_1d);
+		const double sR = maxWaveSpeed(qR_1d);
+		const double s = std::max(sL, sR);
+
+		const Eigen::Vector3d fL_1d = getFlux(qL_1d);
+		const Eigen::Vector3d fR_1d = getFlux(qR_1d);
+
+		const Eigen::VectorXd flux_singleFluid1d = 0.5 * (fL_1d + fR_1d) - 0.5 * s * (qR_1d - qL_1d);
+		
+		Eigen::VectorXd flux_singleFluid3d(5);
+		flux_singleFluid3d(0) = flux_singleFluid1d(0);
+		flux_singleFluid3d.segment(1, 3) = flux_singleFluid1d(1) * fn;
+		flux_singleFluid3d(4) = flux_singleFluid1d(2);
+
+		flux.segment(5 * fidx, 5) = flux_singleFluid3d;
+	}
+	dt_loc = dx / maxWavespeed.maxCoeff();
+	return flux;
 }
 
-Eigen::VectorXd TwoFluidSolver::getFlux(const Eigen::VectorXd & q)
+Eigen::Vector3d TwoFluidSolver::getFlux(const Eigen::Vector3d & q)
 {
-	// TODO
-	Eigen::VectorXd flux(6);
+	Eigen::Vector3d flux;
+	flux(0) = q(1);
+	flux(1) = (gamma - 1) * q(2) + 0.5 * (3. - gamma) * pow(q(1), 2) / q(0);
+	flux(2) = gamma * q(2) * q(1) / q(0) + 0.5 * (1. - gamma) * pow(q(1), 3) / pow(q(0), 2);
 	return flux;
 }
 
@@ -102,16 +203,16 @@ const double TwoFluidSolver::maxWaveSpeed(const Eigen::Vector3d & q) const
 	return (u * Eigen::Vector3d::Ones() + s * Eigen::Vector3d(-1, 0, 1)).cwiseAbs().maxCoeff();
 }
 
-const double TwoFluidSolver::maxWaveSpeed(const Eigen::VectorXd & q, const Eigen::Vector3d & fn)
-{
-	assert(q.size() == stateVectorLength);
-	const Eigen::Vector3d q_a = getState1d(q.segment(0, 5), fn);
-	const double s_a = maxWaveSpeed(q_a);
-
-	const Eigen::Vector3d q_b = getState1d(q.segment(5, 5), fn);
-	const double s_b = maxWaveSpeed(q_b);
-	return std::max(s_a, s_b);
-}
+//const double TwoFluidSolver::maxWaveSpeed(const Eigen::VectorXd & q, const Eigen::Vector3d & fn)
+//{
+//	assert(q.size() == stateVectorLength);
+//	const Eigen::Vector3d q_a = getState1d(q.segment(0, 5), fn);
+//	const double s_a = maxWaveSpeed(q_a);
+//
+//	const Eigen::Vector3d q_b = getState1d(q.segment(5, 5), fn);
+//	const double s_b = maxWaveSpeed(q_b);
+//	return std::max(s_a, s_b);
+//}
 
 
 TwoFluidSolver::PrimitiveState TwoFluidSolver::getPrimitiveState(const Eigen::VectorXd & q) const

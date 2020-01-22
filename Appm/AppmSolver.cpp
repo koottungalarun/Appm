@@ -16,7 +16,8 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 
 	maxwellSolver = new MaxwellSolverCrankNicholson(&primalMesh, &dualMesh);
 	//fluidSolver = new SingleFluidSolver(&dualMesh);
-	fluidSolver = new TwoFluidSolver(&dualMesh);
+	//fluidSolver = new TwoFluidSolver(&dualMesh);
+	fluidSolver = new MultiFluidSolver(&dualMesh);
 	fluidSolver->init();
 
 

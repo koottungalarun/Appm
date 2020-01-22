@@ -105,6 +105,9 @@
     <ClInclude Include="TwoFluidSolver.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="MultiFluidSolver.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -194,12 +197,18 @@
     <ClCompile Include="TwoFluidSolver.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="MultiFluidSolver.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Text Include="primalMeshParams.txt">
       <Filter>Resource Files</Filter>
     </Text>
     <Text Include="AppmSolverParams.txt">
+      <Filter>Resource Files</Filter>
+    </Text>
+    <Text Include="particleParameters.txt">
       <Filter>Resource Files</Filter>
     </Text>
   </ItemGroup>

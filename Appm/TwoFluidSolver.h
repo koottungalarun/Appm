@@ -14,8 +14,8 @@ public:
 
 protected:
 	Eigen::VectorXd getRusanovFlux(const Eigen::VectorXd & qL, const Eigen::VectorXd & qR, const Eigen::Vector3d & fn, const double dx, double & dt_loc) override;
-	Eigen::VectorXd getFlux(const Eigen::VectorXd & q);
-	const double maxWaveSpeed(const Eigen::VectorXd & q, const Eigen::Vector3d & fn);
+	Eigen::Vector3d getFlux(const Eigen::Vector3d & q);
+	//const double maxWaveSpeed(const Eigen::VectorXd & q, const Eigen::Vector3d & fn);
 	const double maxWaveSpeed(const Eigen::Vector3d & q) const;
 
 private:
