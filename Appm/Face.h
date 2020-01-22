@@ -9,6 +9,14 @@ class Face :
 	public GeometryItem
 {
 public:
+
+	enum class FluidType {
+		DEFAULT, INTERIOR, OPENING, WALL
+	};
+	//enum class EmagType {
+	//	DEFAULT
+	//};
+
 	Face();
 	Face(const std::vector<Edge*> & faceEdges);
 	Face(const std::vector<Vertex*> & faceVertices);
@@ -39,6 +47,10 @@ public:
 	const Eigen::Vector3d getNormal() const;
 	void setNormal(const Eigen::Vector3d & fn);
 
+	void setFluidType(const FluidType & fluidType);
+	const FluidType getFluidType() const;
+
+
 private:
 	std::vector<Edge*> edgeList;
 	std::vector<Vertex*> vertexList;
@@ -48,11 +60,14 @@ private:
 	Eigen::Vector3d faceNormal;
 	double area = 0;
 
+	FluidType fluidType = FluidType::DEFAULT;
+
 	void init();
 	bool isListOfVerticesUnique() const;
 	bool isListOfEdgesUnique() const;
 
 	const Eigen::Vector3d getCircumCenter() const;
 	const double computeArea() const;
+
 };
 

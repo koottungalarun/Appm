@@ -407,6 +407,16 @@ const double Face::computeArea() const
 	return area;
 }
 
+void Face::setFluidType(const Face::FluidType & fluidType)
+{
+	this->fluidType = fluidType;
+}
+
+const Face::FluidType Face::getFluidType() const
+{
+	return this->fluidType;
+}
+
 std::ostream & operator<<(std::ostream & os, const Face & obj)
 {
 	os << "Face " << obj.getIndex() << ": {";

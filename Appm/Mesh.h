@@ -112,6 +112,9 @@ protected:
 	Eigen::SparseMatrix<int> face2edgeMap;
 	Eigen::SparseMatrix<int> cell2faceMap;
 
+	virtual XdmfGrid getXdmfSurfaceGrid() const;
+	virtual XdmfGrid getXdmfVolumeGrid() const;
+
 
 private:
 	std::string meshPrefix = "mesh";
@@ -130,9 +133,7 @@ private:
 
 	XdmfGrid getXdmfVertexGrid() const;
 	XdmfGrid getXdmfEdgeGrid() const;
-	XdmfGrid getXdmfSurfaceGrid() const;
-	XdmfGrid getXdmfVolumeGrid() const;
-
+	
 	void writeXdmfVolumeMesh() const;
 
 	//void writeXdmf_surface();

@@ -13,6 +13,16 @@ public:
 	~DualMesh();
 
 	void init_dualMesh(const PrimalMesh & primal);
+
+protected:
+
+	XdmfGrid getXdmfSurfaceGrid() const;
+	XdmfGrid getXdmfVolumeGrid() const;
+
+
 private:
+
+	void init_cellFluidType();
+	void init_faceFluidType();
 };
 

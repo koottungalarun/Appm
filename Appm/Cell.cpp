@@ -144,3 +144,13 @@ const Eigen::Matrix3Xd Cell::getVertexCoordinates() const
 	}
 	return coords;
 }
+
+void Cell::setFluidType(const FluidType & type)
+{
+	this->fluidType = type;
+}
+
+const Cell::FluidType Cell::getFluidType() const
+{
+	return this->fluidType;
+}

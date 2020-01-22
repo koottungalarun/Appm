@@ -392,4 +392,144 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal)
 	delta = (p_e2v - temp).pruned(); // pruned() keeps only non-zero matrix entries
 	std::cout << (delta.nonZeros() == 0 ? "OK" : "FAILED") << std::endl; 
 	assert(delta.nonZeros() == 0);
+
+	init_cellFluidType();
+	const int nCells = this->getNumberOfCells();
+	Eigen::VectorXi cellTypes(nCells);
+	cellTypes.setZero();
+	for (int i = 0; i < nCells; i++) {
+		cellTypes(i) = static_cast<int>(getCell(i)->getFluidType());
+	}
+	const int nSolidCells = (cellTypes.array() == static_cast<int>(Cell::FluidType::SOLID)).count();
+	const int nFluidCells = (cellTypes.array() == static_cast<int>(Cell::FluidType::FLUID)).count();
+	std::cout << "Number of cell types: " << std::endl;
+	std::cout << "  Solid: " << nSolidCells << std::endl;
+	std::cout << "  Fluid: " << nFluidCells << std::endl;
+
+
+	init_faceFluidType();
+	const int nFaces = this->getNumberOfFaces();
+	Eigen::VectorXi faceTypes(nFaces);
+	faceTypes.setZero();
+	for (int i = 0; i < nFaces; i++) {
+		faceTypes(i) = static_cast<int>(getFace(i)->getFluidType());
+	}
+	const int nDefaultFaces = (faceTypes.array() == static_cast<int>(Face::FluidType::DEFAULT)).count();
+	const int nInteriorFaces = (faceTypes.array() == static_cast<int>(Face::FluidType::INTERIOR)).count();
+	const int nOpeningFaces = (faceTypes.array() == static_cast<int>(Face::FluidType::OPENING)).count();
+	const int nWallFaces = (faceTypes.array() == static_cast<int>(Face::FluidType::WALL)).count();
+	std::cout << "Number of face types: " << std::endl;
+	std::cout << "  Default:  " << nDefaultFaces << std::endl;
+	std::cout << "  Interior: " << nInteriorFaces << std::endl;
+	std::cout << "  Opening:  " << nOpeningFaces << std::endl;
+	std::cout << "  Wall:     " << nWallFaces << std::endl;
+
+
+	H5Writer h5writer("dualMeshTypes.h5");
+	h5writer.writeData(cellTypes, "/cellFluidTypes");
+	h5writer.writeData(faceTypes, "/faceFluidTypes");
+
+}
+
+XdmfGrid DualMesh::getXdmfSurfaceGrid() const
+{
+	XdmfGrid surfaceGrid = Mesh::getXdmfSurfaceGrid();
+
+	XdmfAttribute attribute(XdmfAttribute::Tags("Face Fluid Type", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
+	std::string attributeString = (std::stringstream() << this->getPrefix() << "MeshTypes.h5:/faceFluidTypes").str();
+	attribute.addChild(
+		XdmfDataItem(
+			XdmfDataItem::Tags(
+				{ getNumberOfFaces() },
+				XdmfDataItem::NumberType::Int,
+				XdmfDataItem::Format::HDF),
+			attributeString));
+
+	surfaceGrid.addChild(attribute);
+
+	return surfaceGrid;
+}
+
+XdmfGrid DualMesh::getXdmfVolumeGrid() const
+{
+	XdmfGrid volumeGrid = Mesh::getXdmfVolumeGrid();
+
+	XdmfAttribute attribute(XdmfAttribute::Tags("Cell Fluid Type", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
+	std::string attributeString = (std::stringstream() << this->getPrefix() << "MeshTypes.h5:/cellFluidTypes").str();
+	attribute.addChild(
+		XdmfDataItem(
+			XdmfDataItem::Tags(
+				{ getNumberOfCells() },
+				XdmfDataItem::NumberType::Int,
+				XdmfDataItem::Format::HDF),
+			attributeString));
+
+	volumeGrid.addChild(attribute);
+	
+	return volumeGrid;
+}
+
+void DualMesh::init_cellFluidType()
+{
+	const int nCells = this->getNumberOfCells();
+	for (int i = 0; i < nCells; i++) {
+		Cell::FluidType fluidType;
+		Cell * cell = getCell(i);
+		const Eigen::Vector3d cellCenter = cell->getCenter();
+		const Eigen::Vector2d cellCenter2d = cellCenter.segment(0, 2);
+
+		if (cellCenter2d.norm() < 1) {
+			fluidType = Cell::FluidType::FLUID;
+		}
+		else {
+			fluidType = Cell::FluidType::SOLID;
+		}
+		cell->setFluidType(fluidType);
+	}
+}
+
+void DualMesh::init_faceFluidType()
+{
+	const int nFaces = this->getNumberOfFaces();
+	for (int i = 0; i < nFaces; i++) {
+		Face * face = getFace(i);
+		Face::FluidType faceFluidType = Face::FluidType::DEFAULT;
+
+		std::vector<Cell*> faceCells = face->getCellList();
+		const int nAdjacientCells = faceCells.size();
+		assert(nAdjacientCells >= 1 && nAdjacientCells <= 2);
+
+		int nSolidCells = 0;
+		int nFluidCells = 0;
+		for (auto cell : faceCells) {
+			if (cell->getFluidType() == Cell::FluidType::FLUID) {
+				nFluidCells++;
+			}
+			if (cell->getFluidType() == Cell::FluidType::SOLID) {
+				nSolidCells++;
+			}
+		}
+		assert(nSolidCells >= 0 && nSolidCells <= faceCells.size());
+		assert(nFluidCells >= 0 && nFluidCells <= faceCells.size());
+		assert(nFluidCells + nSolidCells == faceCells.size());
+
+		if (nAdjacientCells == 2) {
+			if (nSolidCells == 0 && nFluidCells == 2) {
+				faceFluidType = Face::FluidType::INTERIOR;
+			}
+			if (nSolidCells == 1 && nFluidCells == 1) {
+				faceFluidType = Face::FluidType::WALL;
+			}
+		}
+
+		if (nAdjacientCells == 1) {
+			if (nSolidCells == 0 && nFluidCells == 1) {
+				faceFluidType = Face::FluidType::OPENING;
+			}
+			if (nSolidCells == 1 && nFluidCells == 0) {
+				faceFluidType = Face::FluidType::DEFAULT;
+			}
+		}
+		face->setFluidType(faceFluidType);
+	}
 }
