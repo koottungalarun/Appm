@@ -18,6 +18,7 @@ DualMesh::~DualMesh()
 
 void DualMesh::init_dualMesh(const PrimalMesh & primal)
 {
+	assert(primal.getNumberOfCells() > 0);
 	// add dual vertices ... 
 	
 	// ... at primal cell centers
