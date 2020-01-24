@@ -46,7 +46,8 @@ private:
 	void init_triangle();
 	void refineMesh(const int nRefinements);
 	void outerMeshExtrude(const int nLayers);
-	void outerMeshExtrude();
+	void outerMeshExtrude_triangles();
+	void outerMeshExtrude_prisms();
 	void extrudeMesh(const int nLayers, const double zmax);
 
 	Eigen::Matrix3Xi refine_triangles();
@@ -58,6 +59,7 @@ private:
 	void sortVertices(const double electrodeRadius);
 	void sortEdges();
 	void sortFaces();
+	void sortCells();
 
 	void validateParameters();
 	void check_zCoord(const double z0);

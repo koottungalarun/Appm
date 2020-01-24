@@ -820,7 +820,7 @@ XdmfGrid Mesh::getXdmfSurfaceGrid() const
 {
 	H5Reader h5reader(this->meshPrefix + "-mesh.h5");
 
-	XdmfGrid surfaceGrid(XdmfGrid::Tags("FaceGrid"));
+	XdmfGrid surfaceGrid(XdmfGrid::Tags("Face Grid"));
 
 	// Topology
 	XdmfTopology topology(XdmfTopology::Tags(XdmfTopology::TopologyType::Mixed, getNumberOfFaces()));

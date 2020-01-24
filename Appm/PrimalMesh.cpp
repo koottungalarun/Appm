@@ -43,11 +43,15 @@ void PrimalMesh::init()
 	check_zCoord(z0);
 	
 	const int axialLayers = params.getAxialLayers();
+	if (axialLayers == 0) {
+		return;
+	}
 	extrudeMesh(axialLayers, zmax);
 
 	sortVertices(params.getElectrodeRadius());
 	sortEdges();
 	sortFaces();
+	sortCells();
 }
 
 void PrimalMesh::init_hexagon(const double zValue)
@@ -189,11 +193,12 @@ void PrimalMesh::refineMesh(const int nRefinements)
 void PrimalMesh::outerMeshExtrude(const int nLayers)
 {
 	for (int layer = 0; layer < nLayers; layer++) {
-		outerMeshExtrude();
+		//outerMeshExtrude_triangles();
+		outerMeshExtrude_prisms();
 	}
 }
 
-void PrimalMesh::outerMeshExtrude()
+void PrimalMesh::outerMeshExtrude_triangles()
 {
 	const int nVertices = vertexList.size();
 	assert(nVertices == vertexCoordinates.cols());
@@ -343,6 +348,84 @@ void PrimalMesh::outerMeshExtrude()
 		Vertex * C = getVertex(f2v_vertices(2, i));
 		addFace({ addEdge(A, B), addEdge(B, C), addEdge(C, A) });
 		//addFace({ A, B, C });
+	}
+}
+
+void PrimalMesh::outerMeshExtrude_prisms()
+{
+	const int nVertices = getNumberOfVertices();
+	assert(nVertices == vertexCoordinates.cols());
+	const int nEdges = getNumberOfEdges();
+
+	Eigen::SparseVector<int> boundaryVertices(nVertices);
+	Eigen::SparseVector<int> boundaryEdges(nEdges);
+
+	// collect boundary vertices and edges
+	for (int i = 0; i < nEdges; i++) {
+		const Edge * edge = getEdge(i);
+		if (edge->isBoundary()) {
+			boundaryEdges.coeffRef(i) = 1;
+			const Vertex * A = edge->getVertexA();
+			const int idxA = edge->getVertexA()->getIndex();
+			const int idxB = edge->getVertexB()->getIndex();
+			boundaryVertices.coeffRef(idxA) = 1;
+			boundaryVertices.coeffRef(idxB) = 1;
+		}
+	}
+
+	// create outer vertices for each boundary vertex
+	Eigen::SparseVector<int> newVertexIdx(nVertices);
+	const int nbV = boundaryVertices.nonZeros();
+	Eigen::Matrix3Xd newPosCoords(3, nbV);
+	for (int i = 0; i < nbV; i++) {
+		const int idxV = boundaryVertices.innerIndexPtr()[i];
+		const Vertex * vertex = getVertex(idxV);
+		const Eigen::Vector3d posBoundary = vertex->getPosition();
+		const Eigen::Vector2d posBoundary_2d = posBoundary.segment(0, 2);
+		Eigen::Vector2d pos_2d = 1.2 * posBoundary_2d;
+		Eigen::Vector3d newPos(pos_2d(0), pos_2d(1), posBoundary(2));
+		newPosCoords.col(i) = newPos;
+		Vertex * V = addVertex(newPos);
+		newVertexIdx.coeffRef(idxV) = V->getIndex();
+		assert(V->getIndex() == nVertices + i);
+	}
+	const int offset = vertexCoordinates.cols();
+	vertexCoordinates.conservativeResize(3, offset + nbV);
+	vertexCoordinates.rightCols(nbV) = newPosCoords;
+
+	// create prism face for each boundary edge
+	const int nbE = boundaryEdges.nonZeros();
+	Eigen::MatrixXi f2v_edges(4, nbE);
+	f2v_edges.array() = -1;
+	for (int i = 0; i < nbE; i++) {
+		Edge * edge = getEdge(boundaryEdges.innerIndexPtr()[i]);
+		Vertex * A = edge->getVertexA();
+		Vertex * B = edge->getVertexB();
+
+		int idxC = newVertexIdx.coeff(B->getIndex());
+		int idxD = newVertexIdx.coeff(A->getIndex());
+		assert(idxC >= nVertices);
+		assert(idxD >= nVertices);
+
+		Vertex * C = getVertex(idxC);
+		Vertex * D = getVertex(idxD);
+
+		// store face-to-vertex indices: (A,B,C,D)
+		Eigen::VectorXi col(4);
+		col(0) = A->getIndex();
+		col(1) = B->getIndex();
+		col(2) = C->getIndex();
+		col(3) = D->getIndex();
+		f2v_edges.col(i) = col;
+	}
+	
+	// add faces
+	for (int i = 0; i < f2v_edges.cols(); i++) {
+		Vertex * A = getVertex(f2v_edges(0, i));
+		Vertex * B = getVertex(f2v_edges(1, i));
+		Vertex * C = getVertex(f2v_edges(2, i));
+		Vertex * D = getVertex(f2v_edges(3, i));
+		Face * face = addFace({ addEdge(A, B), addEdge(B, C), addEdge(D, C), addEdge(A, D)});
 	}
 }
 
@@ -851,11 +934,46 @@ void PrimalMesh::sortFaces()
 	faceList = sortedFaces;
 }
 
+void PrimalMesh::sortCells()
+{
+	std::vector<Cell*> innerCells;
+	std::vector<Cell*> outerCells;
+	const int nCells = getNumberOfCells();
+	for (int i = 0; i < nCells; i++) {
+		Cell * cell = getCell(i);
+		const Eigen::Vector3d cellCenter = cell->getCenter();
+		const Eigen::Vector2d cc_2d = cellCenter.segment(0, 2);
+		if (cc_2d.norm() < 1) {
+			innerCells.push_back(cell);
+		}
+		else {
+			outerCells.push_back(cell);
+		}
+	}
+	std::vector<Cell*> sortedCells(nCells);
+	int offset = 0;
+	for (auto cell : innerCells) {
+		sortedCells[offset++] = cell;
+	}
+	for (auto cell : outerCells) {
+		sortedCells[offset++] = cell;
+	}
+	assert(offset == nCells);
+	for (int i = 0; i < sortedCells.size(); i++) {
+		sortedCells[i]->setIndex(i);
+	}
+	cellList = sortedCells;
+}
+
+
 void PrimalMesh::validateParameters()
 {
 	std::cout << "Primal mesh parameters: " << std::endl;
 	std::cout << params << std::endl;
-	assert(params.getAxialLayers() >= 1);
+	assert(params.getAxialLayers() >= 0);
+	if (params.getAxialLayers() == 0) {
+		std::cout << "Warning: axialLayers is zero, a 2d mesh is created." << std::endl;
+	}
 	assert(params.getRefinements() >= 1);
 	if (params.getOuterLayers() > 0) {
 		assert(params.getRefinements() > 1);
