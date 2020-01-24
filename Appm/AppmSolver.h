@@ -32,8 +32,8 @@ protected:
 	PrimalMesh primalMesh;
 	DualMesh dualMesh;
 
-	FluidSolver * fluidSolver;
-	MaxwellSolver * maxwellSolver;
+	FluidSolver * fluidSolver = nullptr;
+	MaxwellSolver * maxwellSolver = nullptr;
 
 	Eigen::Matrix3Xd B_vertex;
 

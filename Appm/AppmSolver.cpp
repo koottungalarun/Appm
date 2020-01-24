@@ -11,7 +11,9 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 {
 	readParameters("AppmSolverParams.txt");
 	init_meshes(primalMeshParams);  // Initialize primal and dual meshes
-
+	if (primalMesh.getNumberOfCells() == 0) {
+		return;
+	}
 	std::cout << "Dual mesh has " << dualMesh.getNumberOfVertices() << " vertices" << std::endl;
 
 	maxwellSolver = new MaxwellSolverCrankNicholson(&primalMesh, &dualMesh);
@@ -20,7 +22,6 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	fluidSolver = new MultiFluidSolver(&dualMesh);
 	fluidSolver->init();
 
-
 	B_vertex = Eigen::Matrix3Xd::Zero(3, primalMesh.getNumberOfVertices());
 	init_RaviartThomasInterpolation();
 }
@@ -28,15 +29,23 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 
 AppmSolver::~AppmSolver()
 {
-	delete fluidSolver;
-	fluidSolver = nullptr;
+	if (fluidSolver != nullptr) {
+		delete fluidSolver;
+		fluidSolver = nullptr;
+	}
 
-	delete maxwellSolver;
-	maxwellSolver = nullptr;
+	if (maxwellSolver != nullptr) {
+		delete maxwellSolver;
+		maxwellSolver = nullptr;
+	}
 }
 
 void AppmSolver::run()
 {
+	if (primalMesh.getNumberOfCells() == 0) {
+		return;
+	}
+
 	double dt = 0.05;
 	double time = 0;
 	int iteration = 0;
@@ -103,7 +112,9 @@ void AppmSolver::interpolateMagneticFluxToPrimalVertices()
 {
 	B_vertex.setZero();
 	// For each cell ...
-	const int nCells = primalMesh.getNumberOfCells();
+	//const int nCells = primalMesh.getNumberOfCells();
+	// For each cell that has a Piola map
+	const int nCells = rt_piolaMatrix.size();
 	Eigen::VectorXi countVertexVisits = Eigen::VectorXi::Zero(primalMesh.getNumberOfVertices());
 
 	const Eigen::VectorXd B_h = maxwellSolver->getBstate();
@@ -169,7 +180,9 @@ void AppmSolver::interpolateMagneticFluxToPrimalVertices()
 		}
 	}
 	for (int i = 0; i < primalMesh.getNumberOfVertices(); i++) {
-		B_vertex.col(i) /= countVertexVisits(i);
+		if (countVertexVisits(i) > 0) {
+			B_vertex.col(i) /= countVertexVisits(i);
+		}
 	}
 }
 
@@ -372,6 +385,10 @@ void AppmSolver::init_meshes(const PrimalMesh::PrimalMeshParams & primalParams)
 	primalMesh.writeXdmf();
 	primalMesh.check();
 
+	if (primalMesh.getNumberOfCells() == 0) {
+		std::cout << "Primal mesh has no cells" << std::endl;
+		return;
+	}
 
 	std::cout << "Init dual mesh" << std::endl;
 	dualMesh = DualMesh();
@@ -833,9 +850,25 @@ void AppmSolver::init_RaviartThomasInterpolation()
 	rt_piolaMatrix.reserve(nCells);
 	rt_piolaVector.reserve(nCells);
 
+	Eigen::VectorXi isPiolaMapDefined(nCells);
+	isPiolaMapDefined.setZero();
+
+	bool isInfoPrinted = true;
+
 	for (int cidx = 0; cidx < nCells; cidx++) {
 		const Cell * cell = primalMesh.getCell(cidx);
 		const std::vector<Face*> cellFaces = cell->getFaceList();
+		if (cellFaces.size() == 5) {
+			isPiolaMapDefined(cidx) = 1;
+		}
+		else {
+			isPiolaMapDefined(cidx) = 0;
+			if (isInfoPrinted) {
+				std::cout << "Raviart-Thomas interpolation is only implemented for triangular prisms!" << std::endl;
+				isInfoPrinted = false; // show info only once
+			}
+			continue;
+		}
 		assert(cellFaces.size() == 5); // prism cells
 
 		// get top and bottom face of prism
@@ -887,8 +920,19 @@ void AppmSolver::init_RaviartThomasInterpolation()
 		BK.col(2) = F - C;
 		rt_piolaMatrix.emplace_back(BK);
 		rt_piolaVector.emplace_back(bK);
-
 	}
+
+	// Check if all Piola maps are defined at beginning of list
+	const int nPiolaMapsDefined = isPiolaMapDefined.count();
+	//std::cout << "nPiolaMapsDefined: " << nPiolaMapsDefined << std::endl;
+	//std::ofstream file("isPiolaMapDefined.dat");
+	//file << isPiolaMapDefined << std::endl;
+	assert(isPiolaMapDefined.topRows(nPiolaMapsDefined).all());
+	assert(isPiolaMapDefined.bottomRows(nCells - nPiolaMapsDefined).any() == 0);
+
+	// Truncate list of Piola maps
+	rt_piolaMatrix.resize(nPiolaMapsDefined);
+	rt_piolaVector.resize(nPiolaMapsDefined);
 }
 
 void AppmSolver::readParameters(const std::string & filename)
