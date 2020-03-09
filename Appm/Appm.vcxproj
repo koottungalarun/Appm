@@ -145,6 +145,7 @@
     <ClInclude Include="Main.h" />
     <ClInclude Include="MaxwellSolver.h" />
     <ClInclude Include="MaxwellSolverCrankNicholson.h" />
+    <ClInclude Include="MaxwellSolverImplicitEuler.h" />
     <ClInclude Include="MaxwellSolverLeapFrog.h" />
     <ClInclude Include="Mesh.h" />
     <ClInclude Include="MultiFluidSolver.h" />
@@ -177,6 +178,7 @@
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="MaxwellSolver.cpp" />
     <ClCompile Include="MaxwellSolverCrankNicholson.cpp" />
+    <ClCompile Include="MaxwellSolverImplicitEuler.cpp" />
     <ClCompile Include="MaxwellSolverLeapFrog.cpp" />
     <ClCompile Include="Mesh.cpp" />
     <ClCompile Include="MultiFluidSolver.cpp" />

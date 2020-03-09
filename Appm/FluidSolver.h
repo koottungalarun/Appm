@@ -28,6 +28,14 @@ protected:
 	Eigen::MatrixXd fluidStates;
 	Eigen::MatrixXd fluidFluxes;
 
+	Eigen::MatrixXd fluidStateUpdate;
+	Eigen::VectorXd dt_local;
+
+	void updateFaceFluxInterior(const int faceIdx);
+	void updateFaceFluxOpening(const int faceIdx);
+	void updateFaceFluxWall(const int faceIdx);
+
+
 	virtual Eigen::VectorXd getRusanovFlux(const Eigen::VectorXd & qL, const Eigen::VectorXd & qR, const Eigen::Vector3d & fn, const double dx, double & dt_loc) = 0;
 
 

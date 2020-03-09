@@ -171,19 +171,28 @@ void MultiFluidSolver::init()
 	// Set states on the left and right side
 	for (int i = 0; i < nCells;  i++) {
 		const Cell * cell = mesh->getCell(i);
-		const Eigen::Vector3d cellCenterPos = cell->getCenter();
-		fluidStates.col(i) = (cellCenterPos(2) < 0) ? leftState : rightState;
-		//fluidStates.col(i) = leftState;
+		Eigen::VectorXd cellState(fluidStateLength);
 
+		if (cell->getFluidType() == Cell::FluidType::FLUID) {
+			const Eigen::Vector3d cellCenterPos = cell->getCenter();
+			cellState = (cellCenterPos(2) < 0) ? leftState : rightState;
+		}
+		else {
+			const double a = std::nan(""); // value of Not-A-Number
+			cellState.setConstant(a);
+		}
+
+		fluidStates.col(i) = cellState;
 	}
 
-	const Eigen::Vector3d fn = Eigen::Vector3d::UnitZ();
-	const double dx = 1;
-	double dt_loc = 0;
-	const Eigen::VectorXd flux = getRusanovFlux(leftState, rightState, fn, dx, dt_loc);
-	std::cout << "flux: " << std::endl;
-	std::cout << flux << std::endl;
-	std::cout << "dt_loc: " << dt_loc << std::endl;
+	// Check for Rusanov flux
+	//const Eigen::Vector3d fn = Eigen::Vector3d::UnitZ();
+	//const double dx = 1;
+	//double dt_loc = 0;
+	//const Eigen::VectorXd flux = getRusanovFlux(leftState, rightState, fn, dx, dt_loc);
+	//std::cout << "flux: " << std::endl;
+	//std::cout << flux << std::endl;
+	//std::cout << "dt_loc: " << dt_loc << std::endl;
 }
 
 Eigen::VectorXd MultiFluidSolver::getRusanovFlux(const Eigen::VectorXd & qL, const Eigen::VectorXd & qR, const Eigen::Vector3d & fn, const double dx, double & dt_loc)

@@ -394,6 +394,7 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal)
 	std::cout << (delta.nonZeros() == 0 ? "OK" : "FAILED") << std::endl; 
 	assert(delta.nonZeros() == 0);
 
+	// Cell fluid type
 	init_cellFluidType();
 	const int nCells = this->getNumberOfCells();
 	Eigen::VectorXi cellTypes(nCells);
@@ -407,7 +408,7 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal)
 	std::cout << "  Solid: " << nSolidCells << std::endl;
 	std::cout << "  Fluid: " << nFluidCells << std::endl;
 
-
+	// Face Fluid Type
 	init_faceFluidType();
 	const int nFaces = this->getNumberOfFaces();
 	Eigen::VectorXi faceTypes(nFaces);
@@ -424,7 +425,6 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal)
 	std::cout << "  Interior: " << nInteriorFaces << std::endl;
 	std::cout << "  Opening:  " << nOpeningFaces << std::endl;
 	std::cout << "  Wall:     " << nWallFaces << std::endl;
-
 
 	H5Writer h5writer("dualMeshTypes.h5");
 	h5writer.writeData(cellTypes, "/cellFluidTypes");
@@ -491,6 +491,7 @@ void DualMesh::init_cellFluidType()
 
 void DualMesh::init_faceFluidType()
 {
+	const double terminalRadius = 0.35;
 	const int nFaces = this->getNumberOfFaces();
 	for (int i = 0; i < nFaces; i++) {
 		Face * face = getFace(i);
@@ -525,7 +526,10 @@ void DualMesh::init_faceFluidType()
 
 		if (nAdjacientCells == 1) {
 			if (nSolidCells == 0 && nFluidCells == 1) {
-				faceFluidType = Face::FluidType::OPENING;
+				const Eigen::Vector3d faceCenter = face->getCenter();
+				const Eigen::Vector2d faceCenter_2d = faceCenter.segment(0, 2);
+				const bool isTerminalFace = faceCenter_2d.norm() < terminalRadius;
+				faceFluidType = isTerminalFace ? Face::FluidType::WALL : Face::FluidType::OPENING;
 			}
 			if (nSolidCells == 1 && nFluidCells == 0) {
 				faceFluidType = Face::FluidType::DEFAULT;

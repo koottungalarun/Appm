@@ -1155,6 +1155,14 @@ const std::string AppmSolver::xdmf_GridDualCells(const int iteration) const
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
+	ss << "<Attribute Name=\"Cell Type\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << "\""
+		<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
+	ss << "dualMeshTypes.h5:/cellFluidTypes" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+
 	ss << "<Attribute Name=\"Magnetic Flux Interpolated\" AttributeType=\"Vector\" Center=\"Node\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfVertices() << " 3\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
