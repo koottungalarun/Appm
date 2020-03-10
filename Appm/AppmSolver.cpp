@@ -16,7 +16,9 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	}
 	std::cout << "Dual mesh has " << dualMesh.getNumberOfVertices() << " vertices" << std::endl;
 
-	maxwellSolver = new MaxwellSolverCrankNicholson(&primalMesh, &dualMesh);
+	MaxwellSolver::MaxwellParams maxwellParams;
+	maxwellParams.lambdaSquare = this->lambdaSquare;
+	maxwellSolver = new MaxwellSolverImplicitEuler(&primalMesh, &dualMesh, maxwellParams);
 	//fluidSolver = new SingleFluidSolver(&dualMesh);
 	//fluidSolver = new TwoFluidSolver(&dualMesh);
 	fluidSolver = new MultiFluidSolver(&dualMesh);
@@ -46,7 +48,7 @@ void AppmSolver::run()
 		return;
 	}
 
-	double dt = 0.05;
+	double dt = timestepSize;
 	double time = 0;
 	int iteration = 0;
 
@@ -57,7 +59,7 @@ void AppmSolver::run()
 	//interpolateMagneticFluxToPrimalVertices();
 
 	// initialize current flow
-	this->isMaxwellCurrentSource = true;
+	this->isMaxwellCurrentSource = false;
 	maxwellSolver->isMaxwellCurrentSource = isMaxwellCurrentSource;
 	if (isMaxwellCurrentSource) {
 		const double x1 = -0.5;
@@ -956,13 +958,29 @@ void AppmSolver::readParameters(const std::string & filename)
 		if (tag == "maxTime") {
 			std::istringstream(line.substr(pos + 1)) >> this->maxTime;
 		}
+		if (tag == "isFluidEnabled") {
+			std::istringstream(line.substr(pos + 1)) >> this->isFluidEnabled;
+		}
+		if (tag == "isMaxwellEnabled") {
+			std::istringstream(line.substr(pos + 1)) >> this->isMaxwellEnabled;
+		}
+		if (tag == "timestepSize") {
+			std::istringstream(line.substr(pos + 1)) >> this->timestepSize;
+		}
+		if (tag == "lambdaSquare") {
+			std::istringstream(line.substr(pos + 1)) >> this->lambdaSquare;
+		}
 	}
 
 	std::cout << std::endl;
 	std::cout << "Appm Solver parameters:" << std::endl;
 	std::cout << "======================="  << std::endl;
-	std::cout << "maxIterations: " << maxIterations << std::endl;
-	std::cout << "maxTime:       " << maxTime << std::endl;
+	std::cout << "maxIterations:  " << maxIterations << std::endl;
+	std::cout << "maxTime:        " << maxTime << std::endl;
+	std::cout << "isFluidEnabled: " << isFluidEnabled << std::endl;
+	std::cout << "isMaxwellEnabled: " << isMaxwellEnabled << std::endl;
+	std::cout << "timestepSize: " << timestepSize << std::endl;
+	std::cout << "lambdaSquare: " << lambdaSquare << std::endl;
 	std::cout << "=======================" << std::endl;
 }
 

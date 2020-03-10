@@ -9,8 +9,13 @@
 class MaxwellSolver
 {
 public:
+	struct MaxwellParams {
+		double lambdaSquare = 1.0;
+	} parameters;
+
 	MaxwellSolver();
 	MaxwellSolver(const PrimalMesh * primal, const DualMesh * dual);
+	MaxwellSolver(const PrimalMesh * primal, const DualMesh * dual, MaxwellParams & param);
 	~MaxwellSolver();
 
 	bool isMaxwellCurrentSource = false;

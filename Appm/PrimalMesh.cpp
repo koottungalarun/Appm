@@ -800,12 +800,27 @@ void PrimalMesh::sortVertices(const double electrodeRadius)
 	std::vector<Vertex*> innerVertices;
 	std::vector<Vertex*> terminalVertices;
 
+	const int nV = getNumberOfVertices();
+	vertexCoordinates = Eigen::Matrix3Xd(3, nV);
+	for (int i = 0; i < nV; i++) {
+		vertexCoordinates.col(i) = getVertex(i)->getPosition();
+	}
+
+	const double zmax = vertexCoordinates.row(2).maxCoeff();
+	const double zmin = vertexCoordinates.row(2).minCoeff();
+
+	std::cout << "zmin, zmax: " << zmin << ", " << zmax << std::endl;
+
 	for (auto vertex : vertexList) {
 		if (vertex->isBoundary()) {
 			const Eigen::Vector3d pos = vertex->getPosition();
 			const Eigen::Vector2d pos_2d(pos.segment(0, 2));
 
-			if (pos_2d.norm() < electrodeRadius && (pos(2) == 0 || pos(2) == 1)) {
+			bool is_zmax = std::abs(pos(2) - zmax) < 100 * std::numeric_limits<double>::epsilon();
+			bool is_zmin = std::abs(pos(2) - zmin) < 100 * std::numeric_limits<double>::epsilon();
+
+
+			if (pos_2d.norm() < electrodeRadius && (is_zmax || is_zmin) ) {
 				terminalVertices.push_back(vertex);
 				vertex->setType(Vertex::Type::Terminal);
 			}
@@ -1063,6 +1078,9 @@ void PrimalMesh::PrimalMeshParams::readParameters(const std::string & filename)
 		}
 		if (tag == "zMax") {
 			std::stringstream(line.substr(pos + 1)) >> this->zmax;
+		}
+		if (tag == "terminalRadius") {
+			std::stringstream(line.substr(pos + 1)) >> this->electrodeRadius;
 		}
 	}
 }

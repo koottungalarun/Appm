@@ -738,18 +738,34 @@ XdmfGrid Mesh::getXdmfVertexGrid() const
 	vertexGrid.addChild(geometry);
 
 	// Attribute: vertex index
-	XdmfAttribute vertexIdxAttribute(XdmfAttribute::Tags("Vertex Index", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
-	vertexIdxAttribute.addChild(
-		XdmfDataItem(
-			XdmfDataItem::Tags(
-				{ getNumberOfVertices() },
-				XdmfDataItem::NumberType::Int,
-				XdmfDataItem::Format::HDF),
-			(std::stringstream() << this->meshPrefix << "-mesh.h5:/vertexIdx").str()
-		)
-	);
-	vertexGrid.addChild(vertexIdxAttribute);
+	{
+		XdmfAttribute attribute(XdmfAttribute::Tags("Vertex Index", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
+		attribute.addChild(
+			XdmfDataItem(
+				XdmfDataItem::Tags(
+					{ getNumberOfVertices() },
+					XdmfDataItem::NumberType::Int,
+					XdmfDataItem::Format::HDF),
+					(std::stringstream() << this->meshPrefix << "-mesh.h5:/vertexIdx").str()
+			)
+		);
+		vertexGrid.addChild(attribute);
+	}
 
+	// Attribute: vertex type
+	{
+		XdmfAttribute attribute(XdmfAttribute::Tags("Vertex Type", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
+		attribute.addChild(
+			XdmfDataItem(
+				XdmfDataItem::Tags(
+					{ getNumberOfVertices() },
+					XdmfDataItem::NumberType::Int,
+					XdmfDataItem::Format::HDF),
+					(std::stringstream() << this->meshPrefix << "-mesh.h5:/vertexType").str()
+			)
+		);
+		vertexGrid.addChild(attribute);
+	}
 	return vertexGrid;
 }
 
@@ -998,6 +1014,10 @@ Mesh::MeshInfo Mesh::getMeshInfo() const
 	meshInfo.nVertices = getNumberOfVertices();
 	meshInfo.nVerticesTerminal = (vertexTypes.array() == terminalVertexType).count();
 	meshInfo.nVerticesBoundary = (vertexTypes.array() == boundaryVertexType).count() + meshInfo.nVerticesTerminal;
+	if (meshPrefix.substr(0, 6) == "primal") {
+		assert(meshInfo.nVerticesTerminal > 0);
+		assert(meshInfo.nVerticesBoundary > 0);
+	}
 
 	// Edges
 	const Eigen::VectorXi edgeTypes = getEdgeTypes();
