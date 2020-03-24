@@ -114,6 +114,7 @@ void MaxwellSolverImplicitEuler::updateMaxwellState(const double dt, const doubl
 
 	// Set state vector for discrete data
 	E_h = Q * maxwellState;
+	B_h -= dt * C * E_h;
 
 	//std::cout << "max(E): " << E_h.cwiseAbs().maxCoeff() << std::endl;
 
