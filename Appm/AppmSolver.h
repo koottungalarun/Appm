@@ -49,6 +49,8 @@ private:
 	/** Get number of fluids. */
 	const int getNFluids() const;
 
+	bool isStateWrittenToOutput = false;
+
 
 
 	bool isMaxwellEnabled = false;

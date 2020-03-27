@@ -130,15 +130,13 @@ void AppmSolver::run()
 					fR(2) = gamma * qR(1) * qR(2) / qR(0) - 0.5 * (gamma - 1) * pow(qR(1) / qR(0), 2) * qR(1);
 
 					flux = 0.5 * (fL + fR) - 0.5 * s * (qR - qL);
+					flux *= faceArea;
 
 					// apply face flux appropriately
 					Eigen::VectorXd faceFlux3d(5);
 					faceFlux3d(0) = flux(0);
 					faceFlux3d.segment(1, 3) = flux(1) * faceNormal;
 					faceFlux3d(4) = flux(2);
-
-					faceFlux3d *= faceArea;
-					
 
 					if (face->getFluidType() == Face::FluidType::INTERIOR) {
 						assert(faceCells.size() == 2);
@@ -160,6 +158,7 @@ void AppmSolver::run()
 						assert(cell->getFluidType() == Cell::FluidType::FLUID);
 						int idxL = cell->getIndex();
 						fluidFluxes.col(idxL).segment(5 * fluidIdx, 5) += faceFlux3d;
+						assert(false);
 					}
 					if (face->getFluidType() == Face::FluidType::WALL) {
 						assert(faceCells.size() >= 1);
@@ -170,6 +169,11 @@ void AppmSolver::run()
 						}
 						assert(cell->getFluidType() == Cell::FluidType::FLUID);
 						int idxL = cell->getIndex();
+
+						const Eigen::Vector3d fc = face->getCenter();
+						const Eigen::Vector3d cc = cell->getCenter();
+						int orientation = (fc - cc).dot(faceNormal) > 0 ? 1 : -1;
+						faceFlux3d.segment(1, 3) *= orientation;
 						fluidFluxes.col(idxL).segment(5 * fluidIdx, 5) += faceFlux3d;
 					}
 
@@ -750,29 +754,27 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 		const std::string velocityTag = fluidTag + "velocity";
 		const std::string densityTag = fluidTag + "density";
 		const std::string numberDensityTag = fluidTag + "numberDensity";
-
-		const std::string stateN = fluidTag + "stateN";
-		const std::string stateU = fluidTag + "stateU";
-		const std::string stateE = fluidTag + "stateE";
-
-
 		Eigen::VectorXd numberDensity = fluidStates.row(5 * k);
 		Eigen::VectorXd density(nCells);
 		Eigen::MatrixXd velocity(3, nCells);
 		Eigen::VectorXd pressure(nCells);
 
+		const std::string stateN = fluidTag + "stateN";
+		const std::string stateU = fluidTag + "stateU";
+		const std::string stateE = fluidTag + "stateE";
 		Eigen::VectorXd qN(nCells);
 		Eigen::MatrixXd qU(3, nCells);
 		Eigen::VectorXd qE(nCells);
-
 
 		const double epsilon2 = particleParams[k].mass;
 		for (int i = 0; i < nCells; i++) {
 			const Eigen::VectorXd state = fluidStates.block(5 * k, i, 5, 1);
 
-			qN(i) = state(0);
-			qU.col(i) = state.segment(1, 3);
-			qE(i) = state(4);
+			if (isStateWrittenToOutput) {
+				qN(i) = state(0);
+				qU.col(i) = state.segment(1, 3);
+				qE(i) = state(4);
+			}
 
 			const double n = state(0);
 			const double rho = epsilon2 * n;
@@ -789,10 +791,11 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 		writer.writeData(pressure, pressureTag);
 		writer.writeData(velocity, velocityTag);
 
-		writer.writeData(qN, stateN);
-		writer.writeData(qU, stateU);
-		writer.writeData(qE, stateE);
-
+		if (isStateWrittenToOutput) {
+			writer.writeData(qN, stateN);
+			writer.writeData(qU, stateU);
+			writer.writeData(qE, stateE);
+		}
 	}
 }
 
@@ -1564,31 +1567,29 @@ const std::string AppmSolver::fluidXdmfOutput(const std::string & datafilename) 
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
+		if (isStateWrittenToOutput) {
+			ss << "<Attribute Name=\"stateN " << fluidName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+			ss << "<DataItem Dimensions=\"" << nCells << "\""
+				<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+			ss << datafilename << ":/" << "fluid" << k << "-stateN" << std::endl;
+			ss << "</DataItem>" << std::endl;
+			ss << "</Attribute>" << std::endl;
 
 
+			ss << "<Attribute Name=\"stateU " << fluidName << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+			ss << "<DataItem Dimensions=\"" << nCells << " 3\""
+				<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+			ss << datafilename << ":/" << "fluid" << k << "-stateU" << std::endl;
+			ss << "</DataItem>" << std::endl;
+			ss << "</Attribute>" << std::endl;
 
-		ss << "<Attribute Name=\"stateN " << fluidName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
-		ss << "<DataItem Dimensions=\"" << nCells << "\""
-			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << datafilename << ":/" << "fluid" << k << "-stateN" << std::endl;
-		ss << "</DataItem>" << std::endl;
-		ss << "</Attribute>" << std::endl;
-
-
-		ss << "<Attribute Name=\"stateU " << fluidName << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
-		ss << "<DataItem Dimensions=\"" << nCells << " 3\""
-			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << datafilename << ":/" << "fluid" << k << "-stateU" << std::endl;
-		ss << "</DataItem>" << std::endl;
-		ss << "</Attribute>" << std::endl;
-
-		ss << "<Attribute Name=\"stateE " << fluidName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
-		ss << "<DataItem Dimensions=\"" << nCells << "\""
-			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << datafilename << ":/" << "fluid" << k << "-stateE" << std::endl;
-		ss << "</DataItem>" << std::endl;
-		ss << "</Attribute>" << std::endl;
-
+			ss << "<Attribute Name=\"stateE " << fluidName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+			ss << "<DataItem Dimensions=\"" << nCells << "\""
+				<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+			ss << datafilename << ":/" << "fluid" << k << "-stateE" << std::endl;
+			ss << "</DataItem>" << std::endl;
+			ss << "</Attribute>" << std::endl;
+		}
 	}
 	return ss.str();
 }
