@@ -33,14 +33,24 @@ protected:
 	PrimalMesh primalMesh;
 	DualMesh dualMesh;
 
-	FluidSolver * fluidSolver = nullptr;
-	MaxwellSolver * maxwellSolver = nullptr;
-
 	Eigen::Matrix3Xd B_vertex;
 
 	bool isMaxwellCurrentSource = false;
 
 private:
+
+	struct ParticleParameters {
+		std::string name = "neutral";
+		double mass = 1.0;
+		int electricCharge = 0;
+	};
+	std::vector<ParticleParameters> particleParams;
+
+	/** Get number of fluids. */
+	const int getNFluids() const;
+
+
+
 	bool isMaxwellEnabled = false;
 	bool isFluidEnabled = true;
 	double timestepSize = 1.0;
@@ -48,8 +58,28 @@ private:
 	double maxTime = 0;
 	double lambdaSquare = 1.0;
 
+	bool isWriteEfield = false;
+	bool isWriteBfield = false;
+	bool isWriteHfield = false;
+	bool isWriteJfield = false;
 
+	Eigen::MatrixXd fluidStates;
+	Eigen::MatrixXd fluidStates_new;
+	Eigen::MatrixXd fluidSources;
+	Eigen::MatrixXd fluidFluxes;
 
+	// Isentropic expansion coefficient, aka ratio of heat capacities
+	const double gamma = 1.4; 
+
+	void getAdjacientCellStates(const int fidx, const int fluidIdx, Eigen::Vector3d & qL, Eigen::Vector3d & qR, double & s, bool & isReversed) const;
+
+	void init_multiFluid(const std::string & filename);
+
+	const double getNextFluidTimestepSize() const;
+	const double getWaveSpeed(const Eigen::VectorXd & state, const Eigen::Vector3d & fn) const;
+	const double getWaveSpeed(const Eigen::Vector3d & state) const;
+
+	const Eigen::Vector3d getFluidStateProjected(const Eigen::VectorXd & state, const Eigen::Vector3d & fn) const;
 	void interpolateMagneticFluxToPrimalVertices();
 
 	// void test_raviartThomas();
@@ -63,6 +93,9 @@ private:
 	void writeXdmfDualVolume();
 
 	void writeOutput(const int iteration, const double time);
+
+	void writeFluidStates(H5Writer & writer);
+	void writeMaxwellStates(H5Writer & writer);
 
 	XdmfGrid getOutputPrimalEdgeGrid(const int iteration, const double time, const std::string & dataFilename);
 	XdmfGrid getOutputPrimalSurfaceGrid(const int iteration, const double time, const std::string & dataFilename);
@@ -83,5 +116,7 @@ private:
 	const std::string xdmf_GridDualEdges(const int iteration) const;
 	const std::string xdmf_GridDualFaces(const int iteration) const;
 	const std::string xdmf_GridDualCells(const int iteration) const;
+
+	const std::string fluidXdmfOutput(const std::string & filename) const;
 };
 

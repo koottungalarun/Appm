@@ -99,6 +99,18 @@ bool Face::hasFaceEdges(const std::vector<Edge*> faceEdges) const
 	return true;
 }
 
+bool Face::hasFluidCells() const
+{
+	bool result = false;
+	for (auto cell : cellList) {
+		if (cell->getFluidType() == Cell::FluidType::FLUID) {
+			result = true;
+			break;
+		}
+	}
+	return result;
+}
+
 const int Face::getOrientation(const Edge * edge)
 {
 	assert(edge != nullptr);

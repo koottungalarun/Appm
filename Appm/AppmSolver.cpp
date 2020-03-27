@@ -16,30 +16,15 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	}
 	std::cout << "Dual mesh has " << dualMesh.getNumberOfVertices() << " vertices" << std::endl;
 
-	MaxwellSolver::MaxwellParams maxwellParams;
-	maxwellParams.lambdaSquare = this->lambdaSquare;
-	maxwellSolver = new MaxwellSolverImplicitEuler(&primalMesh, &dualMesh, maxwellParams);
-	//fluidSolver = new SingleFluidSolver(&dualMesh);
-	//fluidSolver = new TwoFluidSolver(&dualMesh);
-	fluidSolver = new MultiFluidSolver(&dualMesh);
-	fluidSolver->init();
-
 	B_vertex = Eigen::Matrix3Xd::Zero(3, primalMesh.getNumberOfVertices());
 	init_RaviartThomasInterpolation();
+
+	init_multiFluid("particleParameters.txt");
 }
 
 
 AppmSolver::~AppmSolver()
 {
-	if (fluidSolver != nullptr) {
-		delete fluidSolver;
-		fluidSolver = nullptr;
-	}
-
-	if (maxwellSolver != nullptr) {
-		delete maxwellSolver;
-		maxwellSolver = nullptr;
-	}
 }
 
 void AppmSolver::run()
@@ -59,15 +44,15 @@ void AppmSolver::run()
 	//interpolateMagneticFluxToPrimalVertices();
 
 	// initialize current flow
-	this->isMaxwellCurrentSource = false;
-	maxwellSolver->isMaxwellCurrentSource = isMaxwellCurrentSource;
-	if (isMaxwellCurrentSource) {
-		const double x1 = -0.5;
-		const double x2 = 0.5;
-		const double z1 = 0.24;
-		const double z2 = 0.76;
-		maxwellSolver->setTorusCurrent(x1, x2, z1, z2);
-	}
+	//this->isMaxwellCurrentSource = false;
+	//maxwellSolver->isMaxwellCurrentSource = isMaxwellCurrentSource;
+	//if (isMaxwellCurrentSource) {
+	//	const double x1 = -0.5;
+	//	const double x2 = 0.5;
+	//	const double z1 = 0.24;
+	//	const double z2 = 0.76;
+	//	maxwellSolver->setTorusCurrent(x1, x2, z1, z2);
+	//}
 
 	writeOutput(iteration, time);
 
@@ -76,17 +61,133 @@ void AppmSolver::run()
 
 	while (iteration < maxIterations && time < maxTime) {
 		std::cout << "Iteration " << iteration << ",\t time = " << time << std::endl;
-		// Fluid equations
+
+
+		// Determine timestep
 		if (isFluidEnabled) {
-			dt = fluidSolver->updateFluidState();
+			dt = getNextFluidTimestepSize();
 		}
-		std::cout << "dt = " << dt << std::endl;
+		fluidFluxes.setZero();
+		fluidSources.setZero();
 
 		// Maxwell equations
 		if (isMaxwellEnabled) {
-			maxwellSolver->updateMaxwellState(dt, time);
+			//maxwellSolver->updateMaxwellState(dt, time);
+
+			// Interpolation of B-field to dual cell centers
 			interpolateMagneticFluxToPrimalVertices();
+
+			// Consistent formulation of current as mass flux
+
+			// Solve  d^2/dt^2 (E) + curl(curl(E)) + n E = rhs, for new timestep
+
+			// Update magnetic field
+			// b^{m+1} = b^m - dt * e^{m+1} 
+			
 		}
+
+
+		// Fluid equations
+		if (isFluidEnabled) {
+			const int nFluids = this->getNFluids();
+			const int nCells = dualMesh.getNumberOfCells();
+			const int nFaces = dualMesh.getNumberOfFaces();
+			
+			// Flux of energy equation
+			for (int fidx = 0; fidx < nFaces; fidx++) {
+				const Face * face = dualMesh.getFace(fidx);
+				const Eigen::Vector3d faceNormal = face->getNormal();
+				const double faceArea = face->getArea();
+				const std::vector<Cell*> faceCells = face->getCellList();
+				assert(faceCells.size() >= 1);
+
+				// skip faces that have no adjacient fluid cell
+				if (!face->hasFluidCells()) {
+					continue;
+				}
+				// TODO: Only interior faces for testing
+				//if (face->getFluidType() != Face::FluidType::INTERIOR) {
+				//	continue;
+				//}
+
+				for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+					Eigen::Vector3d qL, qR;  // left and right cell state at this face
+					double s = 0;            // wavespeed at face
+					bool isReversed = false; // 
+					getAdjacientCellStates(fidx, fluidIdx, qL, qR, s, isReversed);
+
+					// Explicit Rusanov scheme
+					Eigen::Vector3d fL;
+					Eigen::Vector3d fR;
+					Eigen::Vector3d flux;
+					
+					fL(0) = qL(1);
+					fL(1) = 0.5 * (3 - gamma) * pow(qL(1), 2) / qL(0) + (gamma - 1) * qL(2);
+					fL(2) = gamma * qL(1) * qL(2) / qL(0) - 0.5 * (gamma - 1) * pow(qL(1) / qL(0), 2) * qL(1);
+
+					fR(0) = qR(1);
+					fR(1) = 0.5 * (3 - gamma) * pow(qR(1), 2) / qR(0) + (gamma - 1) * qR(2);
+					fR(2) = gamma * qR(1) * qR(2) / qR(0) - 0.5 * (gamma - 1) * pow(qR(1) / qR(0), 2) * qR(1);
+
+					flux = 0.5 * (fL + fR) - 0.5 * s * (qR - qL);
+
+					// apply face flux appropriately
+					Eigen::VectorXd faceFlux3d(5);
+					faceFlux3d(0) = flux(0);
+					faceFlux3d.segment(1, 3) = flux(1) * faceNormal;
+					faceFlux3d(4) = flux(2);
+
+					faceFlux3d *= faceArea;
+					
+
+					if (face->getFluidType() == Face::FluidType::INTERIOR) {
+						assert(faceCells.size() == 2);
+						int idxL, idxR;
+						if (!isReversed) {
+							idxL = faceCells[0]->getIndex();
+							idxR = faceCells[1]->getIndex();
+						}
+						else {
+							idxL = faceCells[1]->getIndex();
+							idxR = faceCells[0]->getIndex();
+						}
+						fluidFluxes.col(idxL).segment(5 * fluidIdx, 5) += faceFlux3d;
+						fluidFluxes.col(idxR).segment(5 * fluidIdx, 5) -= faceFlux3d;
+					}
+					if (face->getFluidType() == Face::FluidType::OPENING) {
+						assert(faceCells.size() == 1);
+						const Cell * cell = faceCells[0];
+						assert(cell->getFluidType() == Cell::FluidType::FLUID);
+						int idxL = cell->getIndex();
+						fluidFluxes.col(idxL).segment(5 * fluidIdx, 5) += faceFlux3d;
+					}
+					if (face->getFluidType() == Face::FluidType::WALL) {
+						assert(faceCells.size() >= 1);
+						Cell * cell = faceCells[0];
+						if (cell->getFluidType() != Cell::FluidType::FLUID) {
+							assert(faceCells.size() >= 2);
+							cell = faceCells[1];
+						}
+						assert(cell->getFluidType() == Cell::FluidType::FLUID);
+						int idxL = cell->getIndex();
+						fluidFluxes.col(idxL).segment(5 * fluidIdx, 5) += faceFlux3d;
+					}
+
+
+				}
+			}
+
+			// Update to next timestep: U(m+1) = U(m) - dt / volume * sum(fluxes)
+			for (int i = 0; i < nCells; i++) {
+				const Cell * cell = dualMesh.getCell(i);
+				double cellVolume = cell->getVolume();
+				fluidStates_new.col(i) = fluidStates.col(i) - dt / cellVolume * fluidFluxes.col(i) + dt * fluidSources.col(i);
+			}
+			fluidStates = fluidStates_new; // update data storage to new timestep
+			fluidStates_new.setZero();     // clear auxiliary data storage
+		}
+		std::cout << "dt = " << dt << std::endl;
+
 
 		iteration++;
 		time += dt;
@@ -110,6 +211,314 @@ void AppmSolver::run()
 	writeXdmfDualVolume();
 }
 
+const int AppmSolver::getNFluids() const
+{
+	return particleParams.size();
+}
+
+/** 
+* Get cell states at this face, as indicated by face type.
+*
+* For boundary type faces: the face has only one adjacient fluid cell (= actual cell), the other side has a virtual state
+* The left or right state as defined by face normal vector. 
+*
+* If face type is opening: Virtual state is equal to actual state.
+* If face type is wall:    Virtual state is equal to actual state but with reversed velocity.
+*
+* @param isReversed true if the face normal points from right cell to left cell
+*
+* 
+*/
+void AppmSolver::getAdjacientCellStates(const int fidx, const int fluidIdx, Eigen::Vector3d & qL, Eigen::Vector3d & qR, double & s, bool & isReversed) const
+{
+	// set default output values
+	qL.setZero();
+	qR.setZero();
+	s = 0;
+	isReversed = false;
+
+	// get face data
+	const Face * face = dualMesh.getFace(fidx);
+	const Eigen::Vector3d fn = face->getNormal();
+	const Eigen::Vector3d fc = face->getCenter();
+	const Face::FluidType faceFluidType = face->getFluidType();
+
+	// get face cells
+	const std::vector<Cell*> faceCells = face->getCellList();
+	assert(faceCells.size() >= 1);
+	assert(faceCells.size() <= 2);
+	const Eigen::Vector3d cc = faceCells[0]->getCenter();
+	
+	// determine if cell list is reversed with respect to face normal
+	isReversed = (fc - cc).dot(fn) < 0;
+	const double orientation = isReversed ? -1 : 1;
+
+	// Error: do not call this function with default face type
+	if (faceFluidType == Face::FluidType::DEFAULT) {
+		exit(-1);
+		return;
+	}
+
+	if (faceFluidType == Face::FluidType::INTERIOR) {
+		assert(faceCells.size() == 2);
+		int idxL, idxR;
+		if (isReversed) {
+			idxL = faceCells[1]->getIndex();
+			idxR = faceCells[0]->getIndex();
+		}
+		else {
+			idxL = faceCells[0]->getIndex();
+			idxR = faceCells[1]->getIndex();
+		}
+		const Eigen::VectorXd qL3d = fluidStates.col(idxL).segment(5 * fluidIdx, 5);
+		const Eigen::VectorXd qR3d = fluidStates.col(idxR).segment(5 * fluidIdx, 5);
+		qL = getFluidStateProjected(qL3d, fn);
+		qR = getFluidStateProjected(qR3d, fn);
+	}
+
+	if (faceFluidType == Face::FluidType::OPENING) {
+		assert(faceCells.size() == 1);
+		const Cell * cell = faceCells[0];
+		assert(cell->getFluidType() == Cell::FluidType::FLUID);
+		const int idxL = cell->getIndex();
+		Eigen::VectorXd qL3d = fluidStates.col(idxL).segment(5 * fluidIdx, 5);
+		qL = getFluidStateProjected(qL3d, fn);
+		qR = qL;
+	}
+
+	if (faceFluidType == Face::FluidType::WALL) {
+		// assert(faceCells.size() == 1); // no, it may be that the face is a fluid wall but it has an adjacient solid cell
+		Cell * cell = faceCells[0];
+		if (cell->getFluidType() != Cell::FluidType::FLUID) {
+			assert(faceCells.size() >= 2);
+			cell = faceCells[1];
+			isReversed = true;
+		}
+		assert(cell->getFluidType() == Cell::FluidType::FLUID);
+		const int idxL = cell->getIndex();
+		Eigen::VectorXd qL3d = fluidStates.col(idxL).segment(5 * fluidIdx, 5);
+		qL = getFluidStateProjected(qL3d, fn);
+		qR = qL;
+		qR(1) *= -1;
+	}
+	// get wave speed
+	const double sL = getWaveSpeed(qL);
+	const double sR = getWaveSpeed(qR);
+	s = std::max(sL, sR);
+
+	assert(!(qL.array() == 0).all());
+	assert(!(qR.array() == 0).all());
+	assert(s > 0);
+}
+
+void AppmSolver::init_multiFluid(const std::string & filename)
+{
+	// Read parameter file
+	assert(filename.size() > 4);
+	std::ifstream file(filename);
+	if (!file.is_open()) {
+		std::cout << "File not opened: " << filename << std::endl;
+		exit(-1);
+	}
+	std::string line;
+	while (std::getline(file, line)) {
+		if (line.empty() || line.substr(0, 1) == "#") {
+			continue;
+		}
+		std::string fluidName;
+		double mass;
+		int charge;
+		char delimiter;
+		std::stringstream ss(line);
+		ss >> fluidName;
+		ss >> mass >> delimiter;
+		ss >> charge;
+
+		ParticleParameters params;
+		params.name = fluidName.substr(0, fluidName.size() - 1);
+		params.mass = mass;
+		params.electricCharge = charge;
+
+		particleParams.push_back(params);
+	}
+
+	const int nFluids = particleParams.size();
+
+	// Print parameters to output
+
+	std::cout << std::endl;
+	std::cout << "Fluid parameters: " << std::endl;
+	std::cout << "Fluid #: Name,\tMass,\tCharge" << std::endl;
+	std::cout << "=====================" << std::endl;
+	for (int i = 0; i < nFluids; i++) {
+		std::cout << "Fluid " << i << ": " 
+			<< particleParams[i].name << "\t" 
+			<< particleParams[i].mass << "\t" 
+			<< particleParams[i].electricCharge << std::endl;
+	}
+	std::cout << std::endl;
+
+	// Initialize data
+
+	const int nCells = dualMesh.getNumberOfCells();
+	const int fluidStateLength = 5 * nFluids;
+	fluidStates = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
+	fluidStates_new = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
+	fluidSources = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
+	fluidFluxes = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
+
+	// Initialize fluid states (see Sod's shock tube problem)
+
+	Eigen::VectorXd leftState(fluidStateLength);
+	Eigen::VectorXd rightState(fluidStateLength);
+
+	for (int k = 0; k < nFluids; k++) {
+		// TODO: edit such that number density is equal among the fluids (= quasi-neutral plasma state), not the mass density.
+		const double epsilon2 = particleParams[k].mass;
+
+		const double pL = 1;
+		const double nL = 1;
+		const double rhoL = epsilon2 * nL;
+		const Eigen::Vector3d uL = Eigen::Vector3d::Zero();
+
+		const double pR = 0.1;
+		const double nR = 0.125;
+		const double rhoR = epsilon2 * nR;
+		const Eigen::Vector3d uR = Eigen::Vector3d::Zero();
+
+		Eigen::VectorXd singleFluidStateLeft(5);
+		singleFluidStateLeft(0) = nL;
+		singleFluidStateLeft.segment(1, 3).setZero();
+		singleFluidStateLeft(4) = 1. / epsilon2 * (pL / (gamma - 1) + 0.5 * rhoL * uL.squaredNorm());
+
+		Eigen::VectorXd singleFluidStateRight(5);
+		singleFluidStateRight(0) = nR;
+		singleFluidStateRight.segment(1, 3).setZero();
+		singleFluidStateRight(4) = 1. / epsilon2 * (pR / (gamma - 1) + 0.5 * rhoR * uR.squaredNorm());
+
+		leftState.segment(5 * k, 5) = singleFluidStateLeft;
+		rightState.segment(5 * k, 5) = singleFluidStateRight;
+	}
+	for (int i = 0; i < nCells; i++) {
+		const Cell * cell = dualMesh.getCell(i);
+		Eigen::VectorXd cellState(fluidStateLength);
+		cellState.setConstant(std::nan("")); // NaN
+
+		if (cell->getFluidType() == Cell::FluidType::FLUID) {
+			const Eigen::Vector3d cellCenterPos = cell->getCenter();
+			cellState = (cellCenterPos(2) < 0) ? leftState : rightState;
+		}
+		else {
+			//const double a = std::nan(""); // value of Not-A-Number
+			//cellState.setConstant(a);
+		}
+		fluidStates.col(i) = cellState;
+	}
+}
+
+/** 
+* Get timestep size for next iteration.
+*/
+const double AppmSolver::getNextFluidTimestepSize() const
+{
+	const int nFaces = dualMesh.getNumberOfFaces();
+	const int nFluids = this->getNFluids();
+
+	Eigen::VectorXd dt_faces(nFaces);
+	dt_faces.setConstant(std::numeric_limits<double>::max());
+
+	/*
+	* For each face that has an adjacient fluid cell,
+	* determine timestep size such that a travelling wave does not
+	* exceed the distance from cell center to face.
+	*/
+	for (int fidx = 0; fidx < nFaces; fidx++) {
+		const Face * face = dualMesh.getFace(fidx);
+		const Eigen::Vector3d fc = face->getCenter();
+		const Eigen::Vector3d fn = face->getNormal();
+		if (!face->hasFluidCells()) {
+			continue;
+		}
+		// Get list of cells (one or two) that are adjacient to this face.
+		const std::vector<Cell*> faceCells = face->getCellList();
+
+		double dt_local = std::numeric_limits<double>::max();
+		bool is_timestepDefined = false;
+		for (auto cell : faceCells) {
+			// Skip cells that are not of Fluid type
+			if (cell->getFluidType() != Cell::FluidType::FLUID) {
+				continue;
+			}
+			const Eigen::Vector3d cc = cell->getCenter();
+			const double dx = std::abs((fc - cc).dot(fn));
+			const Eigen::VectorXd cellState = fluidStates.col(cell->getIndex());
+
+			Eigen::VectorXd waveSpeeds(nFluids);
+			for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+				waveSpeeds(fluidIdx) = getWaveSpeed(cellState.segment(5 * fluidIdx, 5), fn);
+			}
+			const double smax = waveSpeeds.maxCoeff();
+			dt_local = std::min(dt_local, dx / smax);
+			is_timestepDefined = true;
+			assert(std::isfinite(dt_local));
+			assert(dt_local > 0);
+		}
+		assert(is_timestepDefined);
+		assert(std::isfinite(dt_local));
+		assert(dt_local > 0);
+		dt_faces(fidx) = dt_local;
+	}
+	const double dt = dt_faces.minCoeff();
+	return dt;
+}
+
+/** 
+* Get maximum wavespeed of fluid cell state projected in direction of face normal fn.
+*/
+const double AppmSolver::getWaveSpeed(const Eigen::VectorXd & state, const Eigen::Vector3d & fn) const
+{
+	assert(state.size() == 5);
+	assert(state.allFinite());
+	const double n = state(0);
+	const double u = state.segment(1, 3).dot(fn) / n; // velocity projected in direction of face normal
+	const double etot = state(4) / n;
+	const double s2 = gamma * (gamma - 1) * (etot - 0.5 * pow(u, 2));
+	assert(std::isfinite(s2));
+	assert(s2 > 0);
+	const double s = sqrt(s2);
+	const double smax = (Eigen::Vector3d(-1, 0, 1).array() * s + u).cwiseAbs().maxCoeff();
+	assert(std::isfinite(smax));
+	assert(smax > 0);
+	return smax;
+}
+
+const double AppmSolver::getWaveSpeed(const Eigen::Vector3d & state) const
+{
+	assert(state.size() == 3);
+	assert(state.allFinite());
+	const double n = state(0);
+	const double u = state(1) / state(0);
+	const double etot = state(2) / state(0);
+	const double s2 = gamma * (gamma - 1) * (etot - 0.5 * pow(u, 2));
+	assert(std::isfinite(s2));
+	assert(s2 > 0);
+	const double s = sqrt(s2);
+	assert(s > 0);
+	const double smax = (Eigen::Vector3d(-1, 0, 1).array() * s + u).cwiseAbs().maxCoeff();
+	assert(smax > 0);
+	return smax;
+}
+
+const Eigen::Vector3d AppmSolver::getFluidStateProjected(const Eigen::VectorXd & state, const Eigen::Vector3d & fn) const
+{
+	Eigen::Vector3d qProj;
+	qProj(0) = state(0);
+	qProj(1) = state.segment(1, 3).dot(fn);
+	qProj(2) = state(4);
+	return qProj;
+}
+
+
 void AppmSolver::interpolateMagneticFluxToPrimalVertices()
 {
 	B_vertex.setZero();
@@ -119,7 +528,10 @@ void AppmSolver::interpolateMagneticFluxToPrimalVertices()
 	const int nCells = rt_piolaMatrix.size();
 	Eigen::VectorXi countVertexVisits = Eigen::VectorXi::Zero(primalMesh.getNumberOfVertices());
 
-	const Eigen::VectorXd B_h = maxwellSolver->getBstate();
+	//const Eigen::VectorXd B_h = maxwellSolver->getBstate();
+	const int nPrimalFaces = primalMesh.getNumberOfFaces();
+	Eigen::VectorXd B_h(nPrimalFaces); 
+	B_h.setZero();
 
 	for (int cidx = 0; cidx < nCells; cidx++) {
 		const Cell * cell = primalMesh.getCell(cidx);
@@ -188,165 +600,6 @@ void AppmSolver::interpolateMagneticFluxToPrimalVertices()
 	}
 }
 
-//void AppmSolver::test_raviartThomas()
-//{
-//	std::cout << "Test Raviart Thomas Interpolation" << std::endl;
-//	// setAzimuthalMagneticFluxField();
-//
-//	B_vertex.setZero();
-//
-//
-//
-//	// Primal cells are prisms.
-//	// For each cell, 
-//	// - compute Piola map, 
-//	// - compute reference coordinates of vertices
-//	// - evaluate RT basis functions 
-//	// - map RT basis functions from reference to actual coordinates
-//	// - multiply by magnetic flux B
-//	// - write data to file: B at vertices
-//	const int nCells = primalMeshInfo.nCells;
-//	for (int cidx = 0; cidx < nCells; cidx++) {
-//#ifdef _RT_ONECELL
-//		std::cout << "cidx = " << cidx << std::endl;
-//#endif
-//		const Cell* cell = primalMesh.getCell(cidx);
-//		const std::vector<Face*> cellFaces = cell->getFaceList();
-//		assert(cellFaces.size() == 5); // prism cells
-//		assert(cellFaces[3]->getVertexList().size() == 3); // triangle faces are at end of list
-//		assert(cellFaces[4]->getVertexList().size() == 3);
-//
-//		const Face * bottomFace = cellFaces[3];
-//		const Face * topFace = cellFaces[4];
-//		const std::vector<Vertex*> bottomVertices = bottomFace->getVertexList();
-//		const std::vector<Vertex*> topVertices = topFace->getVertexList();
-//
-//		// check if vertices of triangle faces have same ordering
-//		for (int i = 0; i < 3; i++) {
-//			Eigen::Vector3d v = topVertices[i]->getPosition() - bottomVertices[i]->getPosition();
-//			v.normalize();
-//			assert(v.cross(zUnit).norm() < 10 * std::numeric_limits<double>::epsilon());
-//		}
-//
-//		// check if bottom triangle vertices form a right-handed system
-//		const Eigen::Vector3d fc = bottomFace->getCenter();
-//		for (int i = 0; i < 3; i++) {
-//			const Eigen::Vector3d v0 = bottomVertices[i]->getPosition();
-//			const Eigen::Vector3d v1 = bottomVertices[(i + 1) % 3]->getPosition();
-//			const Eigen::Vector3d a = v0 - fc;
-//			const Eigen::Vector3d b = v1 - v0;
-//			const Eigen::Vector3d n = a.normalized().cross(b.normalized());
-//			assert(n.dot(Eigen::Vector3d::UnitZ()) > 0);
-//		}
-//
-//		std::vector<Vertex*> cellVertices(6);
-//		for (int i = 0; i < 3; i++) {
-//			cellVertices[i] = bottomVertices[i];
-//			cellVertices[i + 3] = topVertices[i];
-//		}
-//
-//		const Eigen::Vector3d v0 = cellVertices[0]->getPosition();
-//		const Eigen::Vector3d v1 = cellVertices[1]->getPosition();
-//		const Eigen::Vector3d v2 = cellVertices[2]->getPosition();
-//		const Eigen::Vector3d v3 = cellVertices[5]->getPosition();
-//
-//		// Piola map: xRef -> x := BK*xRef + bk
-//		Eigen::Matrix3d BK;
-//		BK.col(0) = v0 - v2;
-//		BK.col(1) = v1 - v2;
-//		BK.col(2) = v3 - v2;
-//		const double detBK = BK.determinant();
-//		const Eigen::Vector3d bk = v2;
-//#ifdef _RT_ONECELL
-//		std::cout << "BK: " << BK << std::endl;
-//		std::cout << "det(BK): " << detBK << std::endl;
-//#endif
-//		// vertex coordinates in actual space
-//		Eigen::Matrix3Xd vertexCoords(3, 6);
-//		for (int i = 0; i < 6; i++) {
-//			vertexCoords.col(i) = cellVertices[i]->getPosition();
-//		}
-//		// points in reference coordinates 
-//		const int nSamples = 5;
-//		Eigen::Matrix3Xd refCoords3d(3, 6);
-//		refCoords3d.setZero();
-//#ifdef _RT_ONECELL
-//		refCoords3d = getPrismReferenceCoords(nSamples);
-//#else
-//		// Reference coordinates of cell vertices
-//		for (int i = 0; i < 6; i++) {
-//			const Eigen::Vector3d pos = vertexCoords.col(i);
-//			const Eigen::Vector3d refPos = BK.inverse() * (pos - bk);
-//			refCoords3d.col(i) = refPos;
-//		}
-//#endif
-//		const double tolerance = 16 * std::numeric_limits<double>::epsilon();
-//		assert((refCoords3d.array() >= -1 * std::numeric_limits<double>::epsilon()).all());
-//		if ( ( (refCoords3d.array() - 1) > tolerance ).any() ) {
-//			std::cout << "max value: " << (refCoords3d.array() - 1).maxCoeff() << std::endl;
-//		}
-//		assert((refCoords3d.array() - 1 <= tolerance).all());
-//
-//		for (int i = 0; i < cellFaces.size(); i++) {
-//			const Face * face = cellFaces[i];
-//			const Eigen::Vector3d fn = face->getNormal();
-//			const Eigen::Vector3d fc = face->getCenter();
-//
-//#ifdef _RT_ONECELL
-//			std::cout << "Face " << i << ": ";
-//			std::cout << "fc: " << fc.transpose() << "\t ";
-//			std::cout << "fn: " << fn.transpose() << "\t "; 
-//			std::cout << "incid: " << cell->getOrientation(face) << "\t ";
-//			std::cout << std::endl;
-//#endif
-//		}
-//
-//		Eigen::VectorXd coeff = Eigen::VectorXd::Zero(5);
-//		Eigen::VectorXd B_h_loc(5);
-//		for (int i = 0; i < 5; i++) {
-//			const Face * face = cellFaces[i];
-//			const int fidx = face->getIndex();
-//			const int orientation = cell->getOrientation(face);
-//			B_h_loc(i) = B_h(fidx);
-//			coeff(i) = orientation * B_h(fidx);
-//		}
-//#ifdef _RT_ONECELL
-//		std::cout << "B_h_loc: " << B_h_loc << std::endl;
-//		std::cout << "coeff: " << coeff << std::endl;
-//#endif
-//		
-//		// for each vertex
-//		Eigen::Matrix3Xd Btest(3, refCoords3d.cols());
-//		Eigen::Matrix3Xd xCoords3d(3, refCoords3d.cols());
-//		for (int i = 0; i < refCoords3d.cols(); i++) {
-//			const Eigen::Vector3d refPos = refCoords3d.col(i);
-//			Eigen::Vector3d Bv;
-//			Bv.setZero();
-//			// for each basis function
-//			for (int idx = 0; idx < 5; idx++) {
-//				const Eigen::Vector3d rt = Numerics::raviartThomasBasis(idx, refPos);
-//				Bv += coeff(idx) / detBK * BK * rt;
-//			}
-//#ifdef _RT_ONECELL
-//			Btest.col(i) = Bv;
-//			xCoords3d.col(i) = BK * refPos + bk;
-//#else
-//			const int vIdx = cellVertices[i]->getIndex();
-//			B_vertex.col(vIdx) += Bv;
-//#endif
-//		}
-//#ifdef _RT_ONECELL
-//		H5Writer tempwriter("temp.h5");
-//		tempwriter.writeData(refCoords3d, "/refCoords3d");
-//		tempwriter.writeData(Btest, "/Btest");
-//		tempwriter.writeData(xCoords3d, "/xCoords3d");
-//		break;
-//#endif
-//	}
-//
-//	H5Writer h5writer("rt.h5");
-//	h5writer.writeData(B_vertex, "/Bvertex");
-//}
 
 const Eigen::Matrix3Xd AppmSolver::getPrismReferenceCoords(const int nSamples)
 {
@@ -394,7 +647,7 @@ void AppmSolver::init_meshes(const PrimalMesh::PrimalMeshParams & primalParams)
 
 	std::cout << "Init dual mesh" << std::endl;
 	dualMesh = DualMesh();
-	dualMesh.init_dualMesh(primalMesh);
+	dualMesh.init_dualMesh(primalMesh, primalParams.getElectrodeRadius());
 	dualMesh.writeToFile();
 	dualMesh.writeXdmf();
 
@@ -468,10 +721,12 @@ void AppmSolver::writeOutput(const int iteration, const double time)
 	H5Writer h5writer(filename);
 
 	// Fluid states
-	fluidSolver->writeStates(h5writer);
+	//fluidSolver->writeStates(h5writer);
+	writeFluidStates(h5writer);
 
 	// Maxwell states
-	maxwellSolver->writeStates(h5writer);
+	//maxwellSolver->writeStates(h5writer);
+	writeMaxwellStates(h5writer);
 
 	// Interpolated values of B-field to primal vertices
 	h5writer.writeData(B_vertex, "/Bvertex");
@@ -482,6 +737,67 @@ void AppmSolver::writeOutput(const int iteration, const double time)
 	Eigen::VectorXi iterVec(1);
 	iterVec(0) = iteration;
 	h5writer.writeData(iterVec, "/iteration");
+}
+
+void AppmSolver::writeFluidStates(H5Writer & writer)
+{
+	const int nFluids = this->getNFluids();
+	const int nCells = dualMesh.getNumberOfCells();
+
+	for (int k = 0; k < nFluids; k++) {
+		const std::string fluidTag = (std::stringstream() << "/fluid" << k << "-").str();
+		const std::string pressureTag = fluidTag + "pressure";
+		const std::string velocityTag = fluidTag + "velocity";
+		const std::string densityTag = fluidTag + "density";
+		const std::string numberDensityTag = fluidTag + "numberDensity";
+
+		const std::string stateN = fluidTag + "stateN";
+		const std::string stateU = fluidTag + "stateU";
+		const std::string stateE = fluidTag + "stateE";
+
+
+		Eigen::VectorXd numberDensity = fluidStates.row(5 * k);
+		Eigen::VectorXd density(nCells);
+		Eigen::MatrixXd velocity(3, nCells);
+		Eigen::VectorXd pressure(nCells);
+
+		Eigen::VectorXd qN(nCells);
+		Eigen::MatrixXd qU(3, nCells);
+		Eigen::VectorXd qE(nCells);
+
+
+		const double epsilon2 = particleParams[k].mass;
+		for (int i = 0; i < nCells; i++) {
+			const Eigen::VectorXd state = fluidStates.block(5 * k, i, 5, 1);
+
+			qN(i) = state(0);
+			qU.col(i) = state.segment(1, 3);
+			qE(i) = state(4);
+
+			const double n = state(0);
+			const double rho = epsilon2 * n;
+			const Eigen::Vector3d u = epsilon2 * state.segment(1, 3) / n;
+			const double p = epsilon2 * (gamma - 1) * (state(4) - 0.5 * n * u.squaredNorm());
+
+			density(i) = rho;
+			velocity.col(i) = u;
+			pressure(i) = p;
+		}
+
+		writer.writeData(density, densityTag);
+		writer.writeData(numberDensity, numberDensityTag);
+		writer.writeData(pressure, pressureTag);
+		writer.writeData(velocity, velocityTag);
+
+		writer.writeData(qN, stateN);
+		writer.writeData(qU, stateU);
+		writer.writeData(qE, stateE);
+
+	}
+}
+
+void AppmSolver::writeMaxwellStates(H5Writer & writer)
+{
 }
 
 XdmfGrid AppmSolver::getOutputPrimalEdgeGrid(const int iteration, const double time, const std::string & dataFilename)
@@ -840,6 +1156,10 @@ XdmfGrid AppmSolver::getOutputDualVolumeGrid(const int iteration, const double t
 			(std::stringstream() << dataFilename << ":/velocity").str()
 		));
 	grid.addChild(velocityAttribute);
+
+
+
+
 	return grid;
 }
 
@@ -997,7 +1317,7 @@ const std::string AppmSolver::xdmf_GridPrimalEdges(const int iteration) const
 	ss << "</Topology>" << std::endl;
 
 	ss << "<Geometry GeometryType=\"XYZ\">" << std::endl;
-	ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfVertices() << " 3\"" 
+	ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfVertices() << " 3\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
 	ss << "primal-mesh.h5:/vertexPos" << std::endl;
 	ss << "</DataItem>" << std::endl;
@@ -1010,16 +1330,18 @@ const std::string AppmSolver::xdmf_GridPrimalEdges(const int iteration) const
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
-	ss << "<Attribute Name=\"Electric field\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
-	ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfEdges() << " 3\""
-		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << "appm-" << iteration << ".h5:/E" << std::endl;
-	ss << "</DataItem>" << std::endl;
-	ss << "</Attribute>" << std::endl;
+	if (isWriteEfield) {
+		ss << "<Attribute Name=\"Electric field\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfEdges() << " 3\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << "appm-" << iteration << ".h5:/E" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+	}
+
 	ss << "</Grid>";
 	return ss.str();
 }
-
 const std::string AppmSolver::xdmf_GridPrimalFaces(const int iteration) const
 {
 	H5Reader h5reader;
@@ -1050,12 +1372,14 @@ const std::string AppmSolver::xdmf_GridPrimalFaces(const int iteration) const
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
-	ss << "<Attribute Name=\"Magnetic flux\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
-	ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfFaces() << " 3\""
-		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << "appm-" << iteration << ".h5:/B" << std::endl;
-	ss << "</DataItem>" << std::endl;
-	ss << "</Attribute>" << std::endl;
+	if (isWriteBfield) {
+		ss << "<Attribute Name=\"Magnetic flux\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfFaces() << " 3\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << "appm-" << iteration << ".h5:/B" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+	}
 
 	ss << "<Attribute Name=\"Magnetic flux interpolated\" AttributeType=\"Vector\" Center=\"Node\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfVertices() << " 3\""
@@ -1093,12 +1417,14 @@ const std::string AppmSolver::xdmf_GridDualEdges(const int iteration) const
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
-	ss << "<Attribute Name=\"Magnetic field\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
-	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfEdges() << " 3\""
-		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << "appm-" << iteration << ".h5:/H" << std::endl;
-	ss << "</DataItem>" << std::endl;
-	ss << "</Attribute>" << std::endl;
+	if (isWriteHfield) {
+		ss << "<Attribute Name=\"Magnetic field\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfEdges() << " 3\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << "appm-" << iteration << ".h5:/H" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+	}
 	ss << "</Grid>" << std::endl;
 	return ss.str();
 }
@@ -1133,12 +1459,14 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
-	ss << "<Attribute Name=\"Electric Current\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
-	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
-		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << "appm-" << iteration << ".h5:/J" << std::endl;
-	ss << "</DataItem>" << std::endl;
-	ss << "</Attribute>" << std::endl;
+	if (isWriteJfield) {
+		ss << "<Attribute Name=\"Electric Current\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << "appm-" << iteration << ".h5:/J" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+	}
 	ss << "</Grid>" << std::endl;
 	return ss.str();
 }
@@ -1180,15 +1508,87 @@ const std::string AppmSolver::xdmf_GridDualCells(const int iteration) const
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
+	const std::string datafilename = (std::stringstream() << "appm-" << iteration << ".h5").str();
 
 	ss << "<Attribute Name=\"Magnetic Flux Interpolated\" AttributeType=\"Vector\" Center=\"Node\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfVertices() << " 3\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << "appm-" << iteration << ".h5:/Bvertex" << std::endl;
+	ss << datafilename << ":/Bvertex" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
-	ss << fluidSolver->getXdmfOutput(iteration);
+	//ss << fluidSolver->getXdmfOutput(iteration);
+	ss << fluidXdmfOutput(datafilename) << std::endl;
 	ss << "</Grid>";
+	return ss.str();
+}
+
+/** 
+* Print XDMF output for all fluids. 
+* @param datafilename    Data filename (HDF5)
+*/
+const std::string AppmSolver::fluidXdmfOutput(const std::string & datafilename) const
+{
+	std::stringstream ss;
+	const int nFluids = this->getNFluids();
+	const int nCells = dualMesh.getNumberOfCells();
+	for (int k = 0; k < nFluids; k++) {
+		const std::string fluidName = (std::stringstream() << "" << k).str();
+
+		ss << "<Attribute Name=\"Density " << fluidName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << nCells << "\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << datafilename << ":/" << "fluid" << k << "-density" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+
+		ss << "<Attribute Name=\"Number Density " << fluidName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << nCells << "\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << datafilename << ":/" << "fluid" << k << "-numberDensity" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+
+		ss << "<Attribute Name=\"Pressure " << fluidName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << nCells << "\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << datafilename << ":/" << "fluid" << k << "-pressure" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+
+
+		ss << "<Attribute Name=\"Velocity " << fluidName << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << nCells << " 3\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << datafilename << ":/" << "fluid" << k << "-velocity" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+
+
+
+
+		ss << "<Attribute Name=\"stateN " << fluidName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << nCells << "\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << datafilename << ":/" << "fluid" << k << "-stateN" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+
+
+		ss << "<Attribute Name=\"stateU " << fluidName << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << nCells << " 3\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << datafilename << ":/" << "fluid" << k << "-stateU" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+
+		ss << "<Attribute Name=\"stateE " << fluidName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << nCells << "\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << datafilename << ":/" << "fluid" << k << "-stateE" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+
+	}
 	return ss.str();
 }

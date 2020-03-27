@@ -27,6 +27,7 @@ public:
 	std::vector<Cell*> getCellList() const;
 
 	bool hasFaceEdges(const std::vector<Edge*> faceEdges) const;
+	bool hasFluidCells() const;
 	
 
 	friend std::ostream & operator<<(std::ostream & os, const Face & obj);

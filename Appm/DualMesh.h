@@ -12,7 +12,7 @@ public:
 	DualMesh(const std::string & meshPrefix);
 	~DualMesh();
 
-	void init_dualMesh(const PrimalMesh & primal);
+	void init_dualMesh(const PrimalMesh & primal, const double terminalRadius);
 
 protected:
 
@@ -23,6 +23,6 @@ protected:
 private:
 
 	void init_cellFluidType();
-	void init_faceFluidType();
+	void init_faceFluidType(const double terminalRadius);
 };
 

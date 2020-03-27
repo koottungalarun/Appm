@@ -16,7 +16,7 @@ DualMesh::~DualMesh()
 {
 }
 
-void DualMesh::init_dualMesh(const PrimalMesh & primal)
+void DualMesh::init_dualMesh(const PrimalMesh & primal, const double terminalRadius)
 {
 	assert(primal.getNumberOfCells() > 0);
 	// add dual vertices ... 
@@ -409,7 +409,7 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal)
 	std::cout << "  Fluid: " << nFluidCells << std::endl;
 
 	// Face Fluid Type
-	init_faceFluidType();
+	init_faceFluidType(terminalRadius);
 	const int nFaces = this->getNumberOfFaces();
 	Eigen::VectorXi faceTypes(nFaces);
 	faceTypes.setZero();
@@ -489,9 +489,8 @@ void DualMesh::init_cellFluidType()
 	}
 }
 
-void DualMesh::init_faceFluidType()
+void DualMesh::init_faceFluidType(const double terminalRadius)
 {
-	const double terminalRadius = 0.35;
 	const int nFaces = this->getNumberOfFaces();
 	for (int i = 0; i < nFaces; i++) {
 		Face * face = getFace(i);
