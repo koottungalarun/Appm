@@ -117,19 +117,11 @@ void AppmSolver::run()
 					getAdjacientCellStates(fidx, fluidIdx, qL, qR, s, isReversed);
 
 					// Explicit Rusanov scheme
-					Eigen::Vector3d fL;
-					Eigen::Vector3d fR;
 					Eigen::Vector3d flux;
-					
-					fL(0) = qL(1);
-					fL(1) = 0.5 * (3 - gamma) * pow(qL(1), 2) / qL(0) + (gamma - 1) * qL(2);
-					fL(2) = gamma * qL(1) * qL(2) / qL(0) - 0.5 * (gamma - 1) * pow(qL(1) / qL(0), 2) * qL(1);
+					flux = getRusanovFluxExplicit(qL, qR);
 
-					fR(0) = qR(1);
-					fR(1) = 0.5 * (3 - gamma) * pow(qR(1), 2) / qR(0) + (gamma - 1) * qR(2);
-					fR(2) = gamma * qR(1) * qR(2) / qR(0) - 0.5 * (gamma - 1) * pow(qR(1) / qR(0), 2) * qR(1);
 
-					flux = 0.5 * (fL + fR) - 0.5 * s * (qR - qL);
+
 					flux *= faceArea;
 
 					// apply face flux appropriately
@@ -543,6 +535,29 @@ const double AppmSolver::getWaveSpeed(const Eigen::Vector3d & state) const
 	const double smax = (Eigen::Vector3d(-1, 0, 1).array() * s + u).cwiseAbs().maxCoeff();
 	assert(smax > 0);
 	return smax;
+}
+
+const Eigen::Vector3d AppmSolver::getRusanovFluxExplicit(const Eigen::Vector3d & qL, const Eigen::Vector3d & qR) const
+{
+	Eigen::Vector3d flux;
+	Eigen::Vector3d fL;
+	Eigen::Vector3d fR;
+
+	const double sL = getWaveSpeed(qL);
+	const double sR = getWaveSpeed(qR);
+	const double s = std::max(sL, sR);
+	assert(s > 0);
+
+	fL(0) = qL(1);
+	fL(1) = 0.5 * (3 - gamma) * pow(qL(1), 2) / qL(0) + (gamma - 1) * qL(2);
+	fL(2) = gamma * qL(1) * qL(2) / qL(0) - 0.5 * (gamma - 1) * pow(qL(1) / qL(0), 2) * qL(1);
+
+	fR(0) = qR(1);
+	fR(1) = 0.5 * (3 - gamma) * pow(qR(1), 2) / qR(0) + (gamma - 1) * qR(2);
+	fR(2) = gamma * qR(1) * qR(2) / qR(0) - 0.5 * (gamma - 1) * pow(qR(1) / qR(0), 2) * qR(1);
+
+	flux = 0.5 * (fL + fR) - 0.5 * s * (qR - qL);
+	return flux;
 }
 
 const Eigen::Vector3d AppmSolver::getFluidStateProjected(const Eigen::VectorXd & state, const Eigen::Vector3d & fn) const
