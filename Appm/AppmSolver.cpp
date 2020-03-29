@@ -122,6 +122,7 @@ void AppmSolver::run()
 
 
 
+
 					flux *= faceArea;
 
 					// apply face flux appropriately
@@ -537,26 +538,24 @@ const double AppmSolver::getWaveSpeed(const Eigen::Vector3d & state) const
 	return smax;
 }
 
-const Eigen::Vector3d AppmSolver::getRusanovFluxExplicit(const Eigen::Vector3d & qL, const Eigen::Vector3d & qR) const
+const Eigen::Vector3d AppmSolver::getFluidFluxFromState(const Eigen::Vector3d & q) const
 {
 	Eigen::Vector3d flux;
-	Eigen::Vector3d fL;
-	Eigen::Vector3d fR;
+	flux(0) = q(1);
+	flux(1) = 0.5 * (3 - gamma) * pow(q(1), 2) / q(0) + (gamma - 1) * q(2);
+	flux(2) = gamma * q(1) * q(2) / q(0) - 0.5 * (gamma - 1) * pow(q(1) / q(0), 2) * q(1);
+	return flux;
+}
 
+const Eigen::Vector3d AppmSolver::getRusanovFluxExplicit(const Eigen::Vector3d & qL, const Eigen::Vector3d & qR) const
+{
 	const double sL = getWaveSpeed(qL);
 	const double sR = getWaveSpeed(qR);
 	const double s = std::max(sL, sR);
 	assert(s > 0);
-
-	fL(0) = qL(1);
-	fL(1) = 0.5 * (3 - gamma) * pow(qL(1), 2) / qL(0) + (gamma - 1) * qL(2);
-	fL(2) = gamma * qL(1) * qL(2) / qL(0) - 0.5 * (gamma - 1) * pow(qL(1) / qL(0), 2) * qL(1);
-
-	fR(0) = qR(1);
-	fR(1) = 0.5 * (3 - gamma) * pow(qR(1), 2) / qR(0) + (gamma - 1) * qR(2);
-	fR(2) = gamma * qR(1) * qR(2) / qR(0) - 0.5 * (gamma - 1) * pow(qR(1) / qR(0), 2) * qR(1);
-
-	flux = 0.5 * (fL + fR) - 0.5 * s * (qR - qL);
+	const Eigen::Vector3d fL = getFluidFluxFromState(qL);
+	const Eigen::Vector3d fR = getFluidFluxFromState(qR);
+	const Eigen::Vector3d flux = 0.5 * (fL + fR) - 0.5 * s * (qR - qL);
 	return flux;
 }
 

@@ -81,6 +81,7 @@ private:
 	const double getWaveSpeed(const Eigen::VectorXd & state, const Eigen::Vector3d & fn) const;
 	const double getWaveSpeed(const Eigen::Vector3d & state) const;
 
+	const Eigen::Vector3d getFluidFluxFromState(const Eigen::Vector3d & q) const;
 	const Eigen::Vector3d getRusanovFluxExplicit(const Eigen::Vector3d & qL, const Eigen::Vector3d & qR) const;
 	
 	const Eigen::Vector3d getFluidStateProjected(const Eigen::VectorXd & state, const Eigen::Vector3d & fn) const;
