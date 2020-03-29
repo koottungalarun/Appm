@@ -137,22 +137,19 @@ void AppmSolver::run()
 					faceFlux3d(0) = flux(0);
 					faceFlux3d.segment(1, 3) = flux(1) * faceNormal;
 					faceFlux3d(4) = flux(2);
+					if (isReversed) {
+						faceFlux3d *= -1;
+					}
 
 					if (face->getFluidType() == Face::FluidType::INTERIOR) {
 						assert(faceCells.size() == 2);
-						int idxL, idxR;
-						if (!isReversed) {
-							idxL = faceCells[0]->getIndex();
-							idxR = faceCells[1]->getIndex();
-						}
-						else {
-							idxL = faceCells[1]->getIndex();
-							idxR = faceCells[0]->getIndex();
-						}
-						fluidFluxes.col(idxL).segment(5 * fluidIdx, 5) += faceFlux3d;
-						fluidFluxes.col(idxR).segment(5 * fluidIdx, 5) -= faceFlux3d;
+						const int idx0 = faceCells[0]->getIndex();
+						const int idx1 = faceCells[1]->getIndex();
+						fluidFluxes.col(idx0).segment(5 * fluidIdx, 5) += faceFlux3d;
+						fluidFluxes.col(idx1).segment(5 * fluidIdx, 5) -= faceFlux3d;
 					}
 					if (face->getFluidType() == Face::FluidType::OPENING) {
+						assert(false); // TODO to be checked
 						assert(faceCells.size() == 1);
 						const Cell * cell = faceCells[0];
 						assert(cell->getFluidType() == Cell::FluidType::FLUID);
@@ -161,23 +158,27 @@ void AppmSolver::run()
 						assert(false);
 					}
 					if (face->getFluidType() == Face::FluidType::WALL) {
-						assert(faceCells.size() >= 1);
-						Cell * cell = faceCells[0];
-						if (cell->getFluidType() != Cell::FluidType::FLUID) {
-							assert(faceCells.size() >= 2);
-							cell = faceCells[1];
+						assert(faceCells.size() == 1 || faceCells.size() == 2);
+						if (faceCells.size() == 1) {
+							const Cell * cell = faceCells[0];
+							const int idx = cell->getIndex();
+							fluidFluxes.col(idx).segment(5 * fluidIdx, 5) += faceFlux3d;
 						}
-						assert(cell->getFluidType() == Cell::FluidType::FLUID);
-						int idxL = cell->getIndex();
-
-						const Eigen::Vector3d fc = face->getCenter();
-						const Eigen::Vector3d cc = cell->getCenter();
-						int orientation = (fc - cc).dot(faceNormal) > 0 ? 1 : -1;
-						faceFlux3d.segment(1, 3) *= orientation;
-						fluidFluxes.col(idxL).segment(5 * fluidIdx, 5) += faceFlux3d;
+						if (faceCells.size() == 2) {
+							Cell * cell = faceCells[0];
+							if (cell->getFluidType() == Cell::FluidType::FLUID) {
+								const int idx = cell->getIndex();
+								fluidFluxes.col(idx).segment(5 * fluidIdx, 5) += faceFlux3d;
+							}
+							else {
+								cell = faceCells[1];
+								assert(cell->getFluidType() == Cell::FluidType::FLUID);
+								faceFlux3d *= -1;
+								const int idx = cell->getIndex();
+								fluidFluxes.col(idx).segment(5 * fluidIdx, 5) += faceFlux3d;
+							}
+						}
 					}
-
-
 				}
 			}
 
@@ -281,6 +282,7 @@ void AppmSolver::getAdjacientCellStates(const int fidx, const int fluidIdx, Eige
 	}
 
 	if (faceFluidType == Face::FluidType::OPENING) {
+		assert(false); // TODO to be checked
 		assert(faceCells.size() == 1);
 		const Cell * cell = faceCells[0];
 		assert(cell->getFluidType() == Cell::FluidType::FLUID);
@@ -292,26 +294,56 @@ void AppmSolver::getAdjacientCellStates(const int fidx, const int fluidIdx, Eige
 
 	if (faceFluidType == Face::FluidType::WALL) {
 		// assert(faceCells.size() == 1); // no, it may be that the face is a fluid wall but it has an adjacient solid cell
-		Cell * cell = faceCells[0];
-		if (cell->getFluidType() != Cell::FluidType::FLUID) {
-			assert(faceCells.size() >= 2);
-			cell = faceCells[1];
-			isReversed = true;
+		assert(faceCells.size() == 1 || faceCells.size() == 2);
+		if (faceCells.size() == 1) {
+			const Cell * cell = faceCells[0];
+			assert(cell->getFluidType() == Cell::FluidType::FLUID);
+			if (!isReversed) {
+				const int idxL = cell->getIndex();
+				const Eigen::VectorXd qL3d = fluidStates.col(idxL).segment(5 * fluidIdx, 5);
+				qL = getFluidStateProjected(qL3d, fn);
+				qR = qL.cwiseProduct(Eigen::Vector3d(1, -1, 1));
+			}
+			else {
+				const int idxR = cell->getIndex();
+				const Eigen::VectorXd qR3d = fluidStates.col(idxR).segment(5 * fluidIdx, 5);
+				qR = getFluidStateProjected(qR3d, fn);
+				qL = qR.cwiseProduct(Eigen::Vector3d(1, -1, 1));
+			}
 		}
-		assert(cell->getFluidType() == Cell::FluidType::FLUID);
-		const int idxL = cell->getIndex();
-		Eigen::VectorXd qL3d = fluidStates.col(idxL).segment(5 * fluidIdx, 5);
-		qL = getFluidStateProjected(qL3d, fn);
-		qR = qL;
-		qR(1) *= -1;
+		if (faceCells.size() == 2) {
+			Cell * leftCell;
+			Cell * rightCell;
+			if (!isReversed) {
+				leftCell = faceCells[0];
+				rightCell = faceCells[1];
+			}
+			else {
+				leftCell = faceCells[1];
+				rightCell = faceCells[0];
+			}
+			assert(leftCell->getFluidType() == Cell::FluidType::FLUID || rightCell->getFluidType() == Cell::FluidType::FLUID);
+
+			if (leftCell->getFluidType() == Cell::FluidType::FLUID) {
+				const int idxL = leftCell->getIndex();
+				const Eigen::VectorXd qL3d = fluidStates.col(idxL).segment(5 * fluidIdx, 5);
+				qL = getFluidStateProjected(qL3d, fn);
+				qR = qL.cwiseProduct(Eigen::Vector3d(1, -1, 1));
+			}
+			if (rightCell->getFluidType() == Cell::FluidType::FLUID) {
+				const int idxR = rightCell->getIndex();
+				const Eigen::VectorXd qR3d = fluidStates.col(idxR).segment(5 * fluidIdx, 5);
+				qR = getFluidStateProjected(qR3d, fn);
+				qL = qR.cwiseProduct(Eigen::Vector3d(1, -1, 1));
+			}
+		}
 	}
 	// get wave speed
+	assert(!(qL.array() == 0).all());
+	assert(!(qR.array() == 0).all());
 	const double sL = getWaveSpeed(qL);
 	const double sR = getWaveSpeed(qR);
 	s = std::max(sL, sR);
-
-	assert(!(qL.array() == 0).all());
-	assert(!(qR.array() == 0).all());
 	assert(s > 0);
 }
 

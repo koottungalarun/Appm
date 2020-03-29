@@ -1,4 +1,4 @@
-axialLayers: 20
+axialLayers: 50
 refinements: 2
 outerLayers: 3
 zMax: 5
