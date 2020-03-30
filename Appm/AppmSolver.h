@@ -69,13 +69,14 @@ private:
 	Eigen::MatrixXd fluidStates_new;
 	Eigen::MatrixXd fluidSources;
 	Eigen::MatrixXd fluidFluxes;
+	Eigen::MatrixXd faceFluxes;
 
 	// Isentropic expansion coefficient, aka ratio of heat capacities
 	const double gamma = 1.4; 
 
 	void init_multiFluid(const std::string & filename);
 
-	void init_SodShockTube();
+	void init_SodShockTube(const double zRef);
 	void init_Uniformly(const double n, const double p, const double u);
 
 	const int getFluidStateLength() const;

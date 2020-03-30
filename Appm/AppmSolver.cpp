@@ -20,8 +20,9 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	init_RaviartThomasInterpolation();
 
 	init_multiFluid("particleParameters.txt");
-	//init_SodShockTube();
-	init_Uniformly(1.0, 1.0, 1.0);
+	const double zRef = -2.;
+	init_SodShockTube(zRef);
+	//init_Uniformly(1.0, 1.0, 1.0);
 
 
 }
@@ -63,6 +64,10 @@ void AppmSolver::run()
 	// Time integration loop
 	//double dT = 0.05;
 
+	const int nFluids = this->getNFluids();
+	const int nFaces = dualMesh.getNumberOfFaces();
+	faceFluxes = Eigen::MatrixXd(5*nFluids, nFaces);
+
 	while (iteration < maxIterations && time < maxTime) {
 		std::cout << "Iteration " << iteration << ",\t time = " << time << std::endl;
 
@@ -73,6 +78,7 @@ void AppmSolver::run()
 		}
 		fluidFluxes.setZero();
 		fluidSources.setZero();
+		faceFluxes.setZero();
 
 		// Maxwell equations
 		if (isMaxwellEnabled) {
@@ -117,7 +123,10 @@ void AppmSolver::run()
 
 					// Explicit Rusanov scheme
 					Eigen::Vector3d flux = Eigen::Vector3d::Zero();
-					flux = getRusanovFluxExplicit(fidx, fluidIdx);
+					bool isCollinearZ = faceNormal.cross(Eigen::Vector3d::UnitZ()).norm() < (std::numeric_limits<double>::epsilon() * 128);
+					if (isCollinearZ) {
+						flux = getRusanovFluxExplicit(fidx, fluidIdx);
+					}
 					flux *= faceArea;
 
 					// apply face flux appropriately
@@ -127,6 +136,8 @@ void AppmSolver::run()
 					faceFlux3d(4) = flux(2);
 
 					if (isReversed) { faceFlux3d *= -1; };
+					faceFluxes.col(fidx) = faceFlux3d;
+
 
 					if (face->getFluidType() == Face::FluidType::INTERIOR) {
 						assert(faceCells.size() == 2);
@@ -153,7 +164,9 @@ void AppmSolver::run()
 							fluidFluxes.col(idx).segment(5 * fluidIdx, 5) += faceFlux3d;
 						}
 						else {
+							assert(false);
 							assert(faceCells.size() >= 2);
+							assert(faceCells[0]->getFluidType() != Cell::FluidType::FLUID);
 							cell = faceCells[1];
 							assert(cell->getFluidType() == Cell::FluidType::FLUID);
 							const int idx = cell->getIndex();
@@ -162,6 +175,8 @@ void AppmSolver::run()
 					}
 				}
 			}
+			//std::ofstream faceFluxesFile((std::stringstream() << "faceFluxes" << iteration << ".dat").str());
+			//faceFluxesFile << fluidFluxes << std::endl;
 
 			// Update to next timestep: U(m+1) = U(m) - dt / volume * sum(fluxes)
 			for (int i = 0; i < nCells; i++) {
@@ -266,7 +281,7 @@ const int AppmSolver::getFluidStateLength() const {
 /* 
 * Initialize fluid states (see Sod's shock tube problem).
 */
-void AppmSolver::init_SodShockTube() {
+void AppmSolver::init_SodShockTube(const double zRef) {
 	const int nCells = dualMesh.getNumberOfCells();
 	const int nFluids = getNFluids();
 	const int fluidStateLength = getFluidStateLength();
@@ -300,6 +315,7 @@ void AppmSolver::init_SodShockTube() {
 		leftState.segment(5 * k, 5) = singleFluidStateLeft;
 		rightState.segment(5 * k, 5) = singleFluidStateRight;
 	}
+
 	for (int i = 0; i < nCells; i++) {
 		const Cell * cell = dualMesh.getCell(i);
 		Eigen::VectorXd cellState(fluidStateLength);
@@ -307,7 +323,7 @@ void AppmSolver::init_SodShockTube() {
 
 		if (cell->getFluidType() == Cell::FluidType::FLUID) {
 			const Eigen::Vector3d cellCenterPos = cell->getCenter();
-			cellState = (cellCenterPos(2) < 0) ? leftState : rightState;
+			cellState = (cellCenterPos(2) < zRef) ? leftState : rightState;
 		}
 		else {
 			//const double a = std::nan(""); // value of Not-A-Number
@@ -357,38 +373,37 @@ const double AppmSolver::getNextFluidTimestepSize() const
 	for (int fidx = 0; fidx < nFaces; fidx++) {
 		const Face * face = dualMesh.getFace(fidx);
 		const Eigen::Vector3d fc = face->getCenter();
-		const Eigen::Vector3d fn = face->getNormal();
+		const Eigen::Vector3d faceNormal = face->getNormal();
 		if (!face->hasFluidCells()) {
 			continue;
 		}
 		// Get list of cells (one or two) that are adjacient to this face.
 		const std::vector<Cell*> faceCells = face->getCellList();
 
-		double dt_local = std::numeric_limits<double>::max();
+		Eigen::VectorXd dt_local(faceCells.size());
 		bool is_timestepDefined = false;
-		for (auto cell : faceCells) {
-			// Skip cells that are not of Fluid type
+
+		for (int i = 0; i < faceCells.size(); i++) {
+			const Cell * cell = faceCells[i];
 			if (cell->getFluidType() != Cell::FluidType::FLUID) {
 				continue;
 			}
+			const int cellIdx = cell->getIndex();
 			const Eigen::Vector3d cc = cell->getCenter();
-			const double dx = std::abs((fc - cc).dot(fn));
+			const double dx = std::abs((fc - cc).dot(faceNormal));
 			const Eigen::VectorXd cellState = fluidStates.col(cell->getIndex());
-
-			Eigen::VectorXd waveSpeeds(nFluids);
+			Eigen::VectorXd wavespeeds(nFluids);
 			for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-				waveSpeeds(fluidIdx) = getWaveSpeed(cellState.segment(5 * fluidIdx, 5), fn);
+				Eigen::Vector3d q = getFluidState(cellIdx, fluidIdx, faceNormal);
+				const double s = getWaveSpeed(q);
+				wavespeeds(fluidIdx) = s;
 			}
-			const double smax = waveSpeeds.maxCoeff();
-			dt_local = std::min(dt_local, dx / smax);
-			is_timestepDefined = true;
-			assert(std::isfinite(dt_local));
-			assert(dt_local > 0);
+			const double smax = wavespeeds.maxCoeff();
+			dt_local(i) = smax / dx;
 		}
-		assert(is_timestepDefined);
-		assert(std::isfinite(dt_local));
-		assert(dt_local > 0);
-		dt_faces(fidx) = dt_local;
+		assert(dt_local.allFinite());
+		assert((dt_local.array() > 0).all());
+		dt_faces(fidx) = dt_local.minCoeff();
 	}
 	const double dt = dt_faces.minCoeff();
 	return dt;

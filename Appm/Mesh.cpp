@@ -889,7 +889,21 @@ XdmfGrid Mesh::getXdmfSurfaceGrid() const
 				XdmfDataItem::Format::HDF),
 			faceAreaStringAttribute));
 	surfaceGrid.addChild(attributeFaceArea);
-	
+
+	// Attribute: face normal
+	XdmfAttribute attributeFaceNormal(XdmfAttribute::Tags("Face Normal", XdmfAttribute::Type::Vector, XdmfAttribute::Center::Cell));
+	{
+		std::string faceNormalStringAttribute = (std::stringstream() << this->meshPrefix << "-mesh.h5:/faceNormal").str();
+		attributeFaceNormal.addChild(
+			XdmfDataItem(
+				XdmfDataItem::Tags(
+					{ getNumberOfFaces(), 3 },
+					XdmfDataItem::NumberType::Float,
+					XdmfDataItem::Format::HDF),
+				faceNormalStringAttribute));
+	}
+	surfaceGrid.addChild(attributeFaceNormal);
+
 	return surfaceGrid;
 }
 
