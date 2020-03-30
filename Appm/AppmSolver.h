@@ -73,16 +73,26 @@ private:
 	// Isentropic expansion coefficient, aka ratio of heat capacities
 	const double gamma = 1.4; 
 
-	void getAdjacientCellStates(const int fidx, const int fluidIdx, Eigen::Vector3d & qL, Eigen::Vector3d & qR, double & s, bool & isReversed) const;
-
 	void init_multiFluid(const std::string & filename);
 
+	void init_SodShockTube();
+	void init_Uniformly(const double n, const double p, const double u);
+
+	const int getFluidStateLength() const;
 	const double getNextFluidTimestepSize() const;
 	const double getWaveSpeed(const Eigen::VectorXd & state, const Eigen::Vector3d & fn) const;
 	const double getWaveSpeed(const Eigen::Vector3d & state) const;
 
+	const Eigen::VectorXd getFluidState(const int cellIdx, const int fluidIdx) const;
+	const Eigen::Vector3d getFluidState(const int cellIdx, const int fluidIdx, const Eigen::Vector3d & faceNormal) const;
+	
+
+	const bool isFaceCellsReversed(const int faceIdx) const;
+
 	const Eigen::Vector3d getFluidFluxFromState(const Eigen::Vector3d & q) const;
-	const Eigen::Vector3d getRusanovFluxExplicit(const Eigen::Vector3d & qL, const Eigen::Vector3d & qR) const;
+	//const Eigen::Vector3d getRusanovFluxExplicit(const Eigen::Vector3d & qL, const Eigen::Vector3d & qR) const;
+	const Eigen::Vector3d getRusanovFluxExplicit(const int faceIdx, const int fluidIdx) const;
+	const double getMomentumUpdate(const int k, const Eigen::Vector3d & nvec, const int fluidIdx) const;
 	
 	const Eigen::Vector3d getFluidStateProjected(const Eigen::VectorXd & state, const Eigen::Vector3d & fn) const;
 	void interpolateMagneticFluxToPrimalVertices();

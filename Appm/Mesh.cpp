@@ -959,13 +959,67 @@ XdmfGrid Mesh::getXdmfVolumeGrid() const
 
 void Mesh::writeXdmfVolumeMesh() const
 {
-	XdmfRoot root;
-	XdmfDomain domain;
-	XdmfGrid volumeGrid = getXdmfVolumeGrid();
-	domain.addChild(volumeGrid);
-	root.addChild(domain);
-	std::ofstream file(this->meshPrefix + "-volume.xdmf");
-	file << root << std::endl;
+	{
+		XdmfRoot root;
+		XdmfDomain domain;
+		XdmfGrid volumeGrid = getXdmfVolumeGrid();
+		domain.addChild(volumeGrid);
+
+
+		root.addChild(domain);
+		std::ofstream file(this->meshPrefix + "-volume.xdmf");
+		file << root << std::endl;
+	}
+
+	{
+		XdmfRoot root;
+		XdmfDomain domain;
+		XdmfGrid cellCenterGrid(XdmfGrid::Tags("CellCenterGrid"));
+		{
+			const int nElements = this->getNumberOfCells();
+			XdmfTopology topology(XdmfTopology::Tags(XdmfTopology::TopologyType::Polyvertex, getNumberOfCells(), 1));
+			topology.addChild(
+				XdmfDataItem(
+					XdmfDataItem::Tags(
+						{ nElements },
+						XdmfDataItem::NumberType::Int,
+						XdmfDataItem::Format::HDF),
+						(std::stringstream() << this->meshPrefix << "-mesh.h5:/cellIndex").str()
+				));
+			cellCenterGrid.addChild(topology);
+
+			// Geometry and Geometry DataItem
+			XdmfGeometry geometry;
+			geometry.addChild(
+				XdmfDataItem(
+					XdmfDataItem::Tags(
+						{ getNumberOfCells(), 3 },
+						XdmfDataItem::NumberType::Float,
+						XdmfDataItem::Format::HDF),
+						(std::stringstream() << this->meshPrefix << "-mesh.h5:/cellCenter").str()
+				));
+
+			cellCenterGrid.addChild(geometry);
+
+			// Attribute: cell index
+			{
+				XdmfAttribute attribute(XdmfAttribute::Tags("Cell Center Index", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
+				std::string bodyString = (std::stringstream() << this->meshPrefix << "-mesh.h5:/cellIndex").str();
+				attribute.addChild(
+					XdmfDataItem(
+						XdmfDataItem::Tags(
+							{ getNumberOfCells() },
+							XdmfDataItem::NumberType::Int,
+							XdmfDataItem::Format::HDF),
+						bodyString));
+				cellCenterGrid.addChild(attribute);
+			}
+		}
+		domain.addChild(cellCenterGrid);
+		root.addChild(domain);
+		std::ofstream file(this->meshPrefix + "-cellCenters.xdmf");
+		file << root << std::endl;
+	}
 }
 
 

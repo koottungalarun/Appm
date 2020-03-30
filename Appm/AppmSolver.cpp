@@ -20,6 +20,10 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	init_RaviartThomasInterpolation();
 
 	init_multiFluid("particleParameters.txt");
+	//init_SodShockTube();
+	init_Uniformly(1.0, 1.0, 1.0);
+
+
 }
 
 
@@ -93,7 +97,7 @@ void AppmSolver::run()
 			const int nCells = dualMesh.getNumberOfCells();
 			const int nFaces = dualMesh.getNumberOfFaces();
 			
-			// Flux of energy equation
+			// Calculate flux at each dual face
 			for (int fidx = 0; fidx < nFaces; fidx++) {
 				const Face * face = dualMesh.getFace(fidx);
 				const Eigen::Vector3d faceNormal = face->getNormal();
@@ -105,24 +109,15 @@ void AppmSolver::run()
 				if (!face->hasFluidCells()) {
 					continue;
 				}
-				// TODO: Only interior faces for testing
-				//if (face->getFluidType() != Face::FluidType::INTERIOR) {
-				//	continue;
-				//}
 
 				for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
 					Eigen::Vector3d qL, qR;  // left and right cell state at this face
 					double s = 0;            // wavespeed at face
-					bool isReversed = false; // 
-					getAdjacientCellStates(fidx, fluidIdx, qL, qR, s, isReversed);
+					bool isReversed = isFaceCellsReversed(fidx); 					
 
 					// Explicit Rusanov scheme
-					Eigen::Vector3d flux;
-					flux = getRusanovFluxExplicit(qL, qR);
-
-
-
-
+					Eigen::Vector3d flux = Eigen::Vector3d::Zero();
+					flux = getRusanovFluxExplicit(fidx, fluidIdx);
 					flux *= faceArea;
 
 					// apply face flux appropriately
@@ -130,9 +125,8 @@ void AppmSolver::run()
 					faceFlux3d(0) = flux(0);
 					faceFlux3d.segment(1, 3) = flux(1) * faceNormal;
 					faceFlux3d(4) = flux(2);
-					if (isReversed) {
-						faceFlux3d *= -1;
-					}
+
+					if (isReversed) { faceFlux3d *= -1; };
 
 					if (face->getFluidType() == Face::FluidType::INTERIOR) {
 						assert(faceCells.size() == 2);
@@ -152,24 +146,18 @@ void AppmSolver::run()
 					}
 					if (face->getFluidType() == Face::FluidType::WALL) {
 						assert(faceCells.size() == 1 || faceCells.size() == 2);
-						if (faceCells.size() == 1) {
-							const Cell * cell = faceCells[0];
+
+						const Cell * cell = faceCells[0];
+						if (cell->getFluidType() == Cell::FluidType::FLUID) {
 							const int idx = cell->getIndex();
 							fluidFluxes.col(idx).segment(5 * fluidIdx, 5) += faceFlux3d;
 						}
-						if (faceCells.size() == 2) {
-							Cell * cell = faceCells[0];
-							if (cell->getFluidType() == Cell::FluidType::FLUID) {
-								const int idx = cell->getIndex();
-								fluidFluxes.col(idx).segment(5 * fluidIdx, 5) += faceFlux3d;
-							}
-							else {
-								cell = faceCells[1];
-								assert(cell->getFluidType() == Cell::FluidType::FLUID);
-								faceFlux3d *= -1;
-								const int idx = cell->getIndex();
-								fluidFluxes.col(idx).segment(5 * fluidIdx, 5) += faceFlux3d;
-							}
+						else {
+							assert(faceCells.size() >= 2);
+							cell = faceCells[1];
+							assert(cell->getFluidType() == Cell::FluidType::FLUID);
+							const int idx = cell->getIndex();
+							fluidFluxes.col(idx).segment(5 * fluidIdx, 5) -= faceFlux3d;
 						}
 					}
 				}
@@ -214,132 +202,6 @@ const int AppmSolver::getNFluids() const
 	return particleParams.size();
 }
 
-/** 
-* Get cell states at this face, as indicated by face type.
-*
-* For boundary type faces: the face has only one adjacient fluid cell (= actual cell), the other side has a virtual state
-* The left or right state as defined by face normal vector. 
-*
-* If face type is opening: Virtual state is equal to actual state.
-* If face type is wall:    Virtual state is equal to actual state but with reversed velocity.
-*
-* @param isReversed true if the face normal points from right cell to left cell
-*
-* 
-*/
-void AppmSolver::getAdjacientCellStates(const int fidx, const int fluidIdx, Eigen::Vector3d & qL, Eigen::Vector3d & qR, double & s, bool & isReversed) const
-{
-	// set default output values
-	qL.setZero();
-	qR.setZero();
-	s = 0;
-	isReversed = false;
-
-	// get face data
-	const Face * face = dualMesh.getFace(fidx);
-	const Eigen::Vector3d fn = face->getNormal();
-	const Eigen::Vector3d fc = face->getCenter();
-	const Face::FluidType faceFluidType = face->getFluidType();
-
-	// get face cells
-	const std::vector<Cell*> faceCells = face->getCellList();
-	assert(faceCells.size() >= 1);
-	assert(faceCells.size() <= 2);
-	const Eigen::Vector3d cc = faceCells[0]->getCenter();
-	
-	// determine if cell list is reversed with respect to face normal
-	isReversed = (fc - cc).dot(fn) < 0;
-	const double orientation = isReversed ? -1 : 1;
-
-	// Error: do not call this function with default face type
-	if (faceFluidType == Face::FluidType::DEFAULT) {
-		exit(-1);
-		return;
-	}
-
-	if (faceFluidType == Face::FluidType::INTERIOR) {
-		assert(faceCells.size() == 2);
-		int idxL, idxR;
-		if (isReversed) {
-			idxL = faceCells[1]->getIndex();
-			idxR = faceCells[0]->getIndex();
-		}
-		else {
-			idxL = faceCells[0]->getIndex();
-			idxR = faceCells[1]->getIndex();
-		}
-		const Eigen::VectorXd qL3d = fluidStates.col(idxL).segment(5 * fluidIdx, 5);
-		const Eigen::VectorXd qR3d = fluidStates.col(idxR).segment(5 * fluidIdx, 5);
-		qL = getFluidStateProjected(qL3d, fn);
-		qR = getFluidStateProjected(qR3d, fn);
-	}
-
-	if (faceFluidType == Face::FluidType::OPENING) {
-		assert(false); // TODO to be checked
-		assert(faceCells.size() == 1);
-		const Cell * cell = faceCells[0];
-		assert(cell->getFluidType() == Cell::FluidType::FLUID);
-		const int idxL = cell->getIndex();
-		Eigen::VectorXd qL3d = fluidStates.col(idxL).segment(5 * fluidIdx, 5);
-		qL = getFluidStateProjected(qL3d, fn);
-		qR = qL;
-	}
-
-	if (faceFluidType == Face::FluidType::WALL) {
-		// assert(faceCells.size() == 1); // no, it may be that the face is a fluid wall but it has an adjacient solid cell
-		assert(faceCells.size() == 1 || faceCells.size() == 2);
-		if (faceCells.size() == 1) {
-			const Cell * cell = faceCells[0];
-			assert(cell->getFluidType() == Cell::FluidType::FLUID);
-			if (!isReversed) {
-				const int idxL = cell->getIndex();
-				const Eigen::VectorXd qL3d = fluidStates.col(idxL).segment(5 * fluidIdx, 5);
-				qL = getFluidStateProjected(qL3d, fn);
-				qR = qL.cwiseProduct(Eigen::Vector3d(1, -1, 1));
-			}
-			else {
-				const int idxR = cell->getIndex();
-				const Eigen::VectorXd qR3d = fluidStates.col(idxR).segment(5 * fluidIdx, 5);
-				qR = getFluidStateProjected(qR3d, fn);
-				qL = qR.cwiseProduct(Eigen::Vector3d(1, -1, 1));
-			}
-		}
-		if (faceCells.size() == 2) {
-			Cell * leftCell;
-			Cell * rightCell;
-			if (!isReversed) {
-				leftCell = faceCells[0];
-				rightCell = faceCells[1];
-			}
-			else {
-				leftCell = faceCells[1];
-				rightCell = faceCells[0];
-			}
-			assert(leftCell->getFluidType() == Cell::FluidType::FLUID || rightCell->getFluidType() == Cell::FluidType::FLUID);
-
-			if (leftCell->getFluidType() == Cell::FluidType::FLUID) {
-				const int idxL = leftCell->getIndex();
-				const Eigen::VectorXd qL3d = fluidStates.col(idxL).segment(5 * fluidIdx, 5);
-				qL = getFluidStateProjected(qL3d, fn);
-				qR = qL.cwiseProduct(Eigen::Vector3d(1, -1, 1));
-			}
-			if (rightCell->getFluidType() == Cell::FluidType::FLUID) {
-				const int idxR = rightCell->getIndex();
-				const Eigen::VectorXd qR3d = fluidStates.col(idxR).segment(5 * fluidIdx, 5);
-				qR = getFluidStateProjected(qR3d, fn);
-				qL = qR.cwiseProduct(Eigen::Vector3d(1, -1, 1));
-			}
-		}
-	}
-	// get wave speed
-	assert(!(qL.array() == 0).all());
-	assert(!(qR.array() == 0).all());
-	const double sL = getWaveSpeed(qL);
-	const double sR = getWaveSpeed(qR);
-	s = std::max(sL, sR);
-	assert(s > 0);
-}
-
 void AppmSolver::init_multiFluid(const std::string & filename)
 {
 	// Read parameter file
@@ -380,9 +242,9 @@ void AppmSolver::init_multiFluid(const std::string & filename)
 	std::cout << "Fluid #: Name,\tMass,\tCharge" << std::endl;
 	std::cout << "=====================" << std::endl;
 	for (int i = 0; i < nFluids; i++) {
-		std::cout << "Fluid " << i << ": " 
-			<< particleParams[i].name << "\t" 
-			<< particleParams[i].mass << "\t" 
+		std::cout << "Fluid " << i << ": "
+			<< particleParams[i].name << "\t"
+			<< particleParams[i].mass << "\t"
 			<< particleParams[i].electricCharge << std::endl;
 	}
 	std::cout << std::endl;
@@ -390,14 +252,24 @@ void AppmSolver::init_multiFluid(const std::string & filename)
 	// Initialize data
 
 	const int nCells = dualMesh.getNumberOfCells();
-	const int fluidStateLength = 5 * nFluids;
+	const int fluidStateLength = getFluidStateLength();
 	fluidStates = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
 	fluidStates_new = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
 	fluidSources = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
 	fluidFluxes = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
+}
 
-	// Initialize fluid states (see Sod's shock tube problem)
+const int AppmSolver::getFluidStateLength() const {
+	return 5 * this->getNFluids();
+}
 
+/* 
+* Initialize fluid states (see Sod's shock tube problem).
+*/
+void AppmSolver::init_SodShockTube() {
+	const int nCells = dualMesh.getNumberOfCells();
+	const int nFluids = getNFluids();
+	const int fluidStateLength = getFluidStateLength();
 	Eigen::VectorXd leftState(fluidStateLength);
 	Eigen::VectorXd rightState(fluidStateLength);
 
@@ -442,6 +314,27 @@ void AppmSolver::init_multiFluid(const std::string & filename)
 			//cellState.setConstant(a);
 		}
 		fluidStates.col(i) = cellState;
+	}
+}
+
+void AppmSolver::init_Uniformly(const double n, const double p, const double u)
+{
+	const int nCells = dualMesh.getNumberOfCells();
+	const int nFluids = getNFluids();
+	const int fluidStateLength = getFluidStateLength();
+	Eigen::VectorXd state(fluidStateLength);
+	for (int k = 0; k < nFluids; k++) {
+		const double epsilon2 = particleParams[k].mass;
+		const double e = p / ((gamma - 1) * epsilon2 * n);
+		const double etot = e + 0.5 * pow(u, 2);
+		Eigen::VectorXd singleFluidState(5);
+		singleFluidState(0) = n;
+		singleFluidState.segment(1, 3) = n * u*Eigen::Vector3d::UnitZ();
+		singleFluidState(4) = n * etot;
+		state.segment(5 * k, 5) = singleFluidState;
+	}
+	for (int i = 0; i < nCells; i++) {
+		fluidStates.col(i) = state;
 	}
 }
 
@@ -538,8 +431,38 @@ const double AppmSolver::getWaveSpeed(const Eigen::Vector3d & state) const
 	return smax;
 }
 
+const Eigen::VectorXd AppmSolver::getFluidState(const int cellIdx, const int fluidIdx) const 
+{
+	assert(cellIdx >= 0);
+	assert(cellIdx < fluidStates.cols());
+	assert(fluidIdx >= 0);
+	assert(fluidIdx < getNFluids());
+	return fluidStates.col(cellIdx).segment(5*fluidIdx, 5);
+}
+
+const Eigen::Vector3d AppmSolver::getFluidState(const int cellIdx, const int fluidIdx, const Eigen::Vector3d & faceNormal) const
+{
+	assert(cellIdx >= 0);
+	assert(cellIdx < fluidStates.cols());
+	assert(fluidIdx >= 0);
+	assert(fluidIdx < this->getNFluids());
+	const Eigen::VectorXd cellState = fluidStates.col(cellIdx);
+	const Eigen::VectorXd state = cellState.segment(5 * fluidIdx, 5);
+	return Eigen::Vector3d(state(0), state.segment(1,3).dot(faceNormal), state(4));
+}
+
+const bool AppmSolver::isFaceCellsReversed(const int faceIdx) const
+{
+	const Face * face = dualMesh.getFace(faceIdx);
+	const std::vector<Cell*> faceCells = face->getCellList();
+	assert(faceCells.size() >= 1);
+	bool isReversed = (face->getCenter() - faceCells[0]->getCenter()).dot(face->getNormal()) < 0;
+	return isReversed;
+}
+
 const Eigen::Vector3d AppmSolver::getFluidFluxFromState(const Eigen::Vector3d & q) const
 {
+	assert(q.norm() > 0);
 	Eigen::Vector3d flux;
 	flux(0) = q(1);
 	flux(1) = 0.5 * (3 - gamma) * pow(q(1), 2) / q(0) + (gamma - 1) * q(2);
@@ -547,16 +470,110 @@ const Eigen::Vector3d AppmSolver::getFluidFluxFromState(const Eigen::Vector3d & 
 	return flux;
 }
 
-const Eigen::Vector3d AppmSolver::getRusanovFluxExplicit(const Eigen::Vector3d & qL, const Eigen::Vector3d & qR) const
+//const Eigen::Vector3d AppmSolver::getRusanovFluxExplicit(const Eigen::Vector3d & qL, const Eigen::Vector3d & qR) const
+//{
+//	const double sL = getWaveSpeed(qL);
+//	const double sR = getWaveSpeed(qR);
+//	const double s = std::max(sL, sR);
+//	assert(s > 0);
+//	const Eigen::Vector3d fL = getFluidFluxFromState(qL);
+//	const Eigen::Vector3d fR = getFluidFluxFromState(qR);
+//	const Eigen::Vector3d flux = 0.5 * (fL + fR) - 0.5 * s * (qR - qL);
+//	return flux;
+//}
+
+const Eigen::Vector3d AppmSolver::getRusanovFluxExplicit(const int faceIdx, const int fluidIdx) const
 {
+	const Face * face = dualMesh.getFace(faceIdx);
+	const std::vector<Cell*> faceCells = face->getCellList();
+	assert(faceCells.size() >= 1);
+
+	const Eigen::Vector3d faceNormal = face->getNormal();
+	bool isReversed = isFaceCellsReversed(faceIdx);
+	Eigen::Vector3d qL;
+	Eigen::Vector3d qR;
+	qL.setZero();
+	qR.setZero();
+	int idxL = -1; 
+	int idxR = -1;
+	bool isLeftCellFluid;
+	Cell * cell = nullptr;
+
+	const Face::FluidType faceFluidType = face->getFluidType();
+	switch (faceFluidType) {
+	case Face::FluidType::INTERIOR:
+		assert(faceCells.size() == 2);
+		assert(faceCells[0]->getFluidType() == Cell::FluidType::FLUID);
+		assert(faceCells[1]->getFluidType() == Cell::FluidType::FLUID);
+		if (isReversed) {
+			idxL = faceCells[1]->getIndex();
+			idxR = faceCells[0]->getIndex();
+		}
+		else {
+			idxL = faceCells[0]->getIndex();
+			idxR = faceCells[1]->getIndex();
+		}
+		//idxL = faceCells[isReversed ? 1 : 0]->getIndex();
+		//idxR = faceCells[isReversed ? 0 : 1]->getIndex();
+		qL = getFluidState(idxL, fluidIdx, faceNormal);
+		qR = getFluidState(idxR, fluidIdx, faceNormal);
+		break;
+
+	case Face::FluidType::OPENING:
+		assert(faceCells.size() >= 1);
+		assert(false);
+		exit(-1);
+		break;
+
+	case Face::FluidType::WALL:
+		assert(faceCells.size() >= 1 && faceCells.size() <= 2);
+		if (faceCells[0]->getFluidType() == Cell::FluidType::FLUID) {
+			const int idxL = faceCells[0]->getIndex();
+			qL = getFluidState(idxL, fluidIdx, faceNormal);
+			qR = qL.cwiseProduct(Eigen::Vector3d(1, -1, 1));
+		}
+		else {
+			assert(faceCells.size() >= 2);
+			assert(faceCells[1]->getFluidType() == Cell::FluidType::FLUID);
+			const int idxR = faceCells[1]->getIndex();
+			qR = getFluidState(idxR, fluidIdx, faceNormal);
+			qL = qR.cwiseProduct(Eigen::Vector3d(1, -1, 1));
+		}
+		break;
+
+	default:
+		std::cout << "Face Fluid Type not implemented" << std::endl;
+		exit(-1);
+	}
+
+	const Eigen::Vector3d fL = getFluidFluxFromState(qL);
+	const Eigen::Vector3d fR = getFluidFluxFromState(qR);
 	const double sL = getWaveSpeed(qL);
 	const double sR = getWaveSpeed(qR);
 	const double s = std::max(sL, sR);
 	assert(s > 0);
-	const Eigen::Vector3d fL = getFluidFluxFromState(qL);
-	const Eigen::Vector3d fR = getFluidFluxFromState(qR);
-	const Eigen::Vector3d flux = 0.5 * (fL + fR) - 0.5 * s * (qR - qL);
+	Eigen::Vector3d flux = 0.5 * (fL + fR) - 0.5 * s * (qR - qL);
+	//if (faceFluidType != Face::FluidType::WALL) {
+	//	flux.setZero();
+	//}
 	return flux;
+}
+
+const double AppmSolver::getMomentumUpdate(const int k, const Eigen::Vector3d & nvec, const int fluidIdx) const
+{
+	double result = 0;
+	const Cell * cell = dualMesh.getCell(k);
+	const std::vector<Face*> cellFaces = cell->getFaceList();
+	for (auto face : cellFaces) {
+		const double faceArea = face->getArea();
+		const Eigen::Vector3d faceNormal = face->getNormal();
+		const Eigen::Vector3d faceFlux = getRusanovFluxExplicit(face->getIndex(), fluidIdx);
+		const double momentumFlux = faceFlux(1);
+		double localResult = momentumFlux * faceArea * faceNormal.dot(nvec);
+		result += localResult;
+	}
+	result /= cell->getVolume();
+	return result;
 }
 
 const Eigen::Vector3d AppmSolver::getFluidStateProjected(const Eigen::VectorXd & state, const Eigen::Vector3d & fn) const
