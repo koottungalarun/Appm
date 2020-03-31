@@ -21,8 +21,8 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 
 	init_multiFluid("particleParameters.txt");
 	const double zRef = -2.;
-	init_SodShockTube(zRef);
-	//init_Uniformly(1.0, 1.0, 1.0);
+	//init_SodShockTube(zRef);
+	init_Uniformly(1.0, 1.0, 1.0);
 
 
 }
@@ -59,14 +59,15 @@ void AppmSolver::run()
 	//	maxwellSolver->setTorusCurrent(x1, x2, z1, z2);
 	//}
 
-	writeOutput(iteration, time);
-
+	
 	// Time integration loop
 	//double dT = 0.05;
 
 	const int nFluids = this->getNFluids();
 	const int nFaces = dualMesh.getNumberOfFaces();
-	faceFluxes = Eigen::MatrixXd(5*nFluids, nFaces);
+	faceFluxes = Eigen::MatrixXd::Zero(5*nFluids, nFaces);
+
+	writeOutput(iteration, time);
 
 	while (iteration < maxIterations && time < maxTime) {
 		std::cout << "Iteration " << iteration << ",\t time = " << time << std::endl;
@@ -127,7 +128,6 @@ void AppmSolver::run()
 					if (isCollinearZ) {
 						flux = getRusanovFluxExplicit(fidx, fluidIdx);
 					}
-					flux *= faceArea;
 
 					// apply face flux appropriately
 					Eigen::VectorXd faceFlux3d(5);
@@ -135,9 +135,14 @@ void AppmSolver::run()
 					faceFlux3d.segment(1, 3) = flux(1) * faceNormal;
 					faceFlux3d(4) = flux(2);
 
+					// reverse flux direction
 					if (isReversed) { faceFlux3d *= -1; };
-					faceFluxes.col(fidx) = faceFlux3d;
+					
+					// store data
+					faceFluxes.col(fidx) = faceFlux3d; 
 
+					// multiply flux by face area
+					faceFlux3d *= faceArea;
 
 					if (face->getFluidType() == Face::FluidType::INTERIOR) {
 						assert(faceCells.size() == 2);
@@ -176,7 +181,7 @@ void AppmSolver::run()
 				}
 			}
 			//std::ofstream faceFluxesFile((std::stringstream() << "faceFluxes" << iteration << ".dat").str());
-			//faceFluxesFile << fluidFluxes << std::endl;
+			//faceFluxesFile << faceFluxes << std::endl;
 
 			// Update to next timestep: U(m+1) = U(m) - dt / volume * sum(fluxes)
 			for (int i = 0; i < nCells; i++) {
@@ -210,6 +215,7 @@ void AppmSolver::run()
 	// Therefore, the mesh data for vertices, edges, and faces, are separated from the volume data.
 	writeXdmf();
 	writeXdmfDualVolume();
+	//writeXdmfDualFaceFluxes();
 }
 
 const int AppmSolver::getNFluids() const
@@ -381,6 +387,7 @@ const double AppmSolver::getNextFluidTimestepSize() const
 		const std::vector<Cell*> faceCells = face->getCellList();
 
 		Eigen::VectorXd dt_local(faceCells.size());
+		dt_local.setConstant(std::numeric_limits<double>::max());
 		bool is_timestepDefined = false;
 
 		for (int i = 0; i < faceCells.size(); i++) {
@@ -391,6 +398,7 @@ const double AppmSolver::getNextFluidTimestepSize() const
 			const int cellIdx = cell->getIndex();
 			const Eigen::Vector3d cc = cell->getCenter();
 			const double dx = std::abs((fc - cc).dot(faceNormal));
+			assert(dx > 1e-6);
 			const Eigen::VectorXd cellState = fluidStates.col(cell->getIndex());
 			Eigen::VectorXd wavespeeds(nFluids);
 			for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
@@ -398,14 +406,19 @@ const double AppmSolver::getNextFluidTimestepSize() const
 				const double s = getWaveSpeed(q);
 				wavespeeds(fluidIdx) = s;
 			}
+			assert((wavespeeds.array() > 0).all());
 			const double smax = wavespeeds.maxCoeff();
-			dt_local(i) = smax / dx;
+			assert(smax > 0);
+			assert(smax > 1e-6);
+			assert(smax < 1e6);
+			dt_local(i) = dx / smax;
 		}
 		assert(dt_local.allFinite());
-		assert((dt_local.array() > 0).all());
+		assert((dt_local.array() > 1e-12).all());
 		dt_faces(fidx) = dt_local.minCoeff();
 	}
 	const double dt = dt_faces.minCoeff();
+	assert(dt > 1e-12);
 	return dt;
 }
 
@@ -788,6 +801,26 @@ void AppmSolver::writeXdmfDualVolume()
 	file << "</Xdmf>" << std::endl;
 }
 
+//void AppmSolver::writeXdmfDualFaceFluxes()
+//{
+//	const int nTimesteps = timeStamps.size();
+//	const std::string filename = "appm-faceFluxes.xdmf";
+//	std::ofstream file(filename);
+//	file << "<?xml version = \"1.0\" ?>" << std::endl;
+//	file << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << std::endl;
+//	file << "<Xdmf Version=\"3.0\" xmlns:xi=\"[http://www.w3.org/2001/XInclude]\">" << std::endl;
+//	file << "<Domain>" << std::endl;
+//	file << "<Grid Name=\"Time Grid\" GridType=\"Collection\" CollectionType=\"Temporal\">" << std::endl;
+//	for (int i = 0; i < nTimesteps; i++) {
+//		const double time = this->timeStamps[i];
+//		file << "<Time Value=\"" << time << "\" />" << std::endl;
+//		file << xdmf_GridDualFaces(i) << std::endl;
+//	}
+//	file << "</Grid>" << std::endl;
+//	file << "</Domain>" << std::endl;
+//	file << "</Xdmf>" << std::endl;
+//}
+
 
 void AppmSolver::writeOutput(const int iteration, const double time)
 {
@@ -819,6 +852,31 @@ void AppmSolver::writeOutput(const int iteration, const double time)
 	Eigen::VectorXi iterVec(1);
 	iterVec(0) = iteration;
 	h5writer.writeData(iterVec, "/iteration");
+
+	for (int nf = 0; nf < getNFluids(); nf++) {
+		//std::cout << "Face fluxes size: ";
+		//std::cout << faceFluxes.rows() << " x " << faceFluxes.cols() << std::endl;
+		//assert(nDualFaces == faceFluxes.cols());
+		assert(getNFluids() == 1);
+		assert(faceFluxes.cols() > 0);
+		assert(faceFluxes.rows() > 0);
+		assert(nDualFaces == faceFluxes.cols());
+		{
+			Eigen::VectorXd faceFluxMass(nDualFaces);
+			faceFluxMass = faceFluxes.row(0);
+			h5writer.writeData(faceFluxMass, "/faceFluxMass" + nf);
+		}
+		{
+			Eigen::MatrixXd faceFluxMomentum(3, nDualFaces);
+			faceFluxMomentum = faceFluxes.block(1, 0, 3, nDualFaces);
+			h5writer.writeData(faceFluxMomentum, "/faceFluxMomentum" + nf);
+		} 
+		{
+			Eigen::VectorXd faceFluxEnergy(nDualFaces);
+			faceFluxEnergy = faceFluxes.row(4);
+			h5writer.writeData(faceFluxEnergy, "/faceFluxEnergy" + nf);
+		}
+	}
 }
 
 void AppmSolver::writeFluidStates(H5Writer & writer)
@@ -1539,6 +1597,16 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 	ss << "dual-mesh.h5:/faceIndex" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
+	
+	ss << "<Attribute Name=\"Face Fluid Type\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
+		<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
+	ss << "dualMeshTypes.h5:/faceFluidTypes" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+
+
 
 	if (isWriteJfield) {
 		ss << "<Attribute Name=\"Electric Current\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
@@ -1548,6 +1616,30 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 	}
+
+
+
+	ss << "<Attribute Name=\"Face Flux Mass\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/faceFluxMass" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Face Flux Momentum\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/faceFluxMomentum" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Face Flux Energy\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/faceFluxEnergy" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
 	ss << "</Grid>" << std::endl;
 	return ss.str();
 }

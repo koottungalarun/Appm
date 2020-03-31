@@ -107,6 +107,7 @@ private:
 
 	void writeXdmf();
 	void writeXdmfDualVolume();
+	void writeXdmfDualFaceFluxes();
 
 	void writeOutput(const int iteration, const double time);
 
