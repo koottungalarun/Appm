@@ -71,6 +71,8 @@ private:
 	Eigen::MatrixXd fluidFluxes;
 	Eigen::MatrixXd faceFluxes;
 
+	int faceIdxRef = -1;
+
 	// Isentropic expansion coefficient, aka ratio of heat capacities
 	const double gamma = 1.4; 
 
@@ -87,8 +89,8 @@ private:
 	const Eigen::VectorXd getFluidState(const int cellIdx, const int fluidIdx) const;
 	const Eigen::Vector3d getFluidState(const int cellIdx, const int fluidIdx, const Eigen::Vector3d & faceNormal) const;
 	
-
-	const bool isFaceCellsReversed(const int faceIdx) const;
+	const int getOrientation(const Cell * cell, const Face * face) const;
+	//const bool isFaceCellsReversed(const int faceIdx) const;
 
 	const Eigen::Vector3d getFluidFluxFromState(const Eigen::Vector3d & q) const;
 	//const Eigen::Vector3d getRusanovFluxExplicit(const Eigen::Vector3d & qL, const Eigen::Vector3d & qR) const;

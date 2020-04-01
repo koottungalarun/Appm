@@ -101,14 +101,12 @@ bool Face::hasFaceEdges(const std::vector<Edge*> faceEdges) const
 
 bool Face::hasFluidCells() const
 {
-	bool result = false;
 	for (auto cell : cellList) {
 		if (cell->getFluidType() == Cell::FluidType::FLUID) {
-			result = true;
-			break;
+			return true;
 		}
 	}
-	return result;
+	return false;
 }
 
 const int Face::getOrientation(const Edge * edge)
@@ -131,6 +129,17 @@ const int Face::getOrientation(const Edge * edge)
 	assert(dotProduct != 0);	
 	const int orientation = (dotProduct > 0) ? 1 : -1;
 	return orientation;
+}
+
+const bool Face::isAdjacient(const Cell * cell) const
+{
+	assert(cell != nullptr);
+	for (auto c : cellList) {
+		if (c == cell) {
+			return true;
+		}
+	}
+	return false;
 }
 
 bool Face::isBoundary() const

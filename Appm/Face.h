@@ -34,6 +34,8 @@ public:
 
 	const int getOrientation(const Edge * edge);
 
+	const bool isAdjacient(const Cell * cell) const;
+
 	bool isBoundary() const;
 	bool hasBoundaryEdges() const;
 

@@ -1,5 +1,5 @@
-maxIterations: 1
-maxTime: 0.35
+maxIterations: 5
+maxTime: 10
 isFluidEnabled: 1
 isMaxwellEnabled: 0
 timestepSize: 1.0
