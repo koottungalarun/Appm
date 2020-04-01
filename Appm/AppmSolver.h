@@ -12,6 +12,8 @@
 #include "MaxwellSolverCrankNicholson.h"
 #include "MaxwellSolverImplicitEuler.h"
 
+#include "Physics.h"
+
 #include <Eigen/SparseLU>
 
 
@@ -74,13 +76,15 @@ private:
 	int faceIdxRef = -1;
 
 	// Isentropic expansion coefficient, aka ratio of heat capacities
-	const double gamma = 1.4; 
+	//const double gamma = 1.4; 
 
 	void init_multiFluid(const std::string & filename);
 
 	void init_SodShockTube(const double zRef);
 	void init_Uniformly(const double n, const double p, const double u);
+	void init_Explosion();
 
+	
 	const int getFluidStateLength() const;
 	const double getNextFluidTimestepSize() const;
 	const double getWaveSpeed(const Eigen::VectorXd & state, const Eigen::Vector3d & fn) const;

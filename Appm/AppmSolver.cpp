@@ -22,9 +22,9 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 
 	init_multiFluid("particleParameters.txt");
 	const double zRef = 0.;
-	init_SodShockTube(zRef);
+	//init_SodShockTube(zRef);
 	//init_Uniformly(1.0, 1.0, 1.0);
-
+	init_Explosion();
 
 }
 
@@ -139,7 +139,7 @@ void AppmSolver::run()
 						flux = getRusanovFluxExplicit(fidx, fluidIdx);
 					//}
 
-					// apply face flux appropriately
+					// 3D face flux data vector 
 					Eigen::VectorXd faceFlux3d(5);
 					faceFlux3d(0) = flux(0);
 					faceFlux3d.segment(1, 3) = flux(1) * faceNormal;
@@ -183,11 +183,41 @@ void AppmSolver::run()
 					}
 				}
 			}
+
+			// Set source term
+			if (time < 0) {
+				for (int cIdx = 0; cIdx < nCells; cIdx++) {
+					const Cell * cell = dualMesh.getCell(cIdx);
+
+					// Skip cell that ore not of type Fluid
+					if (cell->getFluidType() != Cell::FluidType::FLUID) {
+						continue;
+					}
+					// For all fluids ... 
+					for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+						Eigen::VectorXd srcLocal(5);
+						srcLocal.setZero();
+
+						// Define geometric position of source region: ball of radius r around reference position
+						const Eigen::Vector3d cc = cell->getCenter();
+						const Eigen::Vector3d srcRefPos(0, 0, 0);
+						const double srcRadius = 0.2;
+
+						if ((cc - srcRefPos).norm() < srcRadius) {
+							srcLocal(0) = 0; // mass source
+							srcLocal.segment(1, 3) = Eigen::Vector3d::Zero(); // momentum source
+							srcLocal(4) = 1; // energy source
+						}
+						fluidSources.col(cIdx).segment(5 * fluidIdx, 5) = srcLocal;
+					}
+				}
+			}
+
 			// Update to next timestep: U(m+1) = U(m) - dt / volume * sum(fluxes)
 			for (int i = 0; i < nCells; i++) {
 				const Cell * cell = dualMesh.getCell(i);
 				double cellVolume = cell->getVolume();
-				fluidStates_new.col(i) = fluidStates.col(i) - dt / cellVolume * fluidFluxes.col(i) + 0* dt * fluidSources.col(i);
+				fluidStates_new.col(i) = fluidStates.col(i) - dt / cellVolume * fluidFluxes.col(i) + dt * fluidSources.col(i);
 			}
 			fluidStates = fluidStates_new; // update data storage to new timestep
 			fluidStates_new.setZero();     // clear auxiliary data storage
@@ -311,12 +341,12 @@ void AppmSolver::init_SodShockTube(const double zRef) {
 		Eigen::VectorXd singleFluidStateLeft(5);
 		singleFluidStateLeft(0) = nL;
 		singleFluidStateLeft.segment(1, 3).setZero();
-		singleFluidStateLeft(4) = 1. / epsilon2 * (pL / (gamma - 1) + 0.5 * rhoL * uL.squaredNorm());
+		singleFluidStateLeft(4) = 1. / epsilon2 * (pL / (Physics::gamma - 1) + 0.5 * rhoL * uL.squaredNorm());
 
 		Eigen::VectorXd singleFluidStateRight(5);
 		singleFluidStateRight(0) = nR;
 		singleFluidStateRight.segment(1, 3).setZero();
-		singleFluidStateRight(4) = 1. / epsilon2 * (pR / (gamma - 1) + 0.5 * rhoR * uR.squaredNorm());
+		singleFluidStateRight(4) = 1. / epsilon2 * (pR / (Physics::gamma - 1) + 0.5 * rhoR * uR.squaredNorm());
 
 		leftState.segment(5 * k, 5) = singleFluidStateLeft;
 		rightState.segment(5 * k, 5) = singleFluidStateRight;
@@ -347,7 +377,7 @@ void AppmSolver::init_Uniformly(const double n, const double p, const double u)
 	Eigen::VectorXd state(fluidStateLength);
 	for (int k = 0; k < nFluids; k++) {
 		const double epsilon2 = particleParams[k].mass;
-		const double e = p / ((gamma - 1) * epsilon2 * n);
+		const double e = p / ((Physics::gamma - 1) * epsilon2 * n);
 		const double etot = e + 0.5 * pow(u, 2);
 		Eigen::VectorXd singleFluidState(5);
 		singleFluidState(0) = n;
@@ -360,6 +390,32 @@ void AppmSolver::init_Uniformly(const double n, const double p, const double u)
 		const Cell * cell = dualMesh.getCell(i);
 		if (cell->getFluidType() == Cell::FluidType::FLUID) {
 			fluidStates.col(i) = state;
+		}
+	}
+}
+
+void AppmSolver::init_Explosion()
+{
+	const Eigen::Vector3d refPos = Eigen::Vector3d(0, 0, 0);
+	const double radius = 0.2;
+	Eigen::VectorXd state_lo = Physics::primitive2state(1, 1, Eigen::Vector3d::Zero());
+	Eigen::VectorXd state_hi = Physics::primitive2state(1, 5, Eigen::Vector3d::Zero());
+
+	const int nCells = dualMesh.getNumberOfCells();
+	const int nFluids = getNFluids();
+	for (int cIdx = 0; cIdx < nCells; cIdx++) {
+		const Cell * cell = dualMesh.getCell(cIdx);
+		if (cell->getFluidType() != Cell::FluidType::FLUID) { continue; } // Skip cells that are not Fluid type
+		const Eigen::Vector3d cc = cell->getCenter();
+		for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+			Eigen::VectorXd state;			
+			if ((cc - refPos).norm() < radius) {
+				state = state_hi;
+			}
+			else {
+				state = state_lo;
+			}
+			fluidStates.col(cIdx).segment(5 * fluidIdx, 5) = state;
 		}
 	}
 }
@@ -418,7 +474,6 @@ const double AppmSolver::getNextFluidTimestepSize() const
 			dt_local(i) = dx / smax;
 		}
 		assert(dt_local.allFinite());
-		assert((dt_local.array() > 1e-12).all());
 		dt_faces(fidx) = dt_local.minCoeff();
 	}
 	const double dt = dt_faces.minCoeff();
@@ -436,7 +491,7 @@ const double AppmSolver::getWaveSpeed(const Eigen::VectorXd & state, const Eigen
 	const double n = state(0);
 	const double u = state.segment(1, 3).dot(fn) / n; // velocity projected in direction of face normal
 	const double etot = state(4) / n;
-	const double s2 = gamma * (gamma - 1) * (etot - 0.5 * pow(u, 2));
+	const double s2 = Physics::gamma * (Physics::gamma - 1) * (etot - 0.5 * pow(u, 2));
 	assert(std::isfinite(s2));
 	assert(s2 > 0);
 	const double s = sqrt(s2);
@@ -453,7 +508,7 @@ const double AppmSolver::getWaveSpeed(const Eigen::Vector3d & state) const
 	const double n = state(0);
 	const double u = state(1) / state(0);
 	const double etot = state(2) / state(0);
-	const double s2 = gamma * (gamma - 1) * (etot - 0.5 * pow(u, 2));
+	const double s2 = Physics::gamma * (Physics::gamma - 1) * (etot - 0.5 * pow(u, 2));
 	assert(std::isfinite(s2));
 	assert(s2 > 0);
 	const double s = sqrt(s2);
@@ -500,8 +555,8 @@ const Eigen::Vector3d AppmSolver::getFluidFluxFromState(const Eigen::Vector3d & 
 	assert(q.norm() > 0);
 	Eigen::Vector3d flux;
 	flux(0) = q(1);
-	flux(1) = 0.5 * (3 - gamma) * pow(q(1), 2) / q(0) + (gamma - 1) * q(2);
-	flux(2) = gamma * q(1) * q(2) / q(0) - 0.5 * (gamma - 1) * pow(q(1) / q(0), 2) * q(1);
+	flux(1) = 0.5 * (3 - Physics::gamma) * pow(q(1), 2) / q(0) + (Physics::gamma - 1) * q(2);
+	flux(2) = Physics::gamma * q(1) * q(2) / q(0) - 0.5 * (Physics::gamma - 1) * pow(q(1) / q(0), 2) * q(1);
 	return flux;
 }
 
@@ -587,7 +642,6 @@ const Eigen::Vector3d AppmSolver::getRusanovFluxExplicit(const int faceIdx, cons
 	const double s = std::max(sL, sR);
 	assert(s > 0);
 	const Eigen::Vector3d flux = 0.5 * (fL + fR) - 0.5 * s * (qR - qL);
-
 	if (faceIdx == faceIdxRef) {
 		std::cout << "qL:\t" << qL.transpose() << std::endl;
 		std::cout << "qR:\t" << qR.transpose() << std::endl;
@@ -927,7 +981,7 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 			const double n = state(0);
 			const double rho = epsilon2 * n;
 			const Eigen::Vector3d u = epsilon2 * state.segment(1, 3) / n;
-			const double p = epsilon2 * (gamma - 1) * (state(4) - 0.5 * n * u.squaredNorm());
+			const double p = epsilon2 * (Physics::gamma - 1) * (state(4) - 0.5 * n * u.squaredNorm());
 
 			density(i) = rho;
 			velocity.col(i) = u;
