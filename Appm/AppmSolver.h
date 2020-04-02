@@ -73,7 +73,7 @@ private:
 	Eigen::MatrixXd fluidFluxes;
 	Eigen::MatrixXd faceFluxes;
 
-	int faceIdxRef = -1;
+	const int faceIdxRef = -1;
 
 	// Isentropic expansion coefficient, aka ratio of heat capacities
 	//const double gamma = 1.4; 
@@ -82,26 +82,21 @@ private:
 
 	void init_SodShockTube(const double zRef);
 	void init_Uniformly(const double n, const double p, const double u);
-	void init_Explosion();
+	void init_Explosion(const Eigen::Vector3d refPos, const double radius);
 
 	
 	const int getFluidStateLength() const;
 	const double getNextFluidTimestepSize() const;
-	const double getWaveSpeed(const Eigen::VectorXd & state, const Eigen::Vector3d & fn) const;
-	const double getWaveSpeed(const Eigen::Vector3d & state) const;
 
-	const Eigen::VectorXd getFluidState(const int cellIdx, const int fluidIdx) const;
+	//const Eigen::VectorXd getFluidState(const int cellIdx, const int fluidIdx) const;
 	const Eigen::Vector3d getFluidState(const int cellIdx, const int fluidIdx, const Eigen::Vector3d & faceNormal) const;
 	
 	const int getOrientation(const Cell * cell, const Face * face) const;
-	//const bool isFaceCellsReversed(const int faceIdx) const;
-
-	const Eigen::Vector3d getFluidFluxFromState(const Eigen::Vector3d & q) const;
-	//const Eigen::Vector3d getRusanovFluxExplicit(const Eigen::Vector3d & qL, const Eigen::Vector3d & qR) const;
+	
+	//const Eigen::Vector3d getFluidFluxFromState(const Eigen::Vector3d & q) const;
 	const Eigen::Vector3d getRusanovFluxExplicit(const int faceIdx, const int fluidIdx) const;
 	const double getMomentumUpdate(const int k, const Eigen::Vector3d & nvec, const int fluidIdx) const;
 	
-	const Eigen::Vector3d getFluidStateProjected(const Eigen::VectorXd & state, const Eigen::Vector3d & fn) const;
 	void interpolateMagneticFluxToPrimalVertices();
 
 	// void test_raviartThomas();
@@ -113,8 +108,7 @@ private:
 
 	void writeXdmf();
 	void writeXdmfDualVolume();
-	void writeXdmfDualFaceFluxes();
-
+	
 	void writeOutput(const int iteration, const double time);
 
 	void writeFluidStates(H5Writer & writer);

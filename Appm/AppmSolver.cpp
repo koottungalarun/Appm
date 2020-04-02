@@ -24,7 +24,10 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	const double zRef = 0.;
 	//init_SodShockTube(zRef);
 	//init_Uniformly(1.0, 1.0, 1.0);
-	init_Explosion();
+
+	const Eigen::Vector3d refPos = Eigen::Vector3d(0, 0, 0);
+	const double radius = 0.2;
+	init_Explosion(refPos, radius);
 
 }
 
@@ -339,13 +342,13 @@ void AppmSolver::init_SodShockTube(const double zRef) {
 		const Eigen::Vector3d uR = Eigen::Vector3d::Zero();
 
 		Eigen::VectorXd singleFluidStateLeft(5);
+		singleFluidStateLeft.setZero();
 		singleFluidStateLeft(0) = nL;
-		singleFluidStateLeft.segment(1, 3).setZero();
 		singleFluidStateLeft(4) = 1. / epsilon2 * (pL / (Physics::gamma - 1) + 0.5 * rhoL * uL.squaredNorm());
 
 		Eigen::VectorXd singleFluidStateRight(5);
+		singleFluidStateRight.setZero();
 		singleFluidStateRight(0) = nR;
-		singleFluidStateRight.segment(1, 3).setZero();
 		singleFluidStateRight(4) = 1. / epsilon2 * (pR / (Physics::gamma - 1) + 0.5 * rhoR * uR.squaredNorm());
 
 		leftState.segment(5 * k, 5) = singleFluidStateLeft;
@@ -381,7 +384,7 @@ void AppmSolver::init_Uniformly(const double n, const double p, const double u)
 		const double etot = e + 0.5 * pow(u, 2);
 		Eigen::VectorXd singleFluidState(5);
 		singleFluidState(0) = n;
-		singleFluidState.segment(1, 3) = n * u*Eigen::Vector3d::UnitZ();
+		singleFluidState.segment(1, 3) = n * u * Eigen::Vector3d::UnitZ();
 		singleFluidState(4) = n * etot;
 		state.segment(5 * k, 5) = singleFluidState;
 	}
@@ -394,10 +397,8 @@ void AppmSolver::init_Uniformly(const double n, const double p, const double u)
 	}
 }
 
-void AppmSolver::init_Explosion()
+void AppmSolver::init_Explosion(const Eigen::Vector3d refPos, const double radius)
 {
-	const Eigen::Vector3d refPos = Eigen::Vector3d(0, 0, 0);
-	const double radius = 0.2;
 	Eigen::VectorXd state_lo = Physics::primitive2state(1, 1, Eigen::Vector3d::Zero());
 	Eigen::VectorXd state_hi = Physics::primitive2state(1, 5, Eigen::Vector3d::Zero());
 
@@ -408,13 +409,8 @@ void AppmSolver::init_Explosion()
 		if (cell->getFluidType() != Cell::FluidType::FLUID) { continue; } // Skip cells that are not Fluid type
 		const Eigen::Vector3d cc = cell->getCenter();
 		for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-			Eigen::VectorXd state;			
-			if ((cc - refPos).norm() < radius) {
-				state = state_hi;
-			}
-			else {
-				state = state_lo;
-			}
+			const bool isInside = (cc - refPos).norm() < radius;
+			const Eigen::VectorXd state = isInside ? state_hi : state_lo;
 			fluidStates.col(cIdx).segment(5 * fluidIdx, 5) = state;
 		}
 	}
@@ -463,7 +459,7 @@ const double AppmSolver::getNextFluidTimestepSize() const
 			Eigen::VectorXd wavespeeds(nFluids);
 			for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
 				Eigen::Vector3d q = getFluidState(cellIdx, fluidIdx, faceNormal);
-				const double s = getWaveSpeed(q);
+				const double s = Physics::getMaxWavespeed(q);
 				wavespeeds(fluidIdx) = s;
 			}
 			assert((wavespeeds.array() > 0).all());
@@ -481,51 +477,14 @@ const double AppmSolver::getNextFluidTimestepSize() const
 	return dt;
 }
 
-/** 
-* Get maximum wavespeed of fluid cell state projected in direction of face normal fn.
-*/
-const double AppmSolver::getWaveSpeed(const Eigen::VectorXd & state, const Eigen::Vector3d & fn) const
-{
-	assert(state.size() == 5);
-	assert(state.allFinite());
-	const double n = state(0);
-	const double u = state.segment(1, 3).dot(fn) / n; // velocity projected in direction of face normal
-	const double etot = state(4) / n;
-	const double s2 = Physics::gamma * (Physics::gamma - 1) * (etot - 0.5 * pow(u, 2));
-	assert(std::isfinite(s2));
-	assert(s2 > 0);
-	const double s = sqrt(s2);
-	const double smax = (Eigen::Vector3d(-1, 0, 1).array() * s + u).cwiseAbs().maxCoeff();
-	assert(std::isfinite(smax));
-	assert(smax > 0);
-	return smax;
-}
-
-const double AppmSolver::getWaveSpeed(const Eigen::Vector3d & state) const
-{
-	assert(state.size() == 3);
-	assert(state.allFinite());
-	const double n = state(0);
-	const double u = state(1) / state(0);
-	const double etot = state(2) / state(0);
-	const double s2 = Physics::gamma * (Physics::gamma - 1) * (etot - 0.5 * pow(u, 2));
-	assert(std::isfinite(s2));
-	assert(s2 > 0);
-	const double s = sqrt(s2);
-	assert(s > 0);
-	const double smax = (Eigen::Vector3d(-1, 0, 1).array() * s + u).cwiseAbs().maxCoeff();
-	assert(smax > 0);
-	return smax;
-}
-
-const Eigen::VectorXd AppmSolver::getFluidState(const int cellIdx, const int fluidIdx) const 
-{
-	assert(cellIdx >= 0);
-	assert(cellIdx < fluidStates.cols());
-	assert(fluidIdx >= 0);
-	assert(fluidIdx < getNFluids());
-	return fluidStates.col(cellIdx).segment(5*fluidIdx, 5);
-}
+//const Eigen::VectorXd AppmSolver::getFluidState(const int cellIdx, const int fluidIdx) const 
+//{
+//	assert(cellIdx >= 0);
+//	assert(cellIdx < fluidStates.cols());
+//	assert(fluidIdx >= 0);
+//	assert(fluidIdx < getNFluids());
+//	return fluidStates.col(cellIdx).segment(5*fluidIdx, 5);
+//}
 
 const Eigen::Vector3d AppmSolver::getFluidState(const int cellIdx, const int fluidIdx, const Eigen::Vector3d & faceNormal) const
 {
@@ -533,8 +492,7 @@ const Eigen::Vector3d AppmSolver::getFluidState(const int cellIdx, const int flu
 	assert(cellIdx < fluidStates.cols());
 	assert(fluidIdx >= 0);
 	assert(fluidIdx < this->getNFluids());
-	const Eigen::VectorXd cellState = fluidStates.col(cellIdx);
-	const Eigen::VectorXd state = cellState.segment(5 * fluidIdx, 5);
+	const Eigen::VectorXd state = fluidStates.col(cellIdx).segment(5 * fluidIdx, 5);
 	return Eigen::Vector3d(state(0), state.segment(1,3).dot(faceNormal), state(4));
 }
 
@@ -550,15 +508,15 @@ const int AppmSolver::getOrientation(const Cell * cell, const Face * face) const
 	return orientation;
 }
 
-const Eigen::Vector3d AppmSolver::getFluidFluxFromState(const Eigen::Vector3d & q) const
-{
-	assert(q.norm() > 0);
-	Eigen::Vector3d flux;
-	flux(0) = q(1);
-	flux(1) = 0.5 * (3 - Physics::gamma) * pow(q(1), 2) / q(0) + (Physics::gamma - 1) * q(2);
-	flux(2) = Physics::gamma * q(1) * q(2) / q(0) - 0.5 * (Physics::gamma - 1) * pow(q(1) / q(0), 2) * q(1);
-	return flux;
-}
+//const Eigen::Vector3d AppmSolver::getFluidFluxFromState(const Eigen::Vector3d & q) const
+//{
+//	assert(q.norm() > 0);
+//	Eigen::Vector3d flux;
+//	flux(0) = q(1);
+//	flux(1) = 0.5 * (3 - Physics::gamma) * pow(q(1), 2) / q(0) + (Physics::gamma - 1) * q(2);
+//	flux(2) = Physics::gamma * q(1) * q(2) / q(0) - 0.5 * (Physics::gamma - 1) * pow(q(1) / q(0), 2) * q(1);
+//	return flux;
+//}
 
 const Eigen::Vector3d AppmSolver::getRusanovFluxExplicit(const int faceIdx, const int fluidIdx) const
 {
@@ -633,24 +591,8 @@ const Eigen::Vector3d AppmSolver::getRusanovFluxExplicit(const int faceIdx, cons
 		std::cout << "Face Fluid Type not implemented" << std::endl;
 		exit(-1);
 	}
-
-
-	const Eigen::Vector3d fL = getFluidFluxFromState(qL);
-	const Eigen::Vector3d fR = getFluidFluxFromState(qR);
-	const double sL = getWaveSpeed(qL);
-	const double sR = getWaveSpeed(qR);
-	const double s = std::max(sL, sR);
-	assert(s > 0);
-	const Eigen::Vector3d flux = 0.5 * (fL + fR) - 0.5 * s * (qR - qL);
-	if (faceIdx == faceIdxRef) {
-		std::cout << "qL:\t" << qL.transpose() << std::endl;
-		std::cout << "qR:\t" << qR.transpose() << std::endl;
-		std::cout << "fL:\t" << fL.transpose() << std::endl;
-		std::cout << "fR:\t" << fR.transpose() << std::endl;
-		std::cout << "flux:\t" << flux.transpose() << std::endl;
-
-	}
-	return flux;
+	const double showOutput = faceIdx == faceIdxRef;
+	return Physics::getRusanovFlux(qL, qR, showOutput); 
 }
 
 const double AppmSolver::getMomentumUpdate(const int k, const Eigen::Vector3d & nvec, const int fluidIdx) const
@@ -668,15 +610,6 @@ const double AppmSolver::getMomentumUpdate(const int k, const Eigen::Vector3d & 
 	}
 	result /= cell->getVolume();
 	return result;
-}
-
-const Eigen::Vector3d AppmSolver::getFluidStateProjected(const Eigen::VectorXd & state, const Eigen::Vector3d & fn) const
-{
-	Eigen::Vector3d qProj;
-	qProj(0) = state(0);
-	qProj(1) = state.segment(1, 3).dot(fn);
-	qProj(2) = state(4);
-	return qProj;
 }
 
 
