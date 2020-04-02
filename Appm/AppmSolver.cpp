@@ -21,14 +21,31 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	init_RaviartThomasInterpolation();
 
 	init_multiFluid("particleParameters.txt");
-	const double zRef = 0.;
-	//init_SodShockTube(zRef);
-	//init_Uniformly(1.0, 1.0, 1.0);
+	
+	const int initType = 1;
+	switch (initType) {
+	case 1:
+	{
+		const double zRef = 0.;
+		init_SodShockTube(zRef);
+	}
+	break;
 
-	const Eigen::Vector3d refPos = Eigen::Vector3d(0, 0, 0);
-	const double radius = 0.2;
-	init_Explosion(refPos, radius);
+	case 2:
+		init_Uniformly(1.0, 1.0, 1.0);
+		break;
 
+	case 3:
+	{
+		const Eigen::Vector3d refPos = Eigen::Vector3d(0, 0, 0);
+		const double radius = 0.2;
+		init_Explosion(refPos, radius);
+	}
+	break;
+
+	default:
+		exit(-1);
+	}
 }
 
 
