@@ -535,7 +535,18 @@ const int AppmSolver::getOrientation(const Cell * cell, const Face * face) const
 //	return flux;
 //}
 
+/**
+* Get the face flux with explicit Rusanov scheme. 
+*/
 const Eigen::Vector3d AppmSolver::getRusanovFluxExplicit(const int faceIdx, const int fluidIdx) const
+{
+	Eigen::Vector3d qL, qR;
+	getAdjacientCellStates(faceIdx, fluidIdx, qL, qR);
+	const double showOutput = faceIdx == faceIdxRef;
+	return Physics::getRusanovFlux(qL, qR, showOutput); 
+}
+
+void AppmSolver::getAdjacientCellStates(const int faceIdx, const int fluidIdx, Eigen::Vector3d & qL, Eigen::Vector3d & qR) const
 {
 	const Face * face = dualMesh.getFace(faceIdx);
 	const std::vector<Cell*> faceCells = face->getCellList();
@@ -543,11 +554,9 @@ const Eigen::Vector3d AppmSolver::getRusanovFluxExplicit(const int faceIdx, cons
 
 	const Eigen::Vector3d faceNormal = face->getNormal();
 	const int orientation = getOrientation(faceCells[0], face);
-	Eigen::Vector3d qL;
-	Eigen::Vector3d qR;
 	qL.setZero();
 	qR.setZero();
-	int idxL = -1; 
+	int idxL = -1;
 	int idxR = -1;
 
 	const Face::FluidType faceFluidType = face->getFluidType();
@@ -594,13 +603,6 @@ const Eigen::Vector3d AppmSolver::getRusanovFluxExplicit(const int faceIdx, cons
 			assert(faceCells.size() >= 2);
 			assert(faceCells[1]->getFluidType() == Cell::FluidType::FLUID);
 			assert(false); // Not yet implemented
-
-			//const int idxR = faceCells[1]->getIndex();
-			//qR = getFluidState(idxR, fluidIdx, faceNormal);
-			//qL = qR.cwiseProduct(Eigen::Vector3d(1, -1, 1));
-			//if (faceIdx == 7126) {
-			//	std::cout << "Wall, cell 1" << std::endl;
-			//}
 		}
 		break;
 
@@ -608,8 +610,6 @@ const Eigen::Vector3d AppmSolver::getRusanovFluxExplicit(const int faceIdx, cons
 		std::cout << "Face Fluid Type not implemented" << std::endl;
 		exit(-1);
 	}
-	const double showOutput = faceIdx == faceIdxRef;
-	return Physics::getRusanovFlux(qL, qR, showOutput); 
 }
 
 const double AppmSolver::getMomentumUpdate(const int k, const Eigen::Vector3d & nvec, const int fluidIdx) const

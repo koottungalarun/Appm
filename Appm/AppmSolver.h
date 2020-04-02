@@ -95,6 +95,9 @@ private:
 	
 	//const Eigen::Vector3d getFluidFluxFromState(const Eigen::Vector3d & q) const;
 	const Eigen::Vector3d getRusanovFluxExplicit(const int faceIdx, const int fluidIdx) const;
+	
+	void getAdjacientCellStates(const int faceIdx, const int fluidIdx, Eigen::Vector3d & qL, Eigen::Vector3d & qR) const;
+
 	const double getMomentumUpdate(const int k, const Eigen::Vector3d & nvec, const int fluidIdx) const;
 	
 	void interpolateMagneticFluxToPrimalVertices();
