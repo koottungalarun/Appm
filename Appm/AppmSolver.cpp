@@ -156,7 +156,8 @@ void AppmSolver::run()
 					bool isCollinearZ = faceNormal.cross(Eigen::Vector3d::UnitZ()).norm() < (std::numeric_limits<double>::epsilon() * 128);
 					const Face::FluidType faceFluidType = face->getFluidType();
 					//if (true || isCollinearZ) {
-						flux = getRusanovFluxExplicit(fidx, fluidIdx);
+						//flux = getRusanovFluxExplicit(fidx, fluidIdx);
+					flux = getRusanovFluxImEx(fidx, fluidIdx, dt);
 					//}
 
 					// 3D face flux data vector 
@@ -546,7 +547,53 @@ const Eigen::Vector3d AppmSolver::getRusanovFluxExplicit(const int faceIdx, cons
 	return Physics::getRusanovFlux(qL, qR, showOutput); 
 }
 
-void AppmSolver::getAdjacientCellStates(const int faceIdx, const int fluidIdx, Eigen::Vector3d & qL, Eigen::Vector3d & qR) const
+const Eigen::Vector3d AppmSolver::getRusanovFluxImEx(const int faceIdx, const int fluidIdx, const double dt) const
+{
+	const Face * face = dualMesh.getFace(faceIdx);
+	const Eigen::Vector3d faceNormal = face->getNormal();
+	const Face::FluidType faceFluidType = face->getFluidType();
+
+	Eigen::Vector3d qL, qR;
+	const std::pair<int, int> adjacientCellIdx = getAdjacientCellStates(faceIdx, fluidIdx, qL, qR);
+
+	double implicitExtraTerms = 0;
+	int cellIndex;
+	if (faceFluidType == Face::FluidType::INTERIOR) {
+		cellIndex = adjacientCellIdx.first;
+		const double extra_L = getImplicitExtraTermMomentumFlux(cellIndex, faceNormal, fluidIdx);
+		cellIndex = adjacientCellIdx.second;
+		const double extra_R = getImplicitExtraTermMomentumFlux(cellIndex, faceNormal, fluidIdx);
+		implicitExtraTerms -= dt * extra_L;
+		implicitExtraTerms -= dt * extra_R;
+	}
+
+	Eigen::Vector3d faceFlux = getRusanovFluxExplicit(faceIdx, fluidIdx);
+	faceFlux(0) += implicitExtraTerms;
+	return faceFlux;
+}
+
+const double AppmSolver::getImplicitExtraTermMomentumFlux(const int cellIdx, const Eigen::Vector3d & faceNormal, const int fluidIdx) const
+{
+	assert(cellIdx >= 0); 
+	assert(std::fabs(faceNormal.norm() - 1) <= 4*std::numeric_limits<double>::epsilon());
+
+	const Cell * cell = dualMesh.getCell(cellIdx);
+	const double cellVolume = cell->getVolume();
+	const std::vector<Face*> cellFaces = cell->getFaceList();
+	double sumFaceFluxes = 0;
+	for (auto face : cellFaces) {
+		const int faceIdx = face->getIndex();
+		const Eigen::Vector3d faceFlux = getRusanovFluxExplicit(faceIdx, fluidIdx);
+		const double momentumFlux = faceFlux(1);
+		const double faceArea = face->getArea();
+		const Eigen::Vector3d fn = face->getNormal();
+		sumFaceFluxes += momentumFlux * faceArea * fn.dot(faceNormal);
+	}
+	const double result = 0.5 * 1./cellVolume * sumFaceFluxes;
+	return result;
+}
+
+const std::pair<int,int> AppmSolver::getAdjacientCellStates(const int faceIdx, const int fluidIdx, Eigen::Vector3d & qL, Eigen::Vector3d & qR) const
 {
 	const Face * face = dualMesh.getFace(faceIdx);
 	const std::vector<Cell*> faceCells = face->getCellList();
@@ -589,13 +636,13 @@ void AppmSolver::getAdjacientCellStates(const int faceIdx, const int fluidIdx, E
 			const int idx = faceCells[0]->getIndex();
 
 			if (orientation > 0) {
-				int idx = faceCells[0]->getIndex();
-				qL = getFluidState(idx, fluidIdx, faceNormal);
+				idxL = faceCells[0]->getIndex();
+				qL = getFluidState(idxL, fluidIdx, faceNormal);
 				qR = qL.cwiseProduct(Eigen::Vector3d(1, -1, 1));
 			}
 			else {
-				int idx = faceCells[0]->getIndex();
-				qR = getFluidState(idx, fluidIdx, faceNormal);
+				idxR = faceCells[0]->getIndex();
+				qR = getFluidState(idxR, fluidIdx, faceNormal);
 				qL = qR.cwiseProduct(Eigen::Vector3d(1, -1, 1));
 			}
 		}
@@ -610,6 +657,8 @@ void AppmSolver::getAdjacientCellStates(const int faceIdx, const int fluidIdx, E
 		std::cout << "Face Fluid Type not implemented" << std::endl;
 		exit(-1);
 	}
+
+	return std::pair<int, int>(idxL, idxR);
 }
 
 const double AppmSolver::getMomentumUpdate(const int k, const Eigen::Vector3d & nvec, const int fluidIdx) const

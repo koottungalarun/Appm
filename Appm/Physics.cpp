@@ -52,13 +52,23 @@ const Eigen::Vector3d Physics::getFluidFluxFromState(const Eigen::Vector3d & q)
 	return flux;
 }
 
+const double Physics::getMaxWavespeed(const Eigen::Vector3d & qL, const Eigen::Vector3d & qR) 
+{
+	const double sL = Physics::getMaxWavespeed(qL);
+	const double sR = Physics::getMaxWavespeed(qR);
+	assert(isfinite(sL));
+	assert(isfinite(sR));
+	const double s = std::max(sL, sR);
+	assert(s > 0);
+	assert(isfinite(s));
+	return s;
+}
+
 const Eigen::VectorXd Physics::getRusanovFlux(const Eigen::VectorXd & qL, const Eigen::VectorXd & qR, const bool showOutput)
 {
 	const Eigen::Vector3d fL = Physics::getFluidFluxFromState(qL);
 	const Eigen::Vector3d fR = Physics::getFluidFluxFromState(qR);
-	const double sL = Physics::getMaxWavespeed(qL);
-	const double sR = Physics::getMaxWavespeed(qR);
-	const double s = std::max(sL, sR);
+	const double s = Physics::getMaxWavespeed(qL, qR);
 	assert(s > 0);
 	const Eigen::Vector3d flux = 0.5 * (fL + fR) - 0.5 * s * (qR - qL);
 	if (showOutput) {

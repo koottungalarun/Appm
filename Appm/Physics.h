@@ -14,6 +14,7 @@ public:
 
 	static const Eigen::VectorXd primitive2state(const double n, const double p, const Eigen::Vector3d u);
 	
+	static const double getMaxWavespeed(const Eigen::Vector3d & qL, const Eigen::Vector3d & qR);
 	static double getMaxWavespeed(const Eigen::Vector3d & state);
 
 	static const Eigen::Vector3d getFluidFluxFromState(const Eigen::Vector3d & q);
