@@ -48,6 +48,13 @@ private:
 	};
 	std::vector<ParticleParameters> particleParams;
 
+	enum class MassFluxScheme {
+		EXPLICIT, IMPLICIT_EXPLICIT
+
+	};
+	friend std::ostream & operator<<(std::ostream & os, const MassFluxScheme & obj);
+
+
 	/** Get number of fluids. */
 	const int getNFluids() const;
 
@@ -61,6 +68,7 @@ private:
 	int maxIterations = 0;
 	double maxTime = 0;
 	double lambdaSquare = 1.0;
+	MassFluxScheme massFluxScheme = MassFluxScheme::EXPLICIT;
 
 	bool isWriteEfield = false;
 	bool isWriteBfield = false;
@@ -72,6 +80,8 @@ private:
 	Eigen::MatrixXd fluidSources;
 	Eigen::MatrixXd fluidFluxes;
 	Eigen::MatrixXd faceFluxes;
+
+	Eigen::MatrixXd faceFluxesImExRusanov;
 
 	const int faceIdxRef = -1;
 
@@ -95,7 +105,7 @@ private:
 	
 	//const Eigen::Vector3d getFluidFluxFromState(const Eigen::Vector3d & q) const;
 	const Eigen::Vector3d getRusanovFluxExplicit(const int faceIdx, const int fluidIdx) const;
-	const Eigen::Vector3d getRusanovFluxImEx(const int faceIdx, const int fluidIdx, const double dt) const;
+	const Eigen::Vector3d getRusanovFluxImEx(const int faceIdx, const int fluidIdx, const double dt);
 
 	const double getImplicitExtraTermMomentumFlux(const int cellIdx, const Eigen::Vector3d & faceNormal, const int fluidIdx) const;
 

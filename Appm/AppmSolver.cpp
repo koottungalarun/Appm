@@ -87,7 +87,7 @@ void AppmSolver::run()
 	const int nFluids = this->getNFluids();
 	const int nFaces = dualMesh.getNumberOfFaces();
 	faceFluxes = Eigen::MatrixXd::Zero(5*nFluids, nFaces);
-
+	faceFluxesImExRusanov = Eigen::MatrixXd::Zero(nFaces, nFluids);
 	writeOutput(iteration, time);
 
 	while (iteration < maxIterations && time < maxTime) {
@@ -101,6 +101,7 @@ void AppmSolver::run()
 		fluidFluxes.setZero();
 		fluidSources.setZero();
 		faceFluxes.setZero();
+		faceFluxesImExRusanov.setZero();
 
 		// Maxwell equations
 		if (isMaxwellEnabled) {
@@ -547,7 +548,7 @@ const Eigen::Vector3d AppmSolver::getRusanovFluxExplicit(const int faceIdx, cons
 	return Physics::getRusanovFlux(qL, qR, showOutput); 
 }
 
-const Eigen::Vector3d AppmSolver::getRusanovFluxImEx(const int faceIdx, const int fluidIdx, const double dt) const
+const Eigen::Vector3d AppmSolver::getRusanovFluxImEx(const int faceIdx, const int fluidIdx, const double dt) 
 {
 	const Face * face = dualMesh.getFace(faceIdx);
 	const Eigen::Vector3d faceNormal = face->getNormal();
@@ -566,6 +567,8 @@ const Eigen::Vector3d AppmSolver::getRusanovFluxImEx(const int faceIdx, const in
 		implicitExtraTerms -= dt * extra_L;
 		implicitExtraTerms -= dt * extra_R;
 	}
+
+	faceFluxesImExRusanov.coeffRef(faceIdx, fluidIdx) = implicitExtraTerms;
 
 	Eigen::Vector3d faceFlux = getRusanovFluxExplicit(faceIdx, fluidIdx);
 	faceFlux(0) += implicitExtraTerms;
@@ -942,6 +945,8 @@ void AppmSolver::writeOutput(const int iteration, const double time)
 			h5writer.writeData(faceFluxEnergy, "/faceFluxEnergy" + nf);
 		}
 	}
+
+	h5writer.writeData(faceFluxesImExRusanov, "/faceFluxesImExRusanov");
 }
 
 void AppmSolver::writeFluidStates(H5Writer & writer)
@@ -1494,6 +1499,13 @@ void AppmSolver::readParameters(const std::string & filename)
 		if (tag == "lambdaSquare") {
 			std::istringstream(line.substr(pos + 1)) >> this->lambdaSquare;
 		}
+		if (tag == "massFluxScheme") {
+			std::string temp;
+			std::istringstream(line.substr(pos + 1)) >> temp;
+			if (temp == "ImEx") {
+				massFluxScheme = MassFluxScheme::IMPLICIT_EXPLICIT;
+			}
+		}
 	}
 
 	std::cout << std::endl;
@@ -1505,6 +1517,7 @@ void AppmSolver::readParameters(const std::string & filename)
 	std::cout << "isMaxwellEnabled: " << isMaxwellEnabled << std::endl;
 	std::cout << "timestepSize: " << timestepSize << std::endl;
 	std::cout << "lambdaSquare: " << lambdaSquare << std::endl;
+	std::cout << "massFluxScheme: " << massFluxScheme << std::endl;
 	std::cout << "=======================" << std::endl;
 }
 
@@ -1827,4 +1840,16 @@ const std::string AppmSolver::fluidXdmfOutput(const std::string & datafilename) 
 		}
 	}
 	return ss.str();
+}
+
+std::ostream & operator<<(std::ostream & os, const AppmSolver::MassFluxScheme & obj) {
+	switch (obj) {
+	case AppmSolver::MassFluxScheme::EXPLICIT:
+		os << "EXPLICIT";
+		break;
+
+	case AppmSolver::MassFluxScheme::IMPLICIT_EXPLICIT:
+		os << "IMEX";
+	}
+	return os;
 }
