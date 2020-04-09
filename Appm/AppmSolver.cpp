@@ -22,7 +22,6 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 
 	init_multiFluid("particleParameters.txt");
 	
-	const int initType = 1;
 	switch (initType) {
 	case 1:
 	{
@@ -32,7 +31,12 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	break;
 
 	case 2:
-		init_Uniformly(1.0, 1.0, 1.0);
+	{
+		double p = 1.0;
+		double n = 1.0;
+		double u = 0.0;
+		init_Uniformly(n, p, u);
+	}
 		break;
 
 	case 3:
@@ -559,16 +563,29 @@ const Eigen::Vector3d AppmSolver::getRusanovFluxImEx(const int faceIdx, const in
 
 	double implicitExtraTerms = 0;
 	int cellIndex;
-	if (faceFluidType == Face::FluidType::INTERIOR) {
+
+	if (faceFluidType != Face::FluidType::INTERIOR) {
+		assert(adjacientCellIdx.first == -1 || adjacientCellIdx.second == -1);
+	}
+	const bool isMassFluxImexScheme = this->massFluxScheme == MassFluxScheme::IMPLICIT_EXPLICIT;
+	const bool isInteriorFace = faceFluidType == Face::FluidType::INTERIOR;
+	const bool isBoundaryFace = !isInteriorFace;
+	if (isMassFluxImexScheme) {
 		cellIndex = adjacientCellIdx.first;
-		const double extra_L = getImplicitExtraTermMomentumFlux(cellIndex, faceNormal, fluidIdx);
+		double extra_L = 0;
+		if (cellIndex >= 0) {
+			extra_L = getImplicitExtraTermMomentumFlux(cellIndex, faceNormal, fluidIdx);
+		}
 		cellIndex = adjacientCellIdx.second;
-		const double extra_R = getImplicitExtraTermMomentumFlux(cellIndex, faceNormal, fluidIdx);
+		double extra_R = 0;
+		if (cellIndex >= 0) {
+			extra_R = getImplicitExtraTermMomentumFlux(cellIndex, faceNormal, fluidIdx);
+		}
 		implicitExtraTerms -= dt * extra_L;
 		implicitExtraTerms -= dt * extra_R;
+		faceFluxesImExRusanov.coeffRef(faceIdx, fluidIdx) = implicitExtraTerms;
 	}
-
-	faceFluxesImExRusanov.coeffRef(faceIdx, fluidIdx) = implicitExtraTerms;
+	
 
 	Eigen::Vector3d faceFlux = getRusanovFluxExplicit(faceIdx, fluidIdx);
 	faceFlux(0) += implicitExtraTerms;
@@ -590,7 +607,8 @@ const double AppmSolver::getImplicitExtraTermMomentumFlux(const int cellIdx, con
 		const double momentumFlux = faceFlux(1);
 		const double faceArea = face->getArea();
 		const Eigen::Vector3d fn = face->getNormal();
-		sumFaceFluxes += momentumFlux * faceArea * fn.dot(faceNormal);
+		const double orientation = fn.dot(faceNormal) * getOrientation(cell, face);
+		sumFaceFluxes += momentumFlux * faceArea * orientation;
 	}
 	const double result = 0.5 * 1./cellVolume * sumFaceFluxes;
 	return result;
@@ -1506,6 +1524,9 @@ void AppmSolver::readParameters(const std::string & filename)
 				massFluxScheme = MassFluxScheme::IMPLICIT_EXPLICIT;
 			}
 		}
+		if (tag == "initType") {
+			std::istringstream(line.substr(pos + 1)) >> initType;
+		}
 	}
 
 	std::cout << std::endl;
@@ -1518,6 +1539,7 @@ void AppmSolver::readParameters(const std::string & filename)
 	std::cout << "timestepSize: " << timestepSize << std::endl;
 	std::cout << "lambdaSquare: " << lambdaSquare << std::endl;
 	std::cout << "massFluxScheme: " << massFluxScheme << std::endl;
+	std::cout << "initType: " << initType << std::endl;
 	std::cout << "=======================" << std::endl;
 }
 

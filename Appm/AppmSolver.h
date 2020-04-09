@@ -69,6 +69,7 @@ private:
 	double maxTime = 0;
 	double lambdaSquare = 1.0;
 	MassFluxScheme massFluxScheme = MassFluxScheme::EXPLICIT;
+	int initType = 1;
 
 	bool isWriteEfield = false;
 	bool isWriteBfield = false;
