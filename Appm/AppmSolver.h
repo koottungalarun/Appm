@@ -76,6 +76,19 @@ private:
 	bool isWriteHfield = false;
 	bool isWriteJfield = false;
 
+	// State vector for solving Maxwell's equations
+	Eigen::VectorXd maxwellState;
+	Eigen::VectorXd maxwellStatePrevious;
+	Eigen::SparseMatrix<double> Q;
+	Eigen::SparseMatrix<double> Meps;
+	Eigen::SparseMatrix<double> Mnu;
+	Eigen::SparseMatrix<double> C;
+	Eigen::SparseMatrix<double> M1, M2;
+	Eigen::VectorXd E_h;
+	Eigen::VectorXd B_h;
+
+
+
 	Eigen::MatrixXd fluidStates;
 	Eigen::MatrixXd fluidStates_new;
 	Eigen::MatrixXd fluidSources;
@@ -88,6 +101,11 @@ private:
 
 	// Isentropic expansion coefficient, aka ratio of heat capacities
 	//const double gamma = 1.4; 
+
+	void init_maxwellStates();
+	Eigen::SparseMatrix<double> getBoundaryGradientInnerInclusionOperator();
+	Eigen::SparseMatrix<double> getElectricPermittivityOperator();
+	Eigen::SparseMatrix<double> getMagneticPermeabilityOperator();
 
 	void init_multiFluid(const std::string & filename);
 

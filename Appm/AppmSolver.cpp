@@ -17,6 +17,8 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	}
 	std::cout << "Dual mesh has " << dualMesh.getNumberOfVertices() << " vertices" << std::endl;
 
+	init_maxwellStates();
+
 	B_vertex = Eigen::Matrix3Xd::Zero(3, primalMesh.getNumberOfVertices());
 	init_RaviartThomasInterpolation();
 
@@ -49,6 +51,17 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 
 	default:
 		exit(-1);
+	}
+
+	if (isMaxwellEnabled) {
+		isWriteBfield = true;
+		isWriteEfield = true;
+		Eigen::sparseMatrixToFile(Q, "Q.dat");
+		Eigen::sparseMatrixToFile(Meps, "Meps.dat");
+		Eigen::sparseMatrixToFile(Mnu, "Mnu.dat");
+		Eigen::sparseMatrixToFile(C, "C.dat");
+		Eigen::sparseMatrixToFile(M1, "M1.dat");
+		Eigen::sparseMatrixToFile(M2, "M2.dat");
 	}
 }
 
@@ -87,6 +100,8 @@ void AppmSolver::run()
 	
 	// Time integration loop
 	//double dT = 0.05;
+	const int nPrimalTerminalVertices = primalMesh.getMeshInfo().nVerticesTerminal;
+	assert(nPrimalTerminalVertices > 0);
 
 	const int nFluids = this->getNFluids();
 	const int nFaces = dualMesh.getNumberOfFaces();
@@ -110,6 +125,69 @@ void AppmSolver::run()
 		// Maxwell equations
 		if (isMaxwellEnabled) {
 			//maxwellSolver->updateMaxwellState(dt, time);
+			Eigen::VectorXd x(maxwellState.size());
+
+			const double dt_sq = pow(dt, 2);
+
+			Eigen::SparseMatrix<double> M;
+			M = M1 + dt_sq * M2;
+			M.makeCompressed();
+			//Eigen::sparseMatrixToFile(M, "M.dat");
+
+			const int nDirichlet = nPrimalTerminalVertices;
+			const int nFree = maxwellState.size() - nDirichlet;
+
+			// Dirichlet conditions
+			Eigen::SparseMatrix<double> Md = M.rightCols(nDirichlet);
+			Eigen::VectorXd xd = Eigen::VectorXd::Zero(nDirichlet);
+			assert(nDirichlet % 2 == 0);
+			xd.topRows(xd.size() / 2).array() = 2;
+			xd.bottomRows(xd.size() / 2).array() = 1; // voltage condition on terminal B
+
+			Eigen::VectorXd src = Eigen::VectorXd::Zero(maxwellState.size());
+			Eigen::VectorXd rhs(x.size());
+			rhs.setZero();
+			rhs += M1 * (2 * maxwellState - maxwellStatePrevious) + dt_sq * src;
+			rhs -= Md * xd;
+
+			// Vector of free coefficients
+			Eigen::VectorXd xf(nFree);
+
+			// Load vector for free coefficients
+			Eigen::VectorXd rhsFree = rhs.topRows(nFree);
+
+			// Matrix of free coefficients
+			Eigen::SparseMatrix<double> Mf = M.topLeftCorner(nFree, nFree);
+			Mf.makeCompressed();
+			
+
+			// Solve system
+			std::cout << "Setup Maxwell solver" << std::endl;
+			Eigen::SparseLU<Eigen::SparseMatrix<double>> maxwellSolver(Mf);
+			if (maxwellSolver.info() != Eigen::Success) {
+				std::cout << "Maxwell solver setup failed" << std::endl;
+			}
+			xf = maxwellSolver.solve(rhsFree);
+			std::cout << "Maxwell solver finished" << std::endl;
+			if (maxwellSolver.info() != Eigen::Success) {
+				std::cout << "Maxwell solver solving failed" << std::endl;
+			}
+			assert(maxwellSolver.info() == Eigen::Success);
+
+			// assemble new state vector
+			x.topRows(nFree) = xf;
+			x.bottomRows(nDirichlet) = xd;
+			//std::ofstream("x.dat") << x << std::endl;
+
+			// Update state vectors for discrete states
+			E_h = Q * x;
+			B_h -= dt * C * E_h;
+
+			//std::ofstream("E_h.dat") << E_h << std::endl;
+
+			// Set new state vector
+			maxwellStatePrevious = maxwellState;
+			maxwellState = x;
 
 			// Interpolation of B-field to dual cell centers
 			interpolateMagneticFluxToPrimalVertices();
@@ -117,10 +195,6 @@ void AppmSolver::run()
 			// Consistent formulation of current as mass flux
 
 			// Solve  d^2/dt^2 (E) + curl(curl(E)) + n E = rhs, for new timestep
-
-			// Update magnetic field
-			// b^{m+1} = b^m - dt * e^{m+1} 
-			
 		}
 
 
@@ -277,6 +351,142 @@ void AppmSolver::run()
 const int AppmSolver::getNFluids() const
 {
 	return particleParams.size();
+}
+
+void AppmSolver::init_maxwellStates()
+{
+	std::cout << "Initialize Maxwell states" << std::endl;
+
+	E_h = Eigen::VectorXd::Zero(primalMesh.getNumberOfEdges());
+	B_h = Eigen::VectorXd::Zero(primalMesh.getNumberOfFaces());
+
+	const Eigen::VectorXi vertexTypes = primalMesh.getVertexTypes();
+	const Eigen::VectorXi edgeTypes = primalMesh.getEdgeTypes();
+	const Eigen::VectorXi faceTypes = primalMesh.getFaceTypes();
+
+	// Number of primal vertices on surface boundary (terminals & free floating)
+	const int nPvb = 
+		(vertexTypes.array() == static_cast<int>(Vertex::Type::Boundary)).count() +
+		(vertexTypes.array() == static_cast<int>(Vertex::Type::Terminal)).count();
+
+	// Number of primal interior edges (not on boundary)
+	const int nPei =
+		(edgeTypes.array() == static_cast<int>(Edge::Type::Interior)).count() +
+		(edgeTypes.array() == static_cast<int>(Edge::Type::InteriorToBoundary)).count();
+
+	// Number of primal interior faces 
+	const int nPfi = (faceTypes.array() == 0).count();
+
+	// Number of degrees of freedom for Maxwell's equation
+	const int nDof = nPei + nPvb;
+	this->maxwellState = Eigen::VectorXd::Zero(nDof);
+	this->maxwellStatePrevious = Eigen::VectorXd::Zero(nDof);
+
+	this->Q = getBoundaryGradientInnerInclusionOperator();
+	assert(Q.nonZeros() > 0);
+	assert(Q.rows() == primalMesh.getNumberOfEdges());
+	assert(Q.cols() == nDof);
+
+	// Material laws
+	this->Meps = getElectricPermittivityOperator();
+	assert(Meps.nonZeros() > 0);
+
+	this->Mnu = getMagneticPermeabilityOperator();
+	assert(Mnu.nonZeros() > 0);
+
+	// Curl operator on all primal faces and all primal edges
+	this->C = primalMesh.get_f2eMap().cast<double>();
+	assert(C.nonZeros() > 0);
+
+	// Curl operator on inner primal faces and inner primal edges
+	const Eigen::SparseMatrix<double> C_inner = C.topLeftCorner(nPfi, nPei);
+
+	Eigen::SparseMatrix<double> P(nPfi, nDof);
+	assert(P.cols() == nPei + nPvb);
+	P.leftCols(nPei) = C_inner;
+
+	M1 = lambdaSquare * Q.transpose() * Meps * Q;
+	M1.makeCompressed();
+
+	const Eigen::SparseMatrix<double> Mnu_inner = Mnu.topLeftCorner(nPfi, nPfi);
+	M2 = P.transpose() * Mnu_inner * P;
+	M2.makeCompressed();
+}
+
+Eigen::SparseMatrix<double> AppmSolver::getBoundaryGradientInnerInclusionOperator()
+{
+	const Eigen::VectorXi vertexTypes = primalMesh.getVertexTypes();
+	const int nPvi = (vertexTypes.array() == static_cast<int>(Vertex::Type::Inner)).count();
+	const int nPvb =
+		(vertexTypes.array() == static_cast<int>(Vertex::Type::Boundary)).count() +
+		(vertexTypes.array() == static_cast<int>(Vertex::Type::Terminal)).count();
+
+	Eigen::SparseMatrix<int> G = primalMesh.get_e2vMap();
+
+	// Boundary vertex inclusion operator 
+	Eigen::SparseMatrix<int> X(nPvi + nPvb, nPvb);
+	typedef Eigen::Triplet<int> T;
+	std::vector<T> triplets;
+	for (int i = 0; i < nPvb; i++) {
+		triplets.push_back(T(nPvi + i, i, 1));
+	}
+	X.setFromTriplets(triplets.begin(), triplets.end());
+	X.makeCompressed();
+
+
+	// Inner edges inclusion operator
+	const Eigen::VectorXi edgeTypes = primalMesh.getEdgeTypes();
+	const int nPe = primalMesh.getNumberOfEdges();
+	const int nPei =
+		(edgeTypes.array() == static_cast<int>(Edge::Type::Interior)).count() +
+		(edgeTypes.array() == static_cast<int>(Edge::Type::InteriorToBoundary)).count();
+
+	Eigen::SparseMatrix<int> innerEdgeInclusionOperator(nPe, nPei);
+	triplets = std::vector<T>();
+	for (int i = 0; i < nPei; i++) {
+		triplets.push_back(T(i, i, 1));
+	}
+	innerEdgeInclusionOperator.setFromTriplets(triplets.begin(), triplets.end());
+	innerEdgeInclusionOperator.makeCompressed();
+
+	// Negative gradient on boundary vertices
+	Eigen::SparseMatrix<int> negGX = -G * X;
+
+	// Q = [id, -grad] = inner edges inclusion & negative gradient on boundary vertices operator
+	Eigen::SparseMatrix<double> Q(nPe, nPei + nPvb);
+	assert(Q.rows() == innerEdgeInclusionOperator.rows());
+	assert(Q.rows() == negGX.rows());
+	assert(Q.cols() == innerEdgeInclusionOperator.cols() + negGX.cols());
+	Q.leftCols(innerEdgeInclusionOperator.cols()) = innerEdgeInclusionOperator.cast<double>();
+	Q.rightCols(negGX.cols()) = negGX.cast<double>();
+	return Q;
+}
+
+Eigen::SparseMatrix<double> AppmSolver::getElectricPermittivityOperator()
+{
+	const int nPe = primalMesh.getNumberOfEdges();
+	Eigen::SparseMatrix<double> Meps(nPe, nPe);
+	Meps.setIdentity();
+	for (int i = 0; i < nPe; i++) {
+		const double dualFaceArea = dualMesh.getFace(i)->getArea();
+		const double primalEdgeLength = primalMesh.getEdge(i)->getLength();
+		Meps.coeffRef(i, i) = dualFaceArea / primalEdgeLength;
+	}
+	Meps.makeCompressed();
+	return Meps;
+}
+
+Eigen::SparseMatrix<double> AppmSolver::getMagneticPermeabilityOperator()
+{
+	const int nFaces = primalMesh.getNumberOfFaces();
+	Eigen::SparseMatrix<double> Mnu(nFaces, nFaces);
+	Mnu.setIdentity();
+	for (int i = 0; i < nFaces; i++) {
+		const double dualEdgeLength = dualMesh.getEdge(i)->getLength();
+		const double primalFaceArea = primalMesh.getFace(i)->getArea();
+		Mnu.coeffRef(i, i) = dualEdgeLength / primalFaceArea;
+	}
+	return Mnu;
 }
 
 void AppmSolver::init_multiFluid(const std::string & filename)
@@ -1025,6 +1235,29 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 
 void AppmSolver::writeMaxwellStates(H5Writer & writer)
 {
+	assert(B_h.size() > 0);
+	writer.writeData(B_h, "/bvec");
+
+	const int nPrimalFaces = primalMesh.getNumberOfFaces();
+	Eigen::Matrix3Xd B(3, nPrimalFaces);
+	for (int i = 0; i < nPrimalFaces; i++) {
+		const Face * face = primalMesh.getFace(i);
+		const Eigen::Vector3d fn = face->getNormal();
+		const double fA = face->getArea();
+		B.col(i) = (B_h(i) / fA) * fn;
+	}
+	writer.writeData(B, "/B");
+
+	assert(E_h.size() > 0);
+	writer.writeData(E_h, "/evec");
+
+	const int nPrimalEdges = primalMesh.getNumberOfEdges();
+	Eigen::Matrix3Xd E(3, nPrimalEdges);
+	for (int i = 0; i < nPrimalEdges; i++) {
+		const Edge * edge = primalMesh.getEdge(i);
+		E.col(i) = E_h(i) / edge->getLength() * edge->getDirection();
+	}
+	writer.writeData(E, "/E");
 }
 
 XdmfGrid AppmSolver::getOutputPrimalEdgeGrid(const int iteration, const double time, const std::string & dataFilename)
