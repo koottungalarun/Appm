@@ -189,7 +189,7 @@ void AppmSolver::run()
 			maxwellStatePrevious = maxwellState;
 			maxwellState = x;
 
-			interpolateElectricFieldPerot();
+			interpolateElectricFieldToCellCenter();
 
 			// Interpolation of B-field to dual cell centers
 			interpolateMagneticFluxToPrimalVertices();
@@ -362,8 +362,7 @@ void AppmSolver::init_maxwellStates()
 	E_h = Eigen::VectorXd::Zero(primalMesh.getNumberOfEdges());
 	B_h = Eigen::VectorXd::Zero(primalMesh.getNumberOfFaces());
 	electricFieldAtDualCellCenters = Eigen::Matrix3Xd::Zero(3, dualMesh.getNumberOfCells());
-	electricFieldAtDualCellCenters.setConstant(1);
-
+	
 	const Eigen::VectorXi vertexTypes = primalMesh.getVertexTypes();
 	const Eigen::VectorXi edgeTypes = primalMesh.getEdgeTypes();
 	const Eigen::VectorXi faceTypes = primalMesh.getFaceTypes();
@@ -913,8 +912,36 @@ const double AppmSolver::getMomentumUpdate(const int k, const Eigen::Vector3d & 
 	return result;
 }
 
-void AppmSolver::interpolateElectricFieldPerot()
+/**
+* Interpolate electric field from primal edges to dual cell centers with Perot's method.
+*/
+void AppmSolver::interpolateElectricFieldToCellCenter()
 {
+	std::cout << "Interpolate electric field to cell center (Perot method)" << std::endl;
+	assert(primalMesh.getNumberOfVertices() == dualMesh.getNumberOfCells());
+	const int nDualCells = dualMesh.getNumberOfCells();
+	const int nPe = primalMesh.getNumberOfEdges();
+
+	for (int k = 0; k < nDualCells; k++) {
+		Eigen::Vector3d E_loc;
+		E_loc.setZero();
+
+		const Cell * dualCell = dualMesh.getCell(k);
+		const std::vector<Face*> cellFaces = dualCell->getFaceList();
+		for (auto dualFace : cellFaces) {
+			const int i = dualFace->getIndex();
+			if (i >= nPe) { continue; }			
+			const double faceArea = dualFace->getArea();
+			const Eigen::Vector3d r = dualFace->getCenter() - dualCell->getCenter();
+			const Eigen::Vector3d fn = dualFace->getNormal();
+			const int orientation = getOrientation(dualCell, dualFace);
+			const double primalEdgeLength = primalMesh.getEdge(i)->getLength();
+			const double eValue = E_h(i) * orientation * 1./primalEdgeLength;
+			E_loc += eValue * faceArea * r;
+		}
+		E_loc *= 1. / dualCell->getVolume();
+		electricFieldAtDualCellCenters.col(k) = E_loc;
+	}
 }
 
 

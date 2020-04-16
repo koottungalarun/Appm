@@ -133,7 +133,7 @@ private:
 
 	const double getMomentumUpdate(const int k, const Eigen::Vector3d & nvec, const int fluidIdx) const;
 	
-	void interpolateElectricFieldPerot();
+	void interpolateElectricFieldToCellCenter();
 
 	void interpolateMagneticFluxToPrimalVertices();
 
