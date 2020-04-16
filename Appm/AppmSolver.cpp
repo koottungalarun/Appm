@@ -189,6 +189,8 @@ void AppmSolver::run()
 			maxwellStatePrevious = maxwellState;
 			maxwellState = x;
 
+			interpolateElectricFieldPerot();
+
 			// Interpolation of B-field to dual cell centers
 			interpolateMagneticFluxToPrimalVertices();
 
@@ -359,6 +361,8 @@ void AppmSolver::init_maxwellStates()
 
 	E_h = Eigen::VectorXd::Zero(primalMesh.getNumberOfEdges());
 	B_h = Eigen::VectorXd::Zero(primalMesh.getNumberOfFaces());
+	electricFieldAtDualCellCenters = Eigen::Matrix3Xd::Zero(3, dualMesh.getNumberOfCells());
+	electricFieldAtDualCellCenters.setConstant(1);
 
 	const Eigen::VectorXi vertexTypes = primalMesh.getVertexTypes();
 	const Eigen::VectorXi edgeTypes = primalMesh.getEdgeTypes();
@@ -909,6 +913,10 @@ const double AppmSolver::getMomentumUpdate(const int k, const Eigen::Vector3d & 
 	return result;
 }
 
+void AppmSolver::interpolateElectricFieldPerot()
+{
+}
+
 
 void AppmSolver::interpolateMagneticFluxToPrimalVertices()
 {
@@ -1258,6 +1266,9 @@ void AppmSolver::writeMaxwellStates(H5Writer & writer)
 		E.col(i) = E_h(i) / edge->getLength() * edge->getDirection();
 	}
 	writer.writeData(E, "/E");
+
+	assert(electricFieldAtDualCellCenters.size() > 0);
+	writer.writeData(electricFieldAtDualCellCenters, "/EdualCellCenter");
 }
 
 XdmfGrid AppmSolver::getOutputPrimalEdgeGrid(const int iteration, const double time, const std::string & dataFilename)
@@ -2020,6 +2031,13 @@ const std::string AppmSolver::xdmf_GridDualCells(const int iteration) const
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfVertices() << " 3\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
 	ss << datafilename << ":/Bvertex" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Electric Field Interpolated\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << " 3\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << datafilename << ":/EdualCellCenter" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 

@@ -94,6 +94,7 @@ private:
 	Eigen::MatrixXd fluidSources;
 	Eigen::MatrixXd fluidFluxes;
 	Eigen::MatrixXd faceFluxes;
+	Eigen::Matrix3Xd electricFieldAtDualCellCenters;
 
 	Eigen::MatrixXd faceFluxesImExRusanov;
 
@@ -132,6 +133,8 @@ private:
 
 	const double getMomentumUpdate(const int k, const Eigen::Vector3d & nvec, const int fluidIdx) const;
 	
+	void interpolateElectricFieldPerot();
+
 	void interpolateMagneticFluxToPrimalVertices();
 
 	// void test_raviartThomas();
