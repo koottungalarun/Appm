@@ -77,6 +77,7 @@ void AppmSolver::run()
 	}
 
 	double dt = timestepSize;
+	double dt_previous = dt;
 	double time = 0;
 	int iteration = 0;
 
@@ -112,6 +113,7 @@ void AppmSolver::run()
 	while (iteration < maxIterations && time < maxTime) {
 		std::cout << "Iteration " << iteration << ",\t time = " << time << std::endl;
 
+		dt_previous = dt;
 
 		// Determine timestep
 		if (isFluidEnabled) {
@@ -127,10 +129,11 @@ void AppmSolver::run()
 			//maxwellSolver->updateMaxwellState(dt, time);
 			Eigen::VectorXd x(maxwellState.size());
 
-			const double dt_sq = pow(dt, 2);
+			const int nEdges = primalMesh.getNumberOfEdges();
+			Eigen::SparseMatrix<double> M_sigma(nEdges, nEdges);
 
 			Eigen::SparseMatrix<double> M;
-			M = M1 + dt_sq * M2;
+			M = M1 + pow(dt, 2) * M2;
 			M.makeCompressed();
 			//Eigen::sparseMatrixToFile(M, "M.dat");
 
@@ -147,7 +150,8 @@ void AppmSolver::run()
 			Eigen::VectorXd src = Eigen::VectorXd::Zero(maxwellState.size());
 			Eigen::VectorXd rhs(x.size());
 			rhs.setZero();
-			rhs += M1 * (2 * maxwellState - maxwellStatePrevious) + dt_sq * src;
+			double dt_ratio = dt / dt_previous;
+			rhs += M1 * ((1 + dt_ratio) * maxwellState - dt_ratio * maxwellStatePrevious);
 			rhs -= Md * xd;
 
 			// Vector of free coefficients
@@ -182,6 +186,8 @@ void AppmSolver::run()
 			// Update state vectors for discrete states
 			E_h = Q * x;
 			B_h -= dt * C * E_h;
+
+			J_h = M_sigma * E_h;
 
 			//std::ofstream("E_h.dat") << E_h << std::endl;
 
@@ -361,6 +367,9 @@ void AppmSolver::init_maxwellStates()
 
 	E_h = Eigen::VectorXd::Zero(primalMesh.getNumberOfEdges());
 	B_h = Eigen::VectorXd::Zero(primalMesh.getNumberOfFaces());
+	J_h = Eigen::VectorXd::Zero(primalMesh.getNumberOfEdges());
+	J_h_previous = J_h;
+
 	electricFieldAtDualCellCenters = Eigen::Matrix3Xd::Zero(3, dualMesh.getNumberOfCells());
 	
 	const Eigen::VectorXi vertexTypes = primalMesh.getVertexTypes();
@@ -1296,6 +1305,18 @@ void AppmSolver::writeMaxwellStates(H5Writer & writer)
 
 	assert(electricFieldAtDualCellCenters.size() > 0);
 	writer.writeData(electricFieldAtDualCellCenters, "/EdualCellCenter");
+
+	assert(J_h.size() > 0);
+	assert(J_h.size() < dualMesh.getNumberOfFaces());
+	Eigen::Matrix3Xd J_consistent(3, dualMesh.getNumberOfFaces());
+	J_consistent.setZero();
+	for (int i = 0; i < J_h.size(); i++) {
+		const Face * face = dualMesh.getFace(i);
+		const double fA = face->getArea();
+		const Eigen::Vector3d fn = face->getNormal();
+		J_consistent.col(i) = J_h(i) / fA * fn;
+	}
+	writer.writeData(J_consistent, "/J_consistent");
 }
 
 XdmfGrid AppmSolver::getOutputPrimalEdgeGrid(const int iteration, const double time, const std::string & dataFilename)
@@ -2008,6 +2029,13 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
 	ss << "appm-" << iteration << ".h5:/faceFluxEnergy" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Current consistent\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/J_consistent" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 

@@ -86,6 +86,8 @@ private:
 	Eigen::SparseMatrix<double> M1, M2;
 	Eigen::VectorXd E_h;
 	Eigen::VectorXd B_h;
+	Eigen::VectorXd J_h;
+	Eigen::VectorXd J_h_previous;
 
 
 
