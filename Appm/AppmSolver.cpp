@@ -56,12 +56,14 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	if (isMaxwellEnabled) {
 		isWriteBfield = true;
 		isWriteEfield = true;
-		Eigen::sparseMatrixToFile(Q, "Q.dat");
-		Eigen::sparseMatrixToFile(Meps, "Meps.dat");
-		Eigen::sparseMatrixToFile(Mnu, "Mnu.dat");
-		Eigen::sparseMatrixToFile(C, "C.dat");
-		Eigen::sparseMatrixToFile(M1, "M1.dat");
-		Eigen::sparseMatrixToFile(M2, "M2.dat");
+		//Eigen::sparseMatrixToFile(Q, "Q.dat");
+		//Eigen::sparseMatrixToFile(Meps, "Meps.dat");
+		//Eigen::sparseMatrixToFile(Mnu, "Mnu.dat");
+		//Eigen::sparseMatrixToFile(C, "C.dat");
+		//Eigen::sparseMatrixToFile(M1, "M1.dat");
+		//Eigen::sparseMatrixToFile(M2, "M2.dat");
+
+		test_implicitEfieldToCurrent();
 	}
 }
 
@@ -659,6 +661,58 @@ void AppmSolver::init_Explosion(const Eigen::Vector3d refPos, const double radiu
 			fluidStates.col(cIdx).segment(5 * fluidIdx, 5) = state;
 		}
 	}
+}
+
+/**
+Test to implement Ohm's law j = M_sigma * e, as given by the implicit and consistent formulation of current and mass flux.
+*/
+void AppmSolver::test_implicitEfieldToCurrent()
+{
+	std::cout << "Test for Ohms law" << std::endl;
+	const int nEdges = primalMesh.getNumberOfEdges();
+
+	// Set data of electric field uniformly
+	for (int i = 0; i < nEdges; i++) {
+		const Edge * edge = primalMesh.getEdge(i);
+		const Eigen::Vector3d edgeDir = edge->getDirection().normalized();
+		E_h(i) = edgeDir.dot(Eigen::Vector3d::UnitZ());
+	}
+
+	typedef Eigen::Triplet<double> T;
+	std::vector<T> triplets;
+	for (int i = 0; i < nEdges; i++) {
+		const Face * dualFace = dualMesh.getFace(i);
+		const double faceArea = dualFace->getArea();
+		const Eigen::Vector3d faceNormal = dualFace->getNormal();
+
+		const std::vector<Cell*> faceCells = dualFace->getCellList();
+		for (auto cell : faceCells) {
+			const int k = cell->getIndex();
+			if (cell->getFluidType() == Cell::FluidType::FLUID) {
+				const double dt = 1;
+				const double q = 1;
+				const double n = 1; // number density in this cell
+				std::vector<Face*> cellFaces = cell->getFaceList();
+				for (auto face : cellFaces) {
+					const int primalEdgeIdx = face->getIndex();
+
+					// Skip dual faces that have no corresponding primal edge
+					if (primalEdgeIdx >= nEdges) { continue; } 
+
+					const double primalEdgeLength = primalMesh.getEdge(primalEdgeIdx)->getLength();
+					const Eigen::Vector3d r = face->getCenter() - cell->getCenter();
+					const double value = dt * q * n * r.dot(faceNormal) * faceArea / primalEdgeLength * getOrientation(cell, face);
+					assert(std::isfinite(value));
+
+					triplets.push_back(T(i, primalEdgeIdx, value));
+				}
+			}
+		}
+	}
+	Eigen::SparseMatrix<double> M_sigma(nEdges, nEdges);
+	M_sigma.setFromTriplets(triplets.begin(), triplets.end());
+	M_sigma.makeCompressed();
+	J_h = M_sigma * E_h;
 }
 
 /** 

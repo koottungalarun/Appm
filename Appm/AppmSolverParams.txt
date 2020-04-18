@@ -5,4 +5,4 @@ isMaxwellEnabled: 1
 timestepSize: 0.2
 lambdaSquare: 1e-0
 massFluxScheme: -ImEx
-initType: 1
+initType: 2

@@ -116,6 +116,8 @@ private:
 	void init_Uniformly(const double n, const double p, const double u);
 	void init_Explosion(const Eigen::Vector3d refPos, const double radius);
 
+	void test_implicitEfieldToCurrent();
+
 	
 	const int getFluidStateLength() const;
 	const double getNextFluidTimestepSize() const;
