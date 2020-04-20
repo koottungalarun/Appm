@@ -669,7 +669,80 @@ Test to implement Ohm's law j = M_sigma * e, as given by the implicit and consis
 void AppmSolver::test_implicitEfieldToCurrent()
 {
 	std::cout << "Test for Ohms law" << std::endl;
+
+	// Set E_h uniform in z-direction
+	E_h.setZero();
+	assert(E_h.size() == primalMesh.getNumberOfEdges());
+	for (int i = 0; i < E_h.size(); i++) {
+		const Edge * edge = primalMesh.getEdge(i);
+		const Eigen::Vector3d edgeDir = edge->getDirection().normalized();
+		E_h(i) = edgeDir.dot(Eigen::Vector3d::UnitZ());
+
+		const Eigen::Vector3d dualFaceNormal = dualMesh.getFace(i)->getNormal();
+		const double tol = 8 * std::numeric_limits<double>::epsilon();
+		assert(dualFaceNormal.dot(edgeDir) > (1 - tol));
+	}
+
+
+
+
+	const Face * dualFace = dualMesh.getFace(5193);
+	const std::vector<Cell*> adjacientCells = dualFace->getCellList();
+	assert(adjacientCells.size() == 2);
+	for (auto cell : adjacientCells) {
+		std::cout << "Cell " << cell->getIndex() << std::endl;
+		const double cellVolume = cell->getVolume();
+		std::vector<Face*> cellFaces = cell->getFaceList();
+		
+		Eigen::Vector3d E_k;
+		E_k.setZero();
+		for (auto face : cellFaces) {
+			int faceIdx = face->getIndex();
+			const double faceArea = face->getArea();
+			const Eigen::Vector3d r = face->getCenter() - cell->getCenter();
+			const Eigen::Vector3d fn = face->getNormal();
+
+			int edgeIdx = -1;
+			if (faceIdx < primalMesh.getNumberOfEdges()) {
+				edgeIdx = faceIdx;
+			}
+			else {
+				edgeIdx = dualFace->getIndex();
+			}
+
+			const Edge * edge = primalMesh.getEdge(edgeIdx);
+			const double edgeLength = edge->getLength();
+			const Eigen::Vector3d edgeDirection = edge->getDirection();
+			const double e_dec = E_h(edgeIdx) / edgeLength;
+			const Eigen::Vector3d Evec = e_dec * edgeDirection;
+
+			// assert that edge direction and face normal are parallel
+			const double tol = 8*std::numeric_limits<double>::epsilon();
+			assert(edgeDirection.cross(fn).norm() < tol);
+
+			const Eigen::Vector3d fn_outward = ((r.dot(fn) > 0) ? 1 : -1) * fn;
+			const Eigen::Vector3d temp = r * (Evec.dot(fn_outward)) * faceArea / cellVolume;
+
+			std::cout << "Face idx: " << face->getIndex() << "\t";
+			std::cout << "r*(E.n): " << (r * (Evec.dot(fn_outward))).transpose() << "\t";
+			std::cout << "|S|/|V|: " << faceArea / cellVolume << "\t";
+			std::cout << "E: " << Evec.transpose() << "\t";
+			std::wcout << "max(|temp|): " << std::scientific << temp.cwiseAbs().maxCoeff() << "\t";
+			std::cout << std::endl;
+
+			E_k += temp;
+		}
+		std::cout << "E_k: " << E_k.transpose() << "\t";
+		std::cout << std::endl;
+	}
+
+
+
+	return;
+
+	std::cout << "Test for Ohms law" << std::endl;
 	const int nEdges = primalMesh.getNumberOfEdges();
+	assert(nEdges == J_h.rows());
 
 	// Set data of electric field uniformly
 	for (int i = 0; i < nEdges; i++) {
@@ -678,33 +751,56 @@ void AppmSolver::test_implicitEfieldToCurrent()
 		E_h(i) = edgeDir.dot(Eigen::Vector3d::UnitZ());
 	}
 
+	assert(getNFluids() == 1);
+
 	typedef Eigen::Triplet<double> T;
 	std::vector<T> triplets;
-	for (int i = 0; i < nEdges; i++) {
-		const Face * dualFace = dualMesh.getFace(i);
+	for (int row = 0; row < nEdges; row++) {
+		const Face * dualFace = dualMesh.getFace(row);
 		const double faceArea = dualFace->getArea();
 		const Eigen::Vector3d faceNormal = dualFace->getNormal();
+
+		bool showOutput = row == 5193;
 
 		const std::vector<Cell*> faceCells = dualFace->getCellList();
 		for (auto cell : faceCells) {
 			const int k = cell->getIndex();
 			if (cell->getFluidType() == Cell::FluidType::FLUID) {
-				const double dt = 1;
-				const double q = 1;
 				const double n = 1; // number density in this cell
 				std::vector<Face*> cellFaces = cell->getFaceList();
 				for (auto face : cellFaces) {
-					const int primalEdgeIdx = face->getIndex();
+					int columnIdx = face->getIndex();
+					if (showOutput) {
+						std::cout << "face idx: " << columnIdx << "\t";
+					}
+					// Special case: dual extra faces that have no corresponding primal edge.
+					// therefore, use the same primal edge as that of the dual face under consideration
+					if (columnIdx >= nEdges) {
+						if (showOutput) {
+							std::cout << "special edge: ";
+						}
+						columnIdx = dualFace->getIndex();
+					} 
 
-					// Skip dual faces that have no corresponding primal edge
-					if (primalEdgeIdx >= nEdges) { continue; } 
-
-					const double primalEdgeLength = primalMesh.getEdge(primalEdgeIdx)->getLength();
+					const Edge * primalEdge = primalMesh.getEdge(columnIdx);
+					const double primalEdgeLength = primalEdge->getLength();
 					const Eigen::Vector3d r = face->getCenter() - cell->getCenter();
-					const double value = dt * q * n * r.dot(faceNormal) * faceArea / primalEdgeLength * getOrientation(cell, face);
-					assert(std::isfinite(value));
 
-					triplets.push_back(T(i, primalEdgeIdx, value));
+					const Eigen::Vector3d edgeDir = primalEdge->getDirection().normalized();
+					const int faceToEdgeIncidence = (edgeDir.dot(face->getNormal().normalized()) > 0) ? 1 : -1;
+					
+					// factor 1/2: from Rusanov flux
+					const double value = 0.5 * n * r.dot(faceNormal) * faceArea / primalEdgeLength * getOrientation(cell, face) * faceToEdgeIncidence;
+					assert(std::isfinite(value));
+					if (showOutput) {
+						std::cout << "column index: " << columnIdx << "\t";
+						std::cout << "value: " << value << "\t";
+						std::cout << "E_h: " << E_h(columnIdx) << "\t";
+						std::cout << std::endl;
+					}
+					assert(columnIdx < nEdges);
+					assert(columnIdx >= 0);
+					triplets.push_back(T(row, columnIdx, value));
 				}
 			}
 		}
@@ -712,6 +808,11 @@ void AppmSolver::test_implicitEfieldToCurrent()
 	Eigen::SparseMatrix<double> M_sigma(nEdges, nEdges);
 	M_sigma.setFromTriplets(triplets.begin(), triplets.end());
 	M_sigma.makeCompressed();
+
+	const double dt = 1;
+	const double q = 1;
+	const double massRatio = 1;
+	M_sigma *= dt * q * massRatio;
 	J_h = M_sigma * E_h;
 }
 
@@ -732,7 +833,7 @@ const double AppmSolver::getNextFluidTimestepSize() const
 	* exceed the distance from cell center to face.
 	*/
 	for (int fidx = 0; fidx < nFaces; fidx++) {
-		const Face * face = dualMesh.getFace(fidx);
+		const Face * face = dualMesh.getFace(fidx); 
 		const Eigen::Vector3d fc = face->getCenter();
 		const Eigen::Vector3d faceNormal = face->getNormal();
 		if (!face->hasFluidCells()) {
