@@ -1,5 +1,10 @@
 #pragma once
 
+#define _USE_MATH_DEFINES
+#include <cmath>
+#include <iostream>
+#include <iomanip>
+
 #include "PrimalMesh.h"
 #include "DualMesh.h"
 #include "Numerics.h"

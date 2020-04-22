@@ -62,7 +62,6 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 		//Eigen::sparseMatrixToFile(C, "C.dat");
 		//Eigen::sparseMatrixToFile(M1, "M1.dat");
 		//Eigen::sparseMatrixToFile(M2, "M2.dat");
-
 		test_implicitEfieldToCurrent();
 	}
 }
@@ -669,19 +668,15 @@ Test to implement Ohm's law j = M_sigma * e, as given by the implicit and consis
 void AppmSolver::test_implicitEfieldToCurrent()
 {
 	std::cout << "Test for Ohms law" << std::endl;
-
+	
 	// Set E_h uniform in z-direction
 	E_h.setZero();
 	assert(E_h.size() == primalMesh.getNumberOfEdges());
 	for (int i = 0; i < E_h.size(); i++) {
 		const Edge * edge = primalMesh.getEdge(i);
 		const Eigen::Vector3d edgeDir = edge->getDirection().normalized();
-		E_h(i) = edgeDir.dot(Eigen::Vector3d::UnitZ());
-
-		// Check that primal edges and corresponding dual face normals are parallel
-		const Eigen::Vector3d dualFaceNormal = dualMesh.getFace(i)->getNormal();
-		const double tol = 8 * std::numeric_limits<double>::epsilon();
-		assert(dualFaceNormal.dot(edgeDir) > (1 - tol));
+		const double edgeLength = edge->getLength();
+		E_h(i) = edgeDir.dot(Eigen::Vector3d::UnitZ()) * edgeLength;
 	}
 
 	// Setup of equation J = M * E + Jb
@@ -694,13 +689,17 @@ void AppmSolver::test_implicitEfieldToCurrent()
 	std::vector<T> triplets;
 
 	// For each dual face
+	const int refIdx = 7565;
 	for (int dualFaceIdx = 0; dualFaceIdx < J_h.size(); dualFaceIdx++) {
 
-		// TODO remove this limiter
-		if (dualFaceIdx >= primalMesh.getNumberOfEdges()) { break; }
-		
+		//if (dualFaceIdx != refIdx) { continue; }
+
 		const Face * dualFace = dualMesh.getFace(dualFaceIdx);
 		const Eigen::Vector3d dualFaceNormal = dualFace->getNormal();
+		const bool isDualFaceBoundary = dualFace->isBoundary();
+
+		// TODO remove this limiter
+		//if (dualFaceIdx >= primalMesh.getNumberOfEdges()) { break; }
 
 		// TODO only for faces in z-direction
 		if (dualFaceNormal.cross(Eigen::Vector3d::UnitZ()).norm() > 1e-8) {
@@ -709,56 +708,94 @@ void AppmSolver::test_implicitEfieldToCurrent()
 
 		// get list of adjacient cells
 		const std::vector<Cell*> adjacientCells = dualFace->getCellList();
-		assert(adjacientCells.size() == 2);
+		assert(adjacientCells.size() >= 1);
+		assert(adjacientCells.size() <= 2);
+		assert((adjacientCells.size() == 1 &&  dualFace->isBoundary())
+			|| (adjacientCells.size() == 2 && !dualFace->isBoundary()));
 
 		// For each adjacient cell
 		for (auto cell : adjacientCells) {
 			const double cellVolume = cell->getVolume();
 			std::vector<Face*> cellFaces = cell->getFaceList();
+			const Eigen::Vector3d cc = cell->getCenter();
 
 			// For each face of that cell
 			for (auto face : cellFaces) {
 				int faceIdx = face->getIndex();
 				const double faceArea = face->getArea();
-				const Eigen::Vector3d r = face->getCenter() - cell->getCenter();
 				const Eigen::Vector3d fn = face->getNormal().normalized();
+				const Eigen::Vector3d fc = face->getCenter();
+				const Eigen::Vector3d r = fc - cc;
 
-				int edgeIdx = -1;
-				if (faceIdx < primalMesh.getNumberOfEdges()) {
-					edgeIdx = faceIdx;
-				}
-				else {
-					// TODO Find primal edge that is normal to this face
-					continue;
-					edgeIdx = dualFace->getIndex();
-				}
+				// Get corresponding primal edge
+				const int edgeIdx = dualMesh.getAssociatedPrimalEdgeIndex(faceIdx);
 				assert(edgeIdx >= 0);
-
-				// get corresponding primal edge
+				assert(edgeIdx < primalMesh.getNumberOfEdges());
 				const Edge * edge = primalMesh.getEdge(edgeIdx);
 				const double edgeLength = edge->getLength();
 				const Eigen::Vector3d edgeDirection = edge->getDirection().normalized();
 
-				// assert that edge direction and face normal are parallel
-				const double tol = 128 * std::numeric_limits<double>::epsilon();
-				if (abs(fn.dot(Eigen::Vector3d::UnitZ())) > tol) { // check only for faces that are in z-direction
-					const Eigen::Vector3d e_dot_fn = edgeDirection.cross(fn);
-					const double e_dot_fn_norm = e_dot_fn.norm();
-					const bool isParallel = e_dot_fn_norm < tol;
-					assert(isParallel);
-				}
+				// assert that edge direction and face normal are (almost) parallel
+				const double tol = 0.2;
+				const Eigen::Vector3d e_x_fn = edgeDirection.cross(fn);
+				const double e_x_fn_norm = e_x_fn.norm();
+				const bool isParallel = e_x_fn_norm < tol;
+				assert(isParallel);
 
 				// 
 				const int row = dualFaceIdx;
 				const int col = edgeIdx;
 				const double n = 1; // number density in cell 
+				assert(cellVolume > 0);
+				const double r_dot_dualFaceNormal = r.dot(dualFaceNormal);
+				
+				// edgeLength * ((face->isBoundary()) ? 0.5 : 1); // this factor is from the hydrodynamic boundary condition
+				
+				const Eigen::Vector3d nj = face->getNormal();
+				const Eigen::Vector3d L = edge->getDirection().normalized();
 				const int incidence = r.dot(fn) > 0 ? 1 : -1;
-				double value = 0.5 * n * 1. / edgeLength * faceArea / cellVolume * r.dot(fn) * incidence;
-				value *= cellVolume;
+				const double dL = edge->getLength();
+				const double dA = face->getArea();
+				const double dV = cell->getVolume();
+				double value = n * r_dot_dualFaceNormal * 1. / dL * (L.dot(nj)) * incidence * dA / dV;
+				//value *= cellVolume; // TODO 
+
+				value *= (dualFace->isBoundary()) ? 1 : 0.5;
+				value *= dualFace->getArea();
+				//value *= (face->isBoundary()) ? 2 : 1; // this factor is from the mesh construction: dual boundary cells have half-length of inner cells
+
+				if (row == refIdx && E_h(col) != 0) {
+					std::cout << std::scientific << std::setprecision(4);
+					std::cout << std::endl;
+					std::cout << "row: " << row << "\t";
+					std::cout << "col: " << col << "\t";
+					std::cout << "value: " << value << std::endl;
+
+					std::cout << "dV:\t" << dV << std::endl;
+					std::cout << "dA:\t" << dA << std::endl;
+					std::cout << "dA/dV:\t" << dA / dV << std::endl;
+					std::cout << "dL:\t" << dL << std::endl;
+
+					std::cout << "fn:\t" << fn.transpose() << std::endl;
+					std::cout << "fc:\t" << fc.transpose() << std::endl;
+					std::cout << "cc:\t" << cc.transpose() << std::endl;
+					std::cout << "ri:\t" << r.transpose() << std::endl;
+
+					std::cout << "E_h(col):\t" << E_h(col) << std::endl;
+					std::cout << "L:\t" << L.transpose() << std::endl;
+					std::cout << "nj:\t" << nj.transpose() << std::endl;
+					std::cout << "L.nj:\t" << L.dot(nj) << std::endl;
+					std::cout << "r.dot(fn):\t" << incidence << std::endl;
+
+					std::cout << std::endl;
+				}
+
 				triplets.push_back(T(row, col, value));
 			}
 		}
 	}
+	std::cout << std::endl;
+
 	M_sigma.setFromTriplets(triplets.begin(), triplets.end());
 	M_sigma.makeCompressed();
 
@@ -769,6 +806,13 @@ void AppmSolver::test_implicitEfieldToCurrent()
 	//M_sigma *= dt * q * massRatio;
 
 	J_h = M_sigma * E_h + J_h_b;
+	
+	std::cout << "J_h(" << refIdx << "): \t";
+	std::cout << J_h(refIdx) << std::endl;
+	std::cout << "J_h/A: \t";
+	std::cout << J_h(refIdx) / dualMesh.getFace(refIdx)->getArea() << std::endl;
+
+	Eigen::sparseMatrixToFile(M_sigma, "Msigma.dat");
 }
 
 /** 
@@ -2143,7 +2187,7 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
-	ss << "<Attribute Name=\"Current consistent\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+	ss << "<Attribute Name=\"Current density consistent\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
 	ss << "appm-" << iteration << ".h5:/J_consistent" << std::endl;

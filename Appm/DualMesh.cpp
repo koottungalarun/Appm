@@ -430,6 +430,89 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal, const double terminalRad
 	h5writer.writeData(cellTypes, "/cellFluidTypes");
 	h5writer.writeData(faceTypes, "/faceFluidTypes");
 
+
+	dualFaceToPrimalEdgeList = associateDualFacesWithPrimalEdges(primal);
+
+}
+
+const int DualMesh::getAssociatedPrimalEdgeIndex(const int dualFaceIndex) const
+{
+	assert(dualFaceIndex >= 0);
+	assert(dualFaceIndex < this->getNumberOfFaces());
+	const int result = dualFaceToPrimalEdgeList(dualFaceIndex);
+	assert(isfinite((double) result));
+	assert(result >= 0);
+	return result;
+}
+
+Eigen::VectorXi DualMesh::associateDualFacesWithPrimalEdges(const PrimalMesh & primal)
+{
+	std::cout << "Associate dual faces and primal edges" << std::endl;
+	const int nDualFaces = this->getNumberOfFaces();
+	assert(nDualFaces > 0);
+	Eigen::VectorXi indexMap = Eigen::VectorXi(nDualFaces);
+	indexMap.setConstant(-1);
+
+	const int nPrimalEdges = primal.getNumberOfEdges();
+
+	for (int i = 0; i < nDualFaces; i++) {
+		const Face * dualFace = this->getFace(i);
+		const Eigen::Vector3d faceNormal = dualFace->getNormal().normalized();
+
+		if (i < nPrimalEdges) {
+			assert(dualFace->isBoundary() == false);
+			const Edge * primalEdge = primal.getEdge(i);
+			const Eigen::Vector3d edgeDir = primalEdge->getDirection().normalized();
+			assert(edgeDir.cross(faceNormal).norm() < 1e-10);
+			assert(primalEdge->getIndex() == i);
+			indexMap(i) = primalEdge->getIndex();
+		}
+		else {
+			assert(dualFace->isBoundary() == true);
+
+			// Get index of primal edge that is most aligned with dual face normal. 
+			// For that, find the primal vertex and loop over its adjacient edges.
+			const std::vector<Cell*> dualCellList = dualFace->getCellList();
+			assert(dualCellList.size() == 1);
+			const Cell * cell = dualCellList[0];
+
+			const Vertex * primalVertex = primal.getVertex(cell->getIndex());
+			const std::vector<Edge*> primalEdges = primalVertex->getEdges();
+			Eigen::VectorXd edge_cross_fn(primalEdges.size());
+			{
+				int idx = 0;
+				for (auto edge : primalEdges) {
+					auto edgeDir = edge->getDirection().normalized();
+					auto temp = edgeDir.cross(faceNormal);
+					edge_cross_fn(idx++) = temp.norm();
+				}
+			}
+		
+			Eigen::VectorXd::Index idx;
+			edge_cross_fn.minCoeff(&idx);
+			assert(idx >= 0);
+			const Edge * edge = primalEdges[idx];
+			indexMap(i) = edge->getIndex();
+		}
+	}
+
+	// Data check
+	Eigen::VectorXd temp(indexMap.size());
+	temp.setZero();
+	for (int i = 0; i < indexMap.size(); i++) {
+		const int edgeIdx = indexMap(i);
+		const Eigen::Vector3d fn = this->getFace(i)->getNormal().normalized();
+		const Eigen::Vector3d edgeDir = primal.getEdge(edgeIdx)->getDirection().normalized();
+		temp(i) = abs(edgeDir.dot(fn));
+	}
+	std::cout << "Smallest value of dot-product (edgeDir,faceNormal): " << temp.minCoeff() << std::endl;
+	assert(temp.minCoeff() > 0.99);
+	Eigen::MatrixXd data(indexMap.size(), 2);
+	data.col(0) = indexMap.cast<double>();
+	data.col(1) = temp;
+	std::cout << "Associate dual faces and primal edges -- DONE" << std::endl;
+	std::ofstream("associateDualFacesPrimalEdges.dat") << indexMap << std::endl;
+	return indexMap;
 }
 
 XdmfGrid DualMesh::getXdmfSurfaceGrid() const

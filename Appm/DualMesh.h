@@ -13,6 +13,7 @@ public:
 	~DualMesh();
 
 	void init_dualMesh(const PrimalMesh & primal, const double terminalRadius);
+	const int getAssociatedPrimalEdgeIndex(const int dualFaceIndex) const;
 
 protected:
 
@@ -21,6 +22,8 @@ protected:
 
 
 private:
+	Eigen::VectorXi dualFaceToPrimalEdgeList;
+	Eigen::VectorXi associateDualFacesWithPrimalEdges(const PrimalMesh & primal);
 
 	void init_cellFluidType();
 	void init_faceFluidType(const double terminalRadius);
