@@ -109,6 +109,17 @@ bool Face::hasFluidCells() const
 	return false;
 }
 
+bool Face::isFluidBoundary() const
+{
+	int nFluidCells = 0;
+	for (auto cell : cellList) {
+		if (cell->getFluidType() == Cell::FluidType::FLUID) {
+			nFluidCells++;
+		}
+	}
+	return nFluidCells == 1;
+}
+
 const int Face::getOrientation(const Edge * edge)
 {
 	assert(edge != nullptr);

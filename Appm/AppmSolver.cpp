@@ -668,6 +668,12 @@ Test to implement Ohm's law j = M_sigma * e, as given by the implicit and consis
 void AppmSolver::test_implicitEfieldToCurrent()
 {
 	std::cout << "Test for Ohms law" << std::endl;
+	assert(getNFluids() == 1);
+	const int fluidIdx = 0;
+
+	const double q = 1;
+	const double massRatio = 1;
+	const double dt = 1;
 	
 	// Set E_h uniform in z-direction
 	E_h.setZero();
@@ -689,12 +695,14 @@ void AppmSolver::test_implicitEfieldToCurrent()
 	std::vector<T> triplets;
 
 	// For each dual face
-	const int refIdx = 7565;
 	for (int dualFaceIdx = 0; dualFaceIdx < J_h.size(); dualFaceIdx++) {
 
-		//if (dualFaceIdx != refIdx) { continue; }
-
 		const Face * dualFace = dualMesh.getFace(dualFaceIdx);
+
+		if (!dualFace->hasFluidCells()) {
+			continue;
+		}
+
 		const Eigen::Vector3d dualFaceNormal = dualFace->getNormal();
 		const bool isDualFaceBoundary = dualFace->isBoundary();
 
@@ -715,87 +723,67 @@ void AppmSolver::test_implicitEfieldToCurrent()
 
 		// For each adjacient cell
 		for (auto cell : adjacientCells) {
+
+			if (cell->getFluidType() != Cell::FluidType::FLUID) { 
+				continue; 
+			}
+
 			const double cellVolume = cell->getVolume();
-			std::vector<Face*> cellFaces = cell->getFaceList();
+			assert(cellVolume > 0);
+
+			const std::vector<Face*> cellFaces = cell->getFaceList();
 			const Eigen::Vector3d cc = cell->getCenter();
+			const double n = fluidStates(5*fluidIdx, cell->getIndex()); // number density in cell 
 
 			// For each face of that cell
 			for (auto face : cellFaces) {
-				int faceIdx = face->getIndex();
-				const double faceArea = face->getArea();
-				const Eigen::Vector3d fn = face->getNormal().normalized();
-				const Eigen::Vector3d fc = face->getCenter();
-				const Eigen::Vector3d r = fc - cc;
-
+				const int faceIdx = face->getIndex();
+				
 				// Get corresponding primal edge
 				const int edgeIdx = dualMesh.getAssociatedPrimalEdgeIndex(faceIdx);
 				assert(edgeIdx >= 0);
 				assert(edgeIdx < primalMesh.getNumberOfEdges());
 				const Edge * edge = primalMesh.getEdge(edgeIdx);
-				const double edgeLength = edge->getLength();
-				const Eigen::Vector3d edgeDirection = edge->getDirection().normalized();
+				//const Eigen::Vector3d edgeDirection = edge->getDirection().normalized();
 
-				// assert that edge direction and face normal are (almost) parallel
-				const double tol = 0.2;
-				const Eigen::Vector3d e_x_fn = edgeDirection.cross(fn);
-				const double e_x_fn_norm = e_x_fn.norm();
-				const bool isParallel = e_x_fn_norm < tol;
-				assert(isParallel);
-
-				// 
-				const int row = dualFaceIdx;
-				const int col = edgeIdx;
-				const double n = 1; // number density in cell 
-				assert(cellVolume > 0);
-				const double r_dot_dualFaceNormal = r.dot(dualFaceNormal);
-				
-				// edgeLength * ((face->isBoundary()) ? 0.5 : 1); // this factor is from the hydrodynamic boundary condition
-				
 				const Eigen::Vector3d nj = face->getNormal();
 				const Eigen::Vector3d L = edge->getDirection().normalized();
-				const int incidence = r.dot(fn) > 0 ? 1 : -1;
+				assert(abs(abs(L.dot(nj)) - 1) < 0.001); // check if edge direction and face normal are (almost) parallel
+
+				const Eigen::Vector3d fc = face->getCenter();
+				const Eigen::Vector3d r = fc - cc; // Position vector of face center relative to cell center
+				assert(r.norm() > 0);
+
+				// Use Perot's interpolation method to obtain a cell-centered value 
+				// of the electric field that is defined at dual faces (= primal edges)
+				const double r_dot_dualFaceNormal = r.dot(dualFaceNormal);
+				const int incidence = r.dot(nj) > 0 ? 1 : -1;
 				const double dL = edge->getLength();
 				const double dA = face->getArea();
 				const double dV = cell->getVolume();
 				double value = n * r_dot_dualFaceNormal * 1. / dL * (L.dot(nj)) * incidence * dA / dV;
-				//value *= cellVolume; // TODO 
 
-				value *= (dualFace->isBoundary()) ? 1 : 0.5;
-				value *= dualFace->getArea();
-				//value *= (face->isBoundary()) ? 2 : 1; // this factor is from the mesh construction: dual boundary cells have half-length of inner cells
+				// factor due to definition of fluid flux: 
+				// - at interior faces: Rusanov scheme f = 0.5 * ( (nu)_k + (nu)_k+1 ) - 0.5 * (n_k+1 - n_k)
+				// - at fluid boundary faces: f = (nu)_k (opening condition)
+				value *= (dualFace->isFluidBoundary()) ? 1 : 0.5;
 
-				if (row == refIdx && E_h(col) != 0) {
-					std::cout << std::scientific << std::setprecision(4);
-					std::cout << std::endl;
-					std::cout << "row: " << row << "\t";
-					std::cout << "col: " << col << "\t";
-					std::cout << "value: " << value << std::endl;
+				// factor due to consistency of electric current and fluid flux: 
+				// J_h = j * A = q * f * A, where: 
+				//   J_h: face-integrated current
+				//   j:   current density at face
+				//   q:   ionization degree of fluid
+				//   f:   fluid flux at face
+				//   A:   face area
+				value *= q * dualFace->getArea();
 
-					std::cout << "dV:\t" << dV << std::endl;
-					std::cout << "dA:\t" << dA << std::endl;
-					std::cout << "dA/dV:\t" << dA / dV << std::endl;
-					std::cout << "dL:\t" << dL << std::endl;
-
-					std::cout << "fn:\t" << fn.transpose() << std::endl;
-					std::cout << "fc:\t" << fc.transpose() << std::endl;
-					std::cout << "cc:\t" << cc.transpose() << std::endl;
-					std::cout << "ri:\t" << r.transpose() << std::endl;
-
-					std::cout << "E_h(col):\t" << E_h(col) << std::endl;
-					std::cout << "L:\t" << L.transpose() << std::endl;
-					std::cout << "nj:\t" << nj.transpose() << std::endl;
-					std::cout << "L.nj:\t" << L.dot(nj) << std::endl;
-					std::cout << "r.dot(fn):\t" << incidence << std::endl;
-
-					std::cout << std::endl;
-				}
-
+				// Store coefficient in sparse matrix
+				const int row = dualFaceIdx;
+				const int col = edgeIdx;
 				triplets.push_back(T(row, col, value));
 			}
 		}
 	}
-	std::cout << std::endl;
-
 	M_sigma.setFromTriplets(triplets.begin(), triplets.end());
 	M_sigma.makeCompressed();
 
@@ -806,12 +794,6 @@ void AppmSolver::test_implicitEfieldToCurrent()
 	//M_sigma *= dt * q * massRatio;
 
 	J_h = M_sigma * E_h + J_h_b;
-	
-	std::cout << "J_h(" << refIdx << "): \t";
-	std::cout << J_h(refIdx) << std::endl;
-	std::cout << "J_h/A: \t";
-	std::cout << J_h(refIdx) / dualMesh.getFace(refIdx)->getArea() << std::endl;
-
 	Eigen::sparseMatrixToFile(M_sigma, "Msigma.dat");
 }
 

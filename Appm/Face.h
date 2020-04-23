@@ -28,6 +28,7 @@ public:
 
 	bool hasFaceEdges(const std::vector<Edge*> faceEdges) const;
 	bool hasFluidCells() const;
+	bool isFluidBoundary() const;
 	
 
 	friend std::ostream & operator<<(std::ostream & os, const Face & obj);
