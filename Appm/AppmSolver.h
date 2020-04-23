@@ -79,8 +79,7 @@ private:
 	bool isWriteEfield = false;
 	bool isWriteBfield = false;
 	bool isWriteHfield = false;
-	bool isWriteJfield = false;
-
+	
 	// State vector for solving Maxwell's equations
 	Eigen::VectorXd maxwellState;
 	Eigen::VectorXd maxwellStatePrevious;

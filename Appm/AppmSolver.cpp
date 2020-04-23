@@ -668,9 +668,11 @@ Test to implement Ohm's law j = M_sigma * e, as given by the implicit and consis
 void AppmSolver::test_implicitEfieldToCurrent()
 {
 	std::cout << "Test for Ohms law" << std::endl;
+
+	// TODO Extend code capabilities
+	// The implementation is limited to a single fluid and pre-defined material parameters
 	assert(getNFluids() == 1);
 	const int fluidIdx = 0;
-
 	const double q = 1;
 	const double massRatio = 1;
 	const double dt = 1;
@@ -696,21 +698,11 @@ void AppmSolver::test_implicitEfieldToCurrent()
 
 	// For each dual face
 	for (int dualFaceIdx = 0; dualFaceIdx < J_h.size(); dualFaceIdx++) {
-
 		const Face * dualFace = dualMesh.getFace(dualFaceIdx);
-
-		if (!dualFace->hasFluidCells()) {
-			continue;
-		}
-
 		const Eigen::Vector3d dualFaceNormal = dualFace->getNormal();
-		const bool isDualFaceBoundary = dualFace->isBoundary();
 
-		// TODO remove this limiter
-		//if (dualFaceIdx >= primalMesh.getNumberOfEdges()) { break; }
-
-		// TODO only for faces in z-direction
-		if (dualFaceNormal.cross(Eigen::Vector3d::UnitZ()).norm() > 1e-8) {
+		// The source term for Lorentz force is defined only in fluid cells
+		if (!dualFace->hasFluidCells()) {
 			continue;
 		}
 
@@ -723,11 +715,10 @@ void AppmSolver::test_implicitEfieldToCurrent()
 
 		// For each adjacient cell
 		for (auto cell : adjacientCells) {
-
+			// Lorentz force is defined only for fluid cells
 			if (cell->getFluidType() != Cell::FluidType::FLUID) { 
 				continue; 
 			}
-
 			const double cellVolume = cell->getVolume();
 			assert(cellVolume > 0);
 
@@ -765,8 +756,10 @@ void AppmSolver::test_implicitEfieldToCurrent()
 
 				// factor due to definition of fluid flux: 
 				// - at interior faces: Rusanov scheme f = 0.5 * ( (nu)_k + (nu)_k+1 ) - 0.5 * (n_k+1 - n_k)
-				// - at fluid boundary faces: f = (nu)_k (opening condition)
-				value *= (dualFace->isFluidBoundary()) ? 1 : 0.5;
+				// - at fluid boundary faces: 
+				//      f = (nu)_k (opening condition)				
+				//      f = ...    (wall condition) (TODO)				
+				value *= (dualFace->getFluidType() == Face::FluidType::OPENING) ? 1 : 0.5;
 
 				// factor due to consistency of electric current and fluid flux: 
 				// J_h = j * A = q * f * A, where: 
@@ -1453,7 +1446,7 @@ void AppmSolver::writeMaxwellStates(H5Writer & writer)
 		const Eigen::Vector3d fn = face->getNormal();
 		J_consistent.col(i) = J_h(i) / fA * fn;
 	}
-	writer.writeData(J_consistent, "/J_consistent");
+	writer.writeData(J_consistent, "/CurrentDensity");
 }
 
 XdmfGrid AppmSolver::getOutputPrimalEdgeGrid(const int iteration, const double time, const std::string & dataFilename)
@@ -2134,20 +2127,6 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
-
-
-
-	if (isWriteJfield) {
-		ss << "<Attribute Name=\"Electric Current\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
-		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
-			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << "appm-" << iteration << ".h5:/J" << std::endl;
-		ss << "</DataItem>" << std::endl;
-		ss << "</Attribute>" << std::endl;
-	}
-
-
-
 	ss << "<Attribute Name=\"Face Flux Mass\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
@@ -2169,10 +2148,10 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
-	ss << "<Attribute Name=\"Current density consistent\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+	ss << "<Attribute Name=\"Current density\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << "appm-" << iteration << ".h5:/J_consistent" << std::endl;
+	ss << "appm-" << iteration << ".h5:/CurrentDensity" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
