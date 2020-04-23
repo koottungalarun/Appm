@@ -97,6 +97,7 @@ public:
 	const Eigen::VectorXi getFaceTypes() const;
 
 	MeshInfo getMeshInfo() const;
+	const std::string getMeshDataFilename() const;
 
 
 protected:
@@ -114,6 +115,7 @@ protected:
 
 	virtual XdmfGrid getXdmfSurfaceGrid() const;
 	virtual XdmfGrid getXdmfVolumeGrid() const;
+
 
 
 private:

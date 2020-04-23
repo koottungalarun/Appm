@@ -426,9 +426,9 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal, const double terminalRad
 	std::cout << "  Opening:  " << nOpeningFaces << std::endl;
 	std::cout << "  Wall:     " << nWallFaces << std::endl;
 
-	H5Writer h5writer("dualMeshTypes.h5");
-	h5writer.writeData(cellTypes, "/cellFluidTypes");
-	h5writer.writeData(faceTypes, "/faceFluidTypes");
+	//H5Writer h5writer("dualMeshTypes.h5");
+	//h5writer.writeData(cellTypes, "/cellFluidTypes");
+	//h5writer.writeData(faceTypes, "/faceFluidTypes");
 
 
 	dualFaceToPrimalEdgeList = associateDualFacesWithPrimalEdges(primal);
@@ -520,7 +520,7 @@ XdmfGrid DualMesh::getXdmfSurfaceGrid() const
 	XdmfGrid surfaceGrid = Mesh::getXdmfSurfaceGrid();
 
 	XdmfAttribute attribute(XdmfAttribute::Tags("Face Fluid Type", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
-	std::string attributeString = (std::stringstream() << this->getPrefix() << "MeshTypes.h5:/faceFluidTypes").str();
+	std::string attributeString = (std::stringstream() << getMeshDataFilename() << ":/faceFluidTypes").str();
 	attribute.addChild(
 		XdmfDataItem(
 			XdmfDataItem::Tags(
@@ -539,7 +539,7 @@ XdmfGrid DualMesh::getXdmfVolumeGrid() const
 	XdmfGrid volumeGrid = Mesh::getXdmfVolumeGrid();
 
 	XdmfAttribute attribute(XdmfAttribute::Tags("Cell Fluid Type", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
-	std::string attributeString = (std::stringstream() << this->getPrefix() << "MeshTypes.h5:/cellFluidTypes").str();
+	std::string attributeString = (std::stringstream() << getMeshDataFilename() << ":/cellFluidTypes").str();
 	attribute.addChild(
 		XdmfDataItem(
 			XdmfDataItem::Tags(
