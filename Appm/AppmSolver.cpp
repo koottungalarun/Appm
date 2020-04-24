@@ -271,13 +271,10 @@ void AppmSolver::run()
 						fluidFluxes.col(idx1).segment(5 * fluidIdx, 5) -= orientation * faceFlux3d;
 					}
 					if (face->getFluidType() == Face::FluidType::OPENING) {
-						assert(false); // TODO to be checked
-						//assert(faceCells.size() == 1);
-						//const Cell * cell = faceCells[0];
-						//assert(cell->getFluidType() == Cell::FluidType::FLUID);
-						//int idxL = cell->getIndex();
-						//fluidFluxes.col(idxL).segment(5 * fluidIdx, 5) += faceFlux3d;
-						//assert(false);
+						assert(faceCells.size() == 1);
+						const Cell * cell = faceCells[0];
+						assert(cell->getFluidType() == Cell::FluidType::FLUID);
+						fluidFluxes.col(cell->getIndex()).segment(5 * fluidIdx, 5) += orientation * faceFlux3d;
 					}
 					if (face->getFluidType() == Face::FluidType::WALL) {
 						assert(faceCells.size() == 1 || faceCells.size() == 2);
@@ -997,9 +994,17 @@ const std::pair<int,int> AppmSolver::getAdjacientCellStates(const int faceIdx, c
 		break;
 
 	case Face::FluidType::OPENING:
-		assert(faceCells.size() >= 1);
-		assert(false);
-		exit(-1);
+		assert(faceCells.size() == 1);
+		if (orientation > 0) {
+			idxL = faceCells[0]->getIndex();
+			qL = getFluidState(idxL, fluidIdx, faceNormal);
+			qR = qL;
+		}
+		else {
+			idxR = faceCells[0]->getIndex();
+			qR = getFluidState(idxR, fluidIdx, faceNormal);
+			qL = qR;
+		}
 		break;
 
 	case Face::FluidType::WALL:
