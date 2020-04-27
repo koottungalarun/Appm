@@ -93,6 +93,8 @@ private:
 	Eigen::VectorXd J_h;
 	Eigen::VectorXd J_h_previous;
 
+	Eigen::Matrix3Xd E_cc; // Electric field at cell center
+
 
 
 	Eigen::MatrixXd fluidStates;
@@ -100,7 +102,6 @@ private:
 	Eigen::MatrixXd fluidSources;
 	Eigen::MatrixXd fluidFluxes;
 	Eigen::MatrixXd faceFluxes;
-	Eigen::Matrix3Xd electricFieldAtDualCellCenters;
 
 	Eigen::MatrixXd faceFluxesImExRusanov;
 
@@ -120,7 +121,14 @@ private:
 	void init_Uniformly(const double n, const double p, const double u);
 	void init_Explosion(const Eigen::Vector3d refPos, const double radius);
 
-	void test_implicitEfieldToCurrent();
+	void set_Efield_uniform(const Eigen::Vector3d direction);
+
+	Eigen::SparseMatrix<double> M_perot;
+	void initPerotInterpolationMatrix();
+	const Eigen::Matrix3Xd getEfieldAtCellCenter();
+
+	Eigen::SparseMatrix<double> M_sigma;
+	void initMsigma();
 
 	
 	const int getFluidStateLength() const;
@@ -141,7 +149,6 @@ private:
 
 	const double getMomentumUpdate(const int k, const Eigen::Vector3d & nvec, const int fluidIdx) const;
 	
-	void interpolateElectricFieldToCellCenter();
 
 	void interpolateMagneticFluxToPrimalVertices();
 

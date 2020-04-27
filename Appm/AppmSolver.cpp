@@ -56,13 +56,6 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	if (isMaxwellEnabled) {
 		isWriteBfield = true;
 		isWriteEfield = true;
-		//Eigen::sparseMatrixToFile(Q, "Q.dat");
-		//Eigen::sparseMatrixToFile(Meps, "Meps.dat");
-		//Eigen::sparseMatrixToFile(Mnu, "Mnu.dat");
-		//Eigen::sparseMatrixToFile(C, "C.dat");
-		//Eigen::sparseMatrixToFile(M1, "M1.dat");
-		//Eigen::sparseMatrixToFile(M2, "M2.dat");
-		test_implicitEfieldToCurrent();
 	}
 }
 
@@ -196,7 +189,8 @@ void AppmSolver::run()
 			maxwellStatePrevious = maxwellState;
 			maxwellState = x;
 
-			interpolateElectricFieldToCellCenter();
+			// Get electric field at cell center (interpolated from primal edge values)
+			E_cc = getEfieldAtCellCenter();
 
 			// Interpolation of B-field to dual cell centers
 			interpolateMagneticFluxToPrimalVertices();
@@ -291,34 +285,36 @@ void AppmSolver::run()
 			}
 
 			// Set source term
-			if (time < 0) {
-				for (int cIdx = 0; cIdx < nCells; cIdx++) {
-					const Cell * cell = dualMesh.getCell(cIdx);
+			for (int cIdx = 0; cIdx < nCells; cIdx++) {
+				const Cell * cell = dualMesh.getCell(cIdx);
 
-					// Skip cell that ore not of type Fluid
-					if (cell->getFluidType() != Cell::FluidType::FLUID) {
-						continue;
-					}
-					// For all fluids ... 
-					for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-						Eigen::VectorXd srcLocal(5);
-						srcLocal.setZero();
+				// Skip cell that ore not of type Fluid
+				if (cell->getFluidType() != Cell::FluidType::FLUID) {
+					continue;
+				}
+				// For all fluids ... 
+				for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+					Eigen::VectorXd srcLocal(5);
+					srcLocal.setZero();
 
-						// Define geometric position of source region: ball of radius r around reference position
-						const Eigen::Vector3d cc = cell->getCenter();
-						const Eigen::Vector3d srcRefPos(0, 0, 0);
-						const double srcRadius = 0.2;
+					//// Define geometric position of source region: ball of radius r around reference position
+					//const Eigen::Vector3d cc = cell->getCenter();
+					//const Eigen::Vector3d srcRefPos(0, 0, 0);
+					//const double srcRadius = 0.2;
+					//if ((cc - srcRefPos).norm() < srcRadius) {
+					//	srcLocal(0) = 0; // mass source
+					//	srcLocal.segment(1, 3) = Eigen::Vector3d::Zero(); // momentum source
+					//	srcLocal(4) = 1; // energy source
+					//}
 
-						if ((cc - srcRefPos).norm() < srcRadius) {
-							srcLocal(0) = 0; // mass source
-							srcLocal.segment(1, 3) = Eigen::Vector3d::Zero(); // momentum source
-							srcLocal(4) = 1; // energy source
-						}
-						fluidSources.col(cIdx).segment(5 * fluidIdx, 5) = srcLocal;
-					}
+					// TODO: Lorentz force (electrostatic)
+					// const Eigen::Vector3d Efield_atCellCenter = getEfieldAtDualCellCenter(cIdx);
+
+
+					fluidSources.col(cIdx).segment(5 * fluidIdx, 5) = srcLocal;
 				}
 			}
-
+			
 			// Update to next timestep: U(m+1) = U(m) - dt / volume * sum(fluxes)
 			for (int i = 0; i < nCells; i++) {
 				const Cell * cell = dualMesh.getCell(i);
@@ -363,13 +359,12 @@ void AppmSolver::init_maxwellStates()
 {
 	std::cout << "Initialize Maxwell states" << std::endl;
 
+
 	E_h = Eigen::VectorXd::Zero(primalMesh.getNumberOfEdges());
 	B_h = Eigen::VectorXd::Zero(primalMesh.getNumberOfFaces());
 	J_h = Eigen::VectorXd::Zero(dualMesh.getNumberOfFaces());
 	J_h_previous = J_h;
 
-	electricFieldAtDualCellCenters = Eigen::Matrix3Xd::Zero(3, dualMesh.getNumberOfCells());
-	
 	const Eigen::VectorXi vertexTypes = primalMesh.getVertexTypes();
 	const Eigen::VectorXi edgeTypes = primalMesh.getEdgeTypes();
 	const Eigen::VectorXi faceTypes = primalMesh.getFaceTypes();
@@ -421,6 +416,14 @@ void AppmSolver::init_maxwellStates()
 	const Eigen::SparseMatrix<double> Mnu_inner = Mnu.topLeftCorner(nPfi, nPfi);
 	M2 = P.transpose() * Mnu_inner * P;
 	M2.makeCompressed();
+
+
+	// Initialize matrix for interpolating electric field from primal edges to dual cell centers
+	initPerotInterpolationMatrix();
+	
+	// Electric field at cell centers
+	E_cc = Eigen::Matrix3Xd::Zero(3, dualMesh.getNumberOfCells());
+
 }
 
 Eigen::SparseMatrix<double> AppmSolver::getBoundaryGradientInnerInclusionOperator()
@@ -659,36 +662,105 @@ void AppmSolver::init_Explosion(const Eigen::Vector3d refPos, const double radiu
 	}
 }
 
-/**
-Test to implement Ohm's law j = M_sigma * e, as given by the implicit and consistent formulation of current and mass flux.
-*/
-void AppmSolver::test_implicitEfieldToCurrent()
+void AppmSolver::set_Efield_uniform(const Eigen::Vector3d direction)
 {
-	std::cout << "Test for Ohms law" << std::endl;
-
-	// TODO Extend code capabilities
-	// The implementation is limited to a single fluid and pre-defined material parameters
-	assert(getNFluids() == 1);
-	const int fluidIdx = 0;
-	const double q = 1;
-	const double massRatio = 1;
-	const double dt = 1;
-	
-	// Set E_h uniform in z-direction
+	// Set E_h uniform in a given direction
 	E_h.setZero();
 	assert(E_h.size() == primalMesh.getNumberOfEdges());
 	for (int i = 0; i < E_h.size(); i++) {
 		const Edge * edge = primalMesh.getEdge(i);
 		const Eigen::Vector3d edgeDir = edge->getDirection().normalized();
 		const double edgeLength = edge->getLength();
-		E_h(i) = edgeDir.dot(Eigen::Vector3d::UnitZ()) * edgeLength;
+		E_h(i) = edgeDir.dot(direction) * edgeLength;
 	}
+}
 
+/** 
+* Initialize matrix for interpolating electric field from primal edges to dual cell centers.*
+*/
+void AppmSolver::initPerotInterpolationMatrix()
+{
+	const std::string text = "Initialize Perot Interpolation Matrix";
+	std::cout << text << std::endl;
+
+	typedef Eigen::Triplet<double> T;
+	std::vector<T> triplets;
+
+	const int nCells = dualMesh.getNumberOfCells();
+	const int nEdges = primalMesh.getNumberOfEdges();
+	assert(nCells > 0);
+	assert(nEdges > 0);
+	assert(nEdges == E_h.rows());
+
+	for (int cIdx = 0; cIdx < nCells; cIdx++) {
+		const Cell * cell = dualMesh.getCell(cIdx);
+		const std::vector<Face*> cellFaces = cell->getFaceList();
+		for (auto face : cellFaces) {
+			const int faceIdx = face->getIndex();
+			const int edgeIdx = dualMesh.getAssociatedPrimalEdgeIndex(faceIdx);
+			const Edge * edge = primalMesh.getEdge(edgeIdx);
+
+			const Eigen::Vector3d fc = face->getCenter();
+			const Eigen::Vector3d cc = cell->getCenter();
+			const double dV = cell->getVolume();
+			const double dA = face->getArea();
+			const double dL = edge->getLength();
+
+			const Eigen::Vector3d r = cc - fc;
+			const Eigen::Vector3d L = edge->getDirection().normalized();
+			const Eigen::Vector3d n = face->getNormal();
+			const int incidence = r.dot(n) > 0 ? 1 : -1;
+
+			const double value = 1. / dL * L.dot(n) * incidence * dA / dV;
+
+			const int col = edgeIdx;
+			for (int i = 0; i < 3; i++) {
+				int row = 3 * cIdx + i;
+				triplets.push_back(T(row, col, value * r(i)));
+			}
+		}
+	}
+	M_perot = Eigen::SparseMatrix<double>(3*nCells, nEdges);
+	M_perot.setFromTriplets(triplets.begin(), triplets.end());
+	M_perot.makeCompressed();
+	
+	std::cout << text << ": DONE" << std::endl;
+	// Eigen::sparseMatrixToFile(M_perot, "Mperot.dat");
+}
+
+const Eigen::Matrix3Xd AppmSolver::getEfieldAtCellCenter()
+{
+	const int nCells = dualMesh.getNumberOfCells();
+	assert(M_perot.size() > 0);
+	assert(M_perot.nonZeros() > 0);
+
+	Eigen::VectorXd E_cc = M_perot * E_h;
+
+	//// Eigen library uses Maps to perform reshaping operations; more precisely, it is another 'view' on the underlying data. 
+	//Eigen::Map<Eigen::Matrix3Xd> E_reshaped(E_cc.data(), 3, nCells);
+	//Eigen::MatrixXd E_cellCenter(3, nCells);
+	//E_cellCenter.setZero();
+	//assert(E_cc.rows() == 3 * nCells);
+	//for (int i = 0; i < nCells; i++) {
+	//	E_cellCenter.col(i) = E_cc.segment(3*i, 3);
+	//	assert((E_cellCenter.col(i).array() == E_reshaped.col(i).array()).all());
+	//}
+	//E_cellCenter = E_reshaped;
+
+	// The class Map allows to 'view' the underlying data in different manner (e.g., doing a reshape operation)
+	Eigen::Map<Eigen::Matrix3Xd> result(E_cc.data(), 3, nCells);
+	return result;
+}
+
+void AppmSolver::initMsigma()
+{
 	// Setup of equation J = M * E + Jb
 	assert(J_h.size() > E_h.size());
-	Eigen::SparseMatrix<double> M_sigma(J_h.size(), E_h.size());
-	Eigen::VectorXd J_h_b(J_h.size());
-	J_h_b.setZero();
+
+	// TODO extend to multi-fluid model
+	assert(getNFluids() == 1);
+	const int fluidIdx = 0;
+	const double q = 1;
 
 	typedef Eigen::Triplet<double> T;
 	std::vector<T> triplets;
@@ -707,26 +779,26 @@ void AppmSolver::test_implicitEfieldToCurrent()
 		const std::vector<Cell*> adjacientCells = dualFace->getCellList();
 		assert(adjacientCells.size() >= 1);
 		assert(adjacientCells.size() <= 2);
-		assert((adjacientCells.size() == 1 &&  dualFace->isBoundary())
+		assert((adjacientCells.size() == 1 && dualFace->isBoundary())
 			|| (adjacientCells.size() == 2 && !dualFace->isBoundary()));
 
 		// For each adjacient cell
 		for (auto cell : adjacientCells) {
 			// Lorentz force is defined only for fluid cells
-			if (cell->getFluidType() != Cell::FluidType::FLUID) { 
-				continue; 
+			if (cell->getFluidType() != Cell::FluidType::FLUID) {
+				continue;
 			}
 			const double cellVolume = cell->getVolume();
 			assert(cellVolume > 0);
 
 			const std::vector<Face*> cellFaces = cell->getFaceList();
 			const Eigen::Vector3d cc = cell->getCenter();
-			const double n = fluidStates(5*fluidIdx, cell->getIndex()); // number density in cell 
+			const double n = fluidStates(5 * fluidIdx, cell->getIndex()); // number density in cell 
 
 			// For each face of that cell
 			for (auto face : cellFaces) {
 				const int faceIdx = face->getIndex();
-				
+
 				// Get corresponding primal edge
 				const int edgeIdx = dualMesh.getAssociatedPrimalEdgeIndex(faceIdx);
 				assert(edgeIdx >= 0);
@@ -774,17 +846,9 @@ void AppmSolver::test_implicitEfieldToCurrent()
 			}
 		}
 	}
+	M_sigma = Eigen::SparseMatrix<double>(J_h.size(), E_h.size());
 	M_sigma.setFromTriplets(triplets.begin(), triplets.end());
 	M_sigma.makeCompressed();
-
-	// TODO: multiply with electric ionization degree, mass ratio, and timestep size
-	//const double dt = 1;
-	//const double q = 1;
-	//const double massRatio = 1;
-	//M_sigma *= dt * q * massRatio;
-
-	J_h = M_sigma * E_h + J_h_b;
-	Eigen::sparseMatrixToFile(M_sigma, "Msigma.dat");
 }
 
 /** 
@@ -1053,38 +1117,6 @@ const double AppmSolver::getMomentumUpdate(const int k, const Eigen::Vector3d & 
 	}
 	result /= cell->getVolume();
 	return result;
-}
-
-/**
-* Interpolate electric field from primal edges to dual cell centers with Perot's method.
-*/
-void AppmSolver::interpolateElectricFieldToCellCenter()
-{
-	std::cout << "Interpolate electric field to cell center (Perot method)" << std::endl;
-	assert(primalMesh.getNumberOfVertices() == dualMesh.getNumberOfCells());
-	const int nDualCells = dualMesh.getNumberOfCells();
-	const int nPe = primalMesh.getNumberOfEdges();
-
-	for (int k = 0; k < nDualCells; k++) {
-		Eigen::Vector3d E_loc;
-		E_loc.setZero();
-
-		const Cell * dualCell = dualMesh.getCell(k);
-		const std::vector<Face*> cellFaces = dualCell->getFaceList();
-		for (auto dualFace : cellFaces) {
-			const int i = dualFace->getIndex();
-			if (i >= nPe) { continue; }			
-			const double faceArea = dualFace->getArea();
-			const Eigen::Vector3d r = dualFace->getCenter() - dualCell->getCenter();
-			const Eigen::Vector3d fn = dualFace->getNormal();
-			const int orientation = getOrientation(dualCell, dualFace);
-			const double primalEdgeLength = primalMesh.getEdge(i)->getLength();
-			const double eValue = E_h(i) * orientation * 1./primalEdgeLength;
-			E_loc += eValue * faceArea * r;
-		}
-		E_loc *= 1. / dualCell->getVolume();
-		electricFieldAtDualCellCenters.col(k) = E_loc;
-	}
 }
 
 
@@ -1437,8 +1469,7 @@ void AppmSolver::writeMaxwellStates(H5Writer & writer)
 	}
 	writer.writeData(E, "/E");
 
-	assert(electricFieldAtDualCellCenters.size() > 0);
-	writer.writeData(electricFieldAtDualCellCenters, "/EdualCellCenter");
+	writer.writeData(E_cc, "/Ecc");
 
 	assert(J_h.size() > 0);
 	assert(J_h.size() == dualMesh.getNumberOfFaces());
@@ -2224,6 +2255,15 @@ const std::string AppmSolver::xdmf_GridDualCells(const int iteration) const
 	ss << datafilename << ":/EdualCellCenter" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Ecc\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << " 3\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << datafilename << ":/Ecc" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+
 
 	//ss << fluidSolver->getXdmfOutput(iteration);
 	ss << fluidXdmfOutput(datafilename) << std::endl;
