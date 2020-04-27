@@ -17,10 +17,6 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	}
 	std::cout << "Dual mesh has " << dualMesh.getNumberOfVertices() << " vertices" << std::endl;
 
-	init_maxwellStates();
-
-	B_vertex = Eigen::Matrix3Xd::Zero(3, primalMesh.getNumberOfVertices());
-	init_RaviartThomasInterpolation();
 
 	init_multiFluid("particleParameters.txt");
 	
@@ -52,6 +48,11 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	default:
 		exit(-1);
 	}
+
+	init_maxwellStates();
+	B_vertex = Eigen::Matrix3Xd::Zero(3, primalMesh.getNumberOfVertices());
+	init_RaviartThomasInterpolation();
+
 
 	if (isMaxwellEnabled) {
 		isWriteBfield = true;
@@ -93,10 +94,14 @@ void AppmSolver::run()
 	//}
 
 	
-	// Time integration loop
-	//double dT = 0.05;
+
+	// Number of primal vertices on terminals
 	const int nPrimalTerminalVertices = primalMesh.getMeshInfo().nVerticesTerminal;
 	assert(nPrimalTerminalVertices > 0);
+
+	// Number of primal edges
+	const int nEdges = primalMesh.getNumberOfEdges();
+
 
 	const int nFluids = this->getNFluids();
 	const int nFaces = dualMesh.getNumberOfFaces();
@@ -104,6 +109,12 @@ void AppmSolver::run()
 	faceFluxesImExRusanov = Eigen::MatrixXd::Zero(nFaces, nFluids);
 	writeOutput(iteration, time);
 
+	const std::string stopFilename = "stop.txt";
+	std::ofstream(stopFilename) << 0 << std::endl;
+
+	/*
+	* Time integration loop 
+	*/
 	while (iteration < maxIterations && time < maxTime) {
 		std::cout << "Iteration " << iteration << ",\t time = " << time << std::endl;
 
@@ -120,32 +131,53 @@ void AppmSolver::run()
 
 		// Maxwell equations
 		if (isMaxwellEnabled) {
-			//maxwellSolver->updateMaxwellState(dt, time);
+
+			// New state vector, solution of the implicit system of equation that we are setting up in the next lines
 			Eigen::VectorXd x(maxwellState.size());
-
-			const int nEdges = primalMesh.getNumberOfEdges();
-			Eigen::SparseMatrix<double> M_sigma(nEdges, nEdges);
-
+			
+			// System matrix on left hand side, i.e., M*x = rhs, to be solved for x
 			Eigen::SparseMatrix<double> M;
+			assert(M1.size() > 0);
+			assert(M1.nonZeros() > 0);
+			assert(M2.size() > 0);
+			assert(M2.nonZeros() > 0);
 			M = M1 + pow(dt, 2) * M2;
 			M.makeCompressed();
 			//Eigen::sparseMatrixToFile(M, "M.dat");
 
+			// The system of equations has fixed and free values; 
+			// - fixed values: electric potential at terminals (Dirichlet boundary condition)
+			// - free  values: electric potential at non-terminal vertices, and electric voltages at non-boundary edges
 			const int nDirichlet = nPrimalTerminalVertices;
 			const int nFree = maxwellState.size() - nDirichlet;
+
+			// The vector of degrees of freedom (DoF) is sorted such that free values are in front of fixed values:
+			// x = [freeValues, fixedValues]
+			// Therefore, the system of free DoF is given as: (without considering proper array sizes)
+			// M_free * x_free = -M_fixed * x_fixed + rhs
 
 			// Dirichlet conditions
 			Eigen::SparseMatrix<double> Md = M.rightCols(nDirichlet);
 			Eigen::VectorXd xd = Eigen::VectorXd::Zero(nDirichlet);
 			assert(nDirichlet % 2 == 0);
-			xd.topRows(xd.size() / 2).array() = 2;
-			xd.bottomRows(xd.size() / 2).array() = 1; // voltage condition on terminal B
+			xd.topRows(xd.size() / 2) = terminalVoltageBC_sideA(time) * Eigen::VectorXd::Ones(xd.size() / 2);
+			xd.bottomRows(xd.size() / 2) = terminalVoltageBC_sideB(time) * Eigen::VectorXd::Ones(xd.size() / 2);
+
 
 			Eigen::VectorXd src = Eigen::VectorXd::Zero(maxwellState.size());
+
+			// Vector on right hand side
 			Eigen::VectorXd rhs(x.size());
 			rhs.setZero();
+
+			// Setup of rhs vector
 			double dt_ratio = dt / dt_previous;
 			rhs += M1 * ((1 + dt_ratio) * maxwellState - dt_ratio * maxwellStatePrevious);
+			// TODO: current source in Ampere equation
+			Eigen::VectorXd temp = dt * Q.transpose() * (J_h - J_h_previous).segment(0, nEdges);
+			assert((temp.array() == 0).all());
+			//rhs -= dt * Q.transpose() * (J_h - J_h_previous).segment(0, nEdges);
+
 			rhs -= Md * xd;
 
 			// Vector of free coefficients
@@ -181,7 +213,8 @@ void AppmSolver::run()
 			E_h = Q * x;
 			B_h -= dt * C * E_h;
 
-			J_h = M_sigma * E_h;
+			// TODO: Get electric current due to Ohms law (see implicit and consistent formulation of electric current)
+			//J_h = M_sigma * E_h;
 
 			//std::ofstream("E_h.dat") << E_h << std::endl;
 
@@ -194,10 +227,6 @@ void AppmSolver::run()
 
 			// Interpolation of B-field to dual cell centers
 			interpolateMagneticFluxToPrimalVertices();
-
-			// Consistent formulation of current as mass flux
-
-			// Solve  d^2/dt^2 (E) + curl(curl(E)) + n E = rhs, for new timestep
 		}
 
 
@@ -330,6 +359,17 @@ void AppmSolver::run()
 		iteration++;
 		time += dt;
 		writeOutput(iteration, time);
+
+		int stopValue = 0;
+		std::ifstream(stopFilename) >> stopValue;
+		if (stopValue > 0) {
+			std::cout << "Stop because of value set in stop-file (" << stopFilename << ")" << std::endl;
+			std::cout << "Stop value: " << stopValue << std::endl;
+			break;
+		}
+		else {
+			std::cout << "Continue; value in stop-file is non-positive" << std::endl;
+		}
 	}
 	std::cout << "Final time:      " << time << std::endl;
 	std::cout << "Final iteration: " << iteration << std::endl;
@@ -424,6 +464,8 @@ void AppmSolver::init_maxwellStates()
 	// Electric field at cell centers
 	E_cc = Eigen::Matrix3Xd::Zero(3, dualMesh.getNumberOfCells());
 
+	// Initialize matrix that maps electric field on primal edges to electric current on dual faces; see Lorentz force in Fluid equations
+	initMsigma();
 }
 
 Eigen::SparseMatrix<double> AppmSolver::getBoundaryGradientInnerInclusionOperator()
@@ -758,6 +800,7 @@ void AppmSolver::initMsigma()
 	assert(J_h.size() > E_h.size());
 
 	// TODO extend to multi-fluid model
+	std::cout << "Number of fluids: " << getNFluids() << std::endl;
 	assert(getNFluids() == 1);
 	const int fluidIdx = 0;
 	const double q = 1;
@@ -849,6 +892,18 @@ void AppmSolver::initMsigma()
 	M_sigma = Eigen::SparseMatrix<double>(J_h.size(), E_h.size());
 	M_sigma.setFromTriplets(triplets.begin(), triplets.end());
 	M_sigma.makeCompressed();
+}
+
+const double AppmSolver::terminalVoltageBC_sideA(const double time) const
+{
+	const double t0 = 2;
+	const double tscale = 0.1;
+	return 0.5 * (1 + tanh((time - t0) / tscale)); 
+}
+
+const double AppmSolver::terminalVoltageBC_sideB(const double time) const
+{
+	return 0.0;
 }
 
 /** 
@@ -1988,6 +2043,13 @@ void AppmSolver::readParameters(const std::string & filename)
 		if (tag == "initType") {
 			std::istringstream(line.substr(pos + 1)) >> initType;
 		}
+		if (tag == "isElectricLorentzForceActive") {
+			std::istringstream(line.substr(pos + 1)) >> isElectricLorentzForceActive;
+		}
+		if (tag == "isMagneticLorentzForceActive") {
+			std::istringstream(line.substr(pos + 1)) >> isMagneticLorentzForceActive;
+		}
+
 	}
 
 	std::cout << std::endl;
@@ -2001,6 +2063,8 @@ void AppmSolver::readParameters(const std::string & filename)
 	std::cout << "lambdaSquare: " << lambdaSquare << std::endl;
 	std::cout << "massFluxScheme: " << massFluxScheme << std::endl;
 	std::cout << "initType: " << initType << std::endl;
+	std::cout << "isElectricLorentzForceActive: " << isElectricLorentzForceActive << std::endl;
+	std::cout << "isMagneticLorentzForceActive: " << isMagneticLorentzForceActive << std::endl;
 	std::cout << "=======================" << std::endl;
 }
 
@@ -2246,13 +2310,6 @@ const std::string AppmSolver::xdmf_GridDualCells(const int iteration) const
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfVertices() << " 3\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
 	ss << datafilename << ":/Bvertex" << std::endl;
-	ss << "</DataItem>" << std::endl;
-	ss << "</Attribute>" << std::endl;
-
-	ss << "<Attribute Name=\"Electric Field Interpolated\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
-	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << " 3\""
-		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << datafilename << ":/EdualCellCenter" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 

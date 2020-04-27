@@ -75,6 +75,8 @@ private:
 	double lambdaSquare = 1.0;
 	MassFluxScheme massFluxScheme = MassFluxScheme::EXPLICIT;
 	int initType = 1;
+	bool isElectricLorentzForceActive = false;
+	bool isMagneticLorentzForceActive = false;
 
 	bool isWriteEfield = false;
 	bool isWriteBfield = false;
@@ -87,7 +89,13 @@ private:
 	Eigen::SparseMatrix<double> Meps;
 	Eigen::SparseMatrix<double> Mnu;
 	Eigen::SparseMatrix<double> C;
-	Eigen::SparseMatrix<double> M1, M2;
+
+	// M1 = lambda^2 * Q' * Meps * Q in the reformulated Ampere equation. 
+	Eigen::SparseMatrix<double> M1;
+
+	// M2 = Cdual * Mnu * C in the reformulated Ampere equation, restricted to inner edges. 
+	Eigen::SparseMatrix<double> M2;
+
 	Eigen::VectorXd E_h;
 	Eigen::VectorXd B_h;
 	Eigen::VectorXd J_h;
@@ -127,10 +135,13 @@ private:
 	void initPerotInterpolationMatrix();
 	const Eigen::Matrix3Xd getEfieldAtCellCenter();
 
+	// Matrix for Ohms law J_h = M_sigma * E_h
 	Eigen::SparseMatrix<double> M_sigma;
 	void initMsigma();
 
-	
+	const double terminalVoltageBC_sideA(const double time) const;
+	const double terminalVoltageBC_sideB(const double time) const;
+
 	const int getFluidStateLength() const;
 	const double getNextFluidTimestepSize() const;
 
