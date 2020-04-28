@@ -78,6 +78,12 @@ private:
 	bool isElectricLorentzForceActive = false;
 	bool isMagneticLorentzForceActive = false;
 
+	enum class MaxwellSolverBCType {
+		VOLTAGE_BC, CURRENT_BC
+	};
+
+	MaxwellSolverBCType maxwellSolverBCType = MaxwellSolverBCType::VOLTAGE_BC;
+
 	bool isWriteEfield = false;
 	bool isWriteBfield = false;
 	bool isWriteHfield = false;
@@ -139,8 +145,10 @@ private:
 	Eigen::SparseMatrix<double> M_sigma;
 	void initMsigma();
 
-	const double terminalVoltageBC_sideA(const double time) const;
+	const double terminalVoltageBC_sideA(const double time, const double t0, const double tscale) const;
 	const double terminalVoltageBC_sideB(const double time) const;
+
+	const Eigen::VectorXd getCurrentAtFaces(const double time) const;
 
 	const int getFluidStateLength() const;
 	const double getNextFluidTimestepSize() const;

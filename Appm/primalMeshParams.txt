@@ -1,6 +1,6 @@
 axialLayers: 10
 refinements: 2
-outerLayers: 3
-zMax: 10
-terminalRadius: 1
+outerLayers: 0
+zMax: 1
+terminalRadius: 2
 

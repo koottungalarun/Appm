@@ -112,6 +112,8 @@ void AppmSolver::run()
 	const std::string stopFilename = "stop.txt";
 	std::ofstream(stopFilename) << 0 << std::endl;
 
+	maxwellSolverBCType = MaxwellSolverBCType::VOLTAGE_BC;
+
 	/*
 	* Time integration loop 
 	*/
@@ -148,7 +150,10 @@ void AppmSolver::run()
 			// The system of equations has fixed and free values; 
 			// - fixed values: electric potential at terminals (Dirichlet boundary condition)
 			// - free  values: electric potential at non-terminal vertices, and electric voltages at non-boundary edges
-			const int nDirichlet = nPrimalTerminalVertices;
+			int nDirichlet = nPrimalTerminalVertices;
+			if (maxwellSolverBCType == MaxwellSolverBCType::CURRENT_BC) {
+				nDirichlet /= 2;
+			}
 			const int nFree = maxwellState.size() - nDirichlet;
 
 			// The vector of degrees of freedom (DoF) is sorted such that free values are in front of fixed values:
@@ -159,9 +164,30 @@ void AppmSolver::run()
 			// Dirichlet conditions
 			Eigen::SparseMatrix<double> Md = M.rightCols(nDirichlet);
 			Eigen::VectorXd xd = Eigen::VectorXd::Zero(nDirichlet);
-			assert(nDirichlet % 2 == 0);
-			xd.topRows(xd.size() / 2) = terminalVoltageBC_sideA(time) * Eigen::VectorXd::Ones(xd.size() / 2);
-			xd.bottomRows(xd.size() / 2) = terminalVoltageBC_sideB(time) * Eigen::VectorXd::Ones(xd.size() / 2);
+			
+			switch (maxwellSolverBCType) {
+				case MaxwellSolverBCType::VOLTAGE_BC:
+				{
+					assert(nDirichlet % 2 == 0);
+					const double t0 = 1;
+					const double tscale = 0.2;
+					xd.topRows(nDirichlet / 2) = terminalVoltageBC_sideA(time, t0, tscale) * Eigen::VectorXd::Ones(nDirichlet / 2);
+					xd.bottomRows(nDirichlet / 2) = terminalVoltageBC_sideB(time) * Eigen::VectorXd::Ones(nDirichlet / 2);
+					break;
+				}
+
+				case MaxwellSolverBCType::CURRENT_BC:
+				{
+					xd.bottomRows(nDirichlet) = terminalVoltageBC_sideB(time) * Eigen::VectorXd::Ones(nDirichlet);
+					break;
+				}
+
+				default:
+				{
+					std::cout << "Maxwell Solver Boundary Type not implemented" << std::endl;
+					assert(false);
+				}
+			}
 
 
 			Eigen::VectorXd src = Eigen::VectorXd::Zero(maxwellState.size());
@@ -173,10 +199,14 @@ void AppmSolver::run()
 			// Setup of rhs vector
 			double dt_ratio = dt / dt_previous;
 			rhs += M1 * ((1 + dt_ratio) * maxwellState - dt_ratio * maxwellStatePrevious);
+
 			// TODO: current source in Ampere equation
-			Eigen::VectorXd temp = dt * Q.transpose() * (J_h - J_h_previous).segment(0, nEdges);
-			assert((temp.array() == 0).all());
-			//rhs -= dt * Q.transpose() * (J_h - J_h_previous).segment(0, nEdges);
+			if (maxwellSolverBCType == MaxwellSolverBCType::CURRENT_BC) {
+				J_h_previous = J_h;
+				J_h = getCurrentAtFaces(time);
+				Eigen::VectorXd deltaJ = dt * Q.transpose() * (J_h - J_h_previous).segment(0, nEdges);
+				rhs -= deltaJ;
+			}
 
 			rhs -= Md * xd;
 
@@ -851,7 +881,7 @@ void AppmSolver::initMsigma()
 
 				const Eigen::Vector3d nj = face->getNormal();
 				const Eigen::Vector3d L = edge->getDirection().normalized();
-				assert(abs(abs(L.dot(nj)) - 1) < 0.001); // check if edge direction and face normal are (almost) parallel
+				//assert(abs(abs(L.dot(nj)) - 1) < 0.001); // check if edge direction and face normal are (almost) parallel
 
 				const Eigen::Vector3d fc = face->getCenter();
 				const Eigen::Vector3d r = fc - cc; // Position vector of face center relative to cell center
@@ -894,16 +924,37 @@ void AppmSolver::initMsigma()
 	M_sigma.makeCompressed();
 }
 
-const double AppmSolver::terminalVoltageBC_sideA(const double time) const
+const double AppmSolver::terminalVoltageBC_sideA(const double time, const double t0, const double tscale) const
 {
-	const double t0 = 2;
-	const double tscale = 0.1;
 	return 0.5 * (1 + tanh((time - t0) / tscale)); 
 }
 
 const double AppmSolver::terminalVoltageBC_sideB(const double time) const
 {
 	return 0.0;
+}
+
+const Eigen::VectorXd AppmSolver::getCurrentAtFaces(const double time) const
+{
+	const double t0 = 4;
+	const double t1 = 7;
+	const double tscale = 1;
+	const double value = 0.5 * (1 + tanh(time - t0) / tscale) * 0.5 * (1 + tanh(-(time - t1) / tscale));
+	const Eigen::VectorXd zUnitVec = Eigen::Vector3d::UnitZ();
+
+	Eigen::VectorXd result(dualMesh.getNumberOfFaces());
+	result.setZero();
+
+	for (int i = 0; i < result.size(); i++) {
+		const Face * face = dualMesh.getFace(i);
+		const Eigen::Vector3d fc = face->getCenter();
+		if (fc.segment(0, 2).norm() < 0.35) {
+			const Eigen::Vector3d fn = face->getNormal();
+			const double fA = face->getArea();
+			result(i) = value * fn.dot(zUnitVec) * fA;
+		}
+	}
+	return result;
 }
 
 /** 
