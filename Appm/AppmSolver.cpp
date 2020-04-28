@@ -112,8 +112,7 @@ void AppmSolver::run()
 	const std::string stopFilename = "stop.txt";
 	std::ofstream(stopFilename) << 0 << std::endl;
 
-	maxwellSolverBCType = MaxwellSolverBCType::VOLTAGE_BC;
-
+	std::vector<double> currentBCValue;
 	/*
 	* Time integration loop 
 	*/
@@ -152,7 +151,7 @@ void AppmSolver::run()
 			// - free  values: electric potential at non-terminal vertices, and electric voltages at non-boundary edges
 			int nDirichlet = nPrimalTerminalVertices;
 			if (maxwellSolverBCType == MaxwellSolverBCType::CURRENT_BC) {
-				nDirichlet /= 2;
+				nDirichlet = nPrimalTerminalVertices / 2;
 			}
 			const int nFree = maxwellState.size() - nDirichlet;
 
@@ -203,8 +202,26 @@ void AppmSolver::run()
 			// TODO: current source in Ampere equation
 			if (maxwellSolverBCType == MaxwellSolverBCType::CURRENT_BC) {
 				J_h_previous = J_h;
-				J_h = getCurrentAtFaces(time);
-				Eigen::VectorXd deltaJ = dt * Q.transpose() * (J_h - J_h_previous).segment(0, nEdges);
+				
+				const double currentValue = currentDensityBC(time);
+				currentBCValue.push_back(currentValue);
+
+				const Eigen::VectorXd zUnitVec = Eigen::Vector3d::UnitZ();
+				Eigen::VectorXd dualFacesInZDirection(dualMesh.getNumberOfFaces());
+				dualFacesInZDirection.setZero();
+
+				for (int i = 0; i < dualFacesInZDirection.size(); i++) {
+					const Face * face = dualMesh.getFace(i);
+					const Eigen::Vector3d fc = face->getCenter();
+					if (true || fc.segment(0, 2).norm() < 0.35) {
+						const Eigen::Vector3d fn = face->getNormal();
+						const double fA = face->getArea();
+						dualFacesInZDirection(i) = fn.dot(zUnitVec) * fA;
+					}
+				}
+
+				J_h = currentValue * dualFacesInZDirection;
+				const Eigen::VectorXd deltaJ = dt * Q.transpose() * (J_h - J_h_previous).segment(0, nEdges);
 				rhs -= deltaJ;
 			}
 
@@ -403,6 +420,15 @@ void AppmSolver::run()
 	}
 	std::cout << "Final time:      " << time << std::endl;
 	std::cout << "Final iteration: " << iteration << std::endl;
+
+	if (currentBCValue.size() > 0) {
+		std::string filename = "currentBC.dat";
+		std::cout << "Write data to file: " << filename << std::endl;
+		std::ofstream currentBCoutput(filename);
+		for (auto value : currentBCValue) {
+			currentBCoutput << value << std::endl;
+		}
+	}
 
 	// test_raviartThomas();
 
@@ -934,27 +960,13 @@ const double AppmSolver::terminalVoltageBC_sideB(const double time) const
 	return 0.0;
 }
 
-const Eigen::VectorXd AppmSolver::getCurrentAtFaces(const double time) const
+const double AppmSolver::currentDensityBC(const double time) const
 {
-	const double t0 = 4;
-	const double t1 = 7;
-	const double tscale = 1;
-	const double value = 0.5 * (1 + tanh(time - t0) / tscale) * 0.5 * (1 + tanh(-(time - t1) / tscale));
-	const Eigen::VectorXd zUnitVec = Eigen::Vector3d::UnitZ();
-
-	Eigen::VectorXd result(dualMesh.getNumberOfFaces());
-	result.setZero();
-
-	for (int i = 0; i < result.size(); i++) {
-		const Face * face = dualMesh.getFace(i);
-		const Eigen::Vector3d fc = face->getCenter();
-		if (fc.segment(0, 2).norm() < 0.35) {
-			const Eigen::Vector3d fn = face->getNormal();
-			const double fA = face->getArea();
-			result(i) = value * fn.dot(zUnitVec) * fA;
-		}
-	}
-	return result;
+	const double t0 = 2;
+	const double t1 = 5;
+	const double tscale = 0.5;
+	const double currentValue = std::exp(-pow((time - t0) / tscale, 2)) - std::exp(-pow((time - t1) / tscale, 2));
+	return currentValue;
 }
 
 /** 
@@ -1551,6 +1563,8 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 
 void AppmSolver::writeMaxwellStates(H5Writer & writer)
 {
+	writer.writeData(maxwellState, "/x");
+
 	assert(B_h.size() > 0);
 	writer.writeData(B_h, "/bvec");
 
@@ -2100,6 +2114,16 @@ void AppmSolver::readParameters(const std::string & filename)
 		if (tag == "isMagneticLorentzForceActive") {
 			std::istringstream(line.substr(pos + 1)) >> isMagneticLorentzForceActive;
 		}
+		if (tag == "maxwellSolverBCType") {
+			std::string temp;
+			std::istringstream(line.substr(pos + 1)) >> temp;
+			if (temp == "Voltage") {
+				maxwellSolverBCType = MaxwellSolverBCType::VOLTAGE_BC;
+			}
+			if (temp == "Current") {
+				maxwellSolverBCType = MaxwellSolverBCType::CURRENT_BC;
+			}
+		}
 
 	}
 
@@ -2116,6 +2140,7 @@ void AppmSolver::readParameters(const std::string & filename)
 	std::cout << "initType: " << initType << std::endl;
 	std::cout << "isElectricLorentzForceActive: " << isElectricLorentzForceActive << std::endl;
 	std::cout << "isMagneticLorentzForceActive: " << isMagneticLorentzForceActive << std::endl;
+	std::cout << "maxwellSolverBCType: " << maxwellSolverBCType << std::endl;
 	std::cout << "=======================" << std::endl;
 }
 
@@ -2455,6 +2480,21 @@ std::ostream & operator<<(std::ostream & os, const AppmSolver::MassFluxScheme & 
 
 	case AppmSolver::MassFluxScheme::IMPLICIT_EXPLICIT:
 		os << "IMEX";
+	}
+	return os;
+}
+
+std::ostream & operator<<(std::ostream & os, const AppmSolver::MaxwellSolverBCType & obj) {
+	switch (obj) {
+	case AppmSolver::MaxwellSolverBCType::CURRENT_BC:
+		os << "CURRENT_BC";
+		break;
+	case AppmSolver::MaxwellSolverBCType::VOLTAGE_BC:
+		os << "VOLTAGE_BC";
+		break;
+	default:
+		os << "Not Implemented";
+		assert(false);
 	}
 	return os;
 }
