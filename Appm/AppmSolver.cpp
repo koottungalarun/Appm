@@ -112,6 +112,11 @@ void AppmSolver::run()
 	const std::string stopFilename = "stop.txt";
 	std::ofstream(stopFilename) << 0 << std::endl;
 
+	J_h_aux.setZero();
+	J_h_aux_mm1.setZero();
+
+
+
 	std::vector<double> currentBCValue;
 	/*
 	* Time integration loop 
@@ -142,7 +147,7 @@ void AppmSolver::run()
 			assert(M1.nonZeros() > 0);
 			assert(M2.size() > 0);
 			assert(M2.nonZeros() > 0);
-			M = M1 + pow(dt, 2) * M2;
+			M = M1 + pow(dt, 2) * M2 + dt * Q.transpose() * Msigma * Q;
 			M.makeCompressed();
 			//Eigen::sparseMatrixToFile(M, "M.dat");
 
@@ -150,9 +155,9 @@ void AppmSolver::run()
 			// - fixed values: electric potential at terminals (Dirichlet boundary condition)
 			// - free  values: electric potential at non-terminal vertices, and electric voltages at non-boundary edges
 			int nDirichlet = nPrimalTerminalVertices;
-			if (maxwellSolverBCType == MaxwellSolverBCType::CURRENT_BC) {
-				nDirichlet = nPrimalTerminalVertices / 2;
-			}
+			//if (maxwellSolverBCType == MaxwellSolverBCType::CURRENT_BC) {
+			//	nDirichlet = nPrimalTerminalVertices / 2;
+			//}
 			const int nFree = maxwellState.size() - nDirichlet;
 
 			// The vector of degrees of freedom (DoF) is sorted such that free values are in front of fixed values:
@@ -164,29 +169,30 @@ void AppmSolver::run()
 			Eigen::SparseMatrix<double> Md = M.rightCols(nDirichlet);
 			Eigen::VectorXd xd = Eigen::VectorXd::Zero(nDirichlet);
 			
-			switch (maxwellSolverBCType) {
-				case MaxwellSolverBCType::VOLTAGE_BC:
-				{
+			//switch (maxwellSolverBCType) {
+			//	case MaxwellSolverBCType::VOLTAGE_BC:
+			//	{
 					assert(nDirichlet % 2 == 0);
 					const double t0 = 1;
+					const double t1 = 11;
 					const double tscale = 0.2;
-					xd.topRows(nDirichlet / 2) = terminalVoltageBC_sideA(time, t0, tscale) * Eigen::VectorXd::Ones(nDirichlet / 2);
+					xd.topRows(nDirichlet / 2) = terminalVoltageBC_sideA(time, t0, t1, tscale) * Eigen::VectorXd::Ones(nDirichlet / 2);
 					xd.bottomRows(nDirichlet / 2) = terminalVoltageBC_sideB(time) * Eigen::VectorXd::Ones(nDirichlet / 2);
-					break;
-				}
+					//break;
+			//	}
 
-				case MaxwellSolverBCType::CURRENT_BC:
-				{
-					xd.bottomRows(nDirichlet) = terminalVoltageBC_sideB(time) * Eigen::VectorXd::Ones(nDirichlet);
-					break;
-				}
+			//	case MaxwellSolverBCType::CURRENT_BC:
+			//	{
+			//		xd.bottomRows(nDirichlet) = terminalVoltageBC_sideB(time) * Eigen::VectorXd::Ones(nDirichlet);
+			//		break;
+			//	}
 
-				default:
-				{
-					std::cout << "Maxwell Solver Boundary Type not implemented" << std::endl;
-					assert(false);
-				}
-			}
+			//	default:
+			//	{
+			//		std::cout << "Maxwell Solver Boundary Type not implemented" << std::endl;
+			//		assert(false);
+			//	}
+			//}
 
 
 			Eigen::VectorXd src = Eigen::VectorXd::Zero(maxwellState.size());
@@ -197,33 +203,61 @@ void AppmSolver::run()
 
 			// Setup of rhs vector
 			double dt_ratio = dt / dt_previous;
-			rhs += M1 * ((1 + dt_ratio) * maxwellState - dt_ratio * maxwellStatePrevious);
+			rhs += M1 * (1 + dt_ratio) * maxwellState 
+				+ dt * Q.transpose() * Msigma * Q * maxwellState 
+				- dt_ratio * M1 * maxwellStatePrevious;
 
 			// TODO: current source in Ampere equation
-			if (maxwellSolverBCType == MaxwellSolverBCType::CURRENT_BC) {
-				J_h_previous = J_h;
-				
-				const double currentValue = currentDensityBC(time);
-				currentBCValue.push_back(currentValue);
+			//if (maxwellSolverBCType == MaxwellSolverBCType::CURRENT_BC) {
+			//	J_h_previous = J_h;
+			//	
+			//	const double currentValue = currentDensityBC(time);
+			//	currentBCValue.push_back(currentValue);
+			//	const Eigen::VectorXd zUnitVec = Eigen::Vector3d::UnitZ();
+			//	Eigen::VectorXd dualFacesInZDirection(dualMesh.getNumberOfFaces());
+			//	dualFacesInZDirection.setZero();
+			//	for (int i = 0; i < dualFacesInZDirection.size(); i++) {
+			//		const Face * face = dualMesh.getFace(i);
+			//		const Eigen::Vector3d fc = face->getCenter();
+			//		if (true || fc.segment(0, 2).norm() < 0.35) {
+			//			const Eigen::Vector3d fn = face->getNormal();
+			//			const double fA = face->getArea();
+			//			dualFacesInZDirection(i) = fn.dot(zUnitVec) * fA;
+			//		}
+			//	}
+			//	J_h = currentValue * dualFacesInZDirection;
+			//	const Eigen::VectorXd deltaJ = dt * Q.transpose() * (J_h - J_h_previous).segment(0, nEdges);
+			//	rhs -= deltaJ;
+			//}
 
-				const Eigen::VectorXd zUnitVec = Eigen::Vector3d::UnitZ();
-				Eigen::VectorXd dualFacesInZDirection(dualMesh.getNumberOfFaces());
-				dualFacesInZDirection.setZero();
+			// Store values from previous timestep
+			J_h_aux_mm1 = J_h_aux;
 
-				for (int i = 0; i < dualFacesInZDirection.size(); i++) {
-					const Face * face = dualMesh.getFace(i);
-					const Eigen::Vector3d fc = face->getCenter();
-					if (true || fc.segment(0, 2).norm() < 0.35) {
-						const Eigen::Vector3d fn = face->getNormal();
-						const double fA = face->getArea();
-						dualFacesInZDirection(i) = fn.dot(zUnitVec) * fA;
-					}
+			// update data vector for J_h_aux
+			for (int i = 0; i < nEdges; i++) {
+				assert(getNFluids() == 1);
+				const Face * face = dualMesh.getFace(i);
+				assert(face->hasFluidCells());
+				const std::vector<Cell*> adjacientCells = face->getCellList();
+				assert(adjacientCells.size() == 2);
+				for (auto cell : adjacientCells) {
+					assert(cell->getFluidType() == Cell::FluidType::FLUID);
 				}
 
-				J_h = currentValue * dualFacesInZDirection;
-				const Eigen::VectorXd deltaJ = dt * Q.transpose() * (J_h - J_h_previous).segment(0, nEdges);
-				rhs -= deltaJ;
+				const double fA = face->getArea();
+				const double q = 1; // TODO fluid species ionization degree
+				const int faceIdx = face->getIndex();
+				const int fluidIdx = 0;
+				const Eigen::Vector3d implicitFlux = getRusanovFluxImEx(faceIdx, fluidIdx, dt);
+				const double implicitMassFlux = implicitFlux(0);
+
+				const double value = q * implicitMassFlux * fA;
+				J_h_aux(i) = value;
 			}
+
+			
+
+			rhs -= dt * Q.transpose() * (J_h_aux - J_h_aux_mm1).segment(0, nEdges);
 
 			rhs -= Md * xd;
 
@@ -260,14 +294,18 @@ void AppmSolver::run()
 			E_h = Q * x;
 			B_h -= dt * C * E_h;
 
-			// TODO: Get electric current due to Ohms law (see implicit and consistent formulation of electric current)
-			//J_h = M_sigma * E_h;
+			// Get electric current due to Ohms law (see implicit and consistent formulation of electric current)
+			assert(Msigma.rows() == nEdges);
+			assert(Msigma.cols() == E_h.size());
+			J_h.segment(0, nEdges) = Msigma * E_h;
 
 			//std::ofstream("E_h.dat") << E_h << std::endl;
 
 			// Set new state vector
 			maxwellStatePrevious = maxwellState;
 			maxwellState = x;
+
+
 
 			// Get electric field at cell center (interpolated from primal edge values)
 			E_cc = getEfieldAtCellCenter();
@@ -522,6 +560,11 @@ void AppmSolver::init_maxwellStates()
 
 	// Initialize matrix that maps electric field on primal edges to electric current on dual faces; see Lorentz force in Fluid equations
 	initMsigma();
+
+
+	const int nFaces = dualMesh.getNumberOfFaces();
+	J_h_aux = Eigen::VectorXd(nFaces);
+	J_h_aux_mm1 = Eigen::VectorXd(nFaces);
 }
 
 Eigen::SparseMatrix<double> AppmSolver::getBoundaryGradientInnerInclusionOperator()
@@ -852,6 +895,38 @@ const Eigen::Matrix3Xd AppmSolver::getEfieldAtCellCenter()
 
 void AppmSolver::initMsigma()
 {
+	init_Msigma_solid();
+}
+
+/**
+* Ohm's law for a solid body (j = Msigma * e).
+*/
+void AppmSolver::init_Msigma_solid()
+{
+	const int nEdges = primalMesh.getNumberOfEdges();
+	typedef Eigen::Triplet<double> T;
+	std::vector<T> triplets;
+
+	for (int i = 0; i < nEdges; i++) {
+		const Face * face = dualMesh.getFace(i);
+		const Eigen::Vector3d fc = face->getCenter();
+		const double faceArea = face->getArea();
+		const double edgeLength = primalMesh.getEdge(i)->getLength();
+
+		//const bool isInside = fc.segment(0, 2).norm() < 0.35;
+		//const double sigma = isInside ? 10 : 1;
+		const double sigma = 0;
+
+		const double value = sigma * faceArea / edgeLength;
+		triplets.push_back(T(i, i, value));
+	}
+	Msigma = Eigen::SparseMatrix<double>(nEdges, nEdges);
+	Msigma.setFromTriplets(triplets.begin(), triplets.end());
+	Msigma.makeCompressed();
+}
+
+void AppmSolver::init_Msigma_fluid()
+{
 	// Setup of equation J = M * E + Jb
 	assert(J_h.size() > E_h.size());
 
@@ -945,14 +1020,16 @@ void AppmSolver::initMsigma()
 			}
 		}
 	}
-	M_sigma = Eigen::SparseMatrix<double>(J_h.size(), E_h.size());
-	M_sigma.setFromTriplets(triplets.begin(), triplets.end());
-	M_sigma.makeCompressed();
+	Msigma = Eigen::SparseMatrix<double>(J_h.size(), E_h.size());
+	Msigma.setFromTriplets(triplets.begin(), triplets.end());
+	Msigma.makeCompressed();
 }
 
-const double AppmSolver::terminalVoltageBC_sideA(const double time, const double t0, const double tscale) const
+const double AppmSolver::terminalVoltageBC_sideA(const double time, const double t0, const double t1, const double tscale) const
 {
-	return 0.5 * (1 + tanh((time - t0) / tscale)); 
+	double f1 = 0.5 * (1 + tanh((time - t0) / tscale)) ; 
+	double f2 = 0.5 * (1 + tanh(- (time - t1) / tscale));
+	return f1 * f2;
 }
 
 const double AppmSolver::terminalVoltageBC_sideB(const double time) const
@@ -1603,6 +1680,19 @@ void AppmSolver::writeMaxwellStates(H5Writer & writer)
 		J_consistent.col(i) = J_h(i) / fA * fn;
 	}
 	writer.writeData(J_consistent, "/CurrentDensity");
+
+
+	assert(dualMesh.getNumberOfFaces() == J_h_aux.size());
+	Eigen::Matrix3Xd J_h_aux_vector(3, J_h_aux.size());
+	for (int i = 0; i < J_h_aux.size(); i++) {
+		const Face * face = dualMesh.getFace(i);
+		const double fA = face->getArea();
+		const Eigen::Vector3d fn = face->getNormal();
+		J_h_aux_vector.col(i) = J_h_aux(i) / fA * fn;
+	}
+	writer.writeData(J_h_aux_vector, "/J_h_aux_vector");
+	writer.writeData(J_h_aux, "/J_h_aux");
+
 }
 
 XdmfGrid AppmSolver::getOutputPrimalEdgeGrid(const int iteration, const double time, const std::string & dataFilename)
@@ -2114,16 +2204,16 @@ void AppmSolver::readParameters(const std::string & filename)
 		if (tag == "isMagneticLorentzForceActive") {
 			std::istringstream(line.substr(pos + 1)) >> isMagneticLorentzForceActive;
 		}
-		if (tag == "maxwellSolverBCType") {
-			std::string temp;
-			std::istringstream(line.substr(pos + 1)) >> temp;
-			if (temp == "Voltage") {
-				maxwellSolverBCType = MaxwellSolverBCType::VOLTAGE_BC;
-			}
-			if (temp == "Current") {
-				maxwellSolverBCType = MaxwellSolverBCType::CURRENT_BC;
-			}
-		}
+		//if (tag == "maxwellSolverBCType") {
+		//	std::string temp;
+		//	std::istringstream(line.substr(pos + 1)) >> temp;
+		//	if (temp == "Voltage") {
+		//		maxwellSolverBCType = MaxwellSolverBCType::VOLTAGE_BC;
+		//	}
+		//	if (temp == "Current") {
+		//		maxwellSolverBCType = MaxwellSolverBCType::CURRENT_BC;
+		//	}
+		//}
 
 	}
 
@@ -2140,7 +2230,7 @@ void AppmSolver::readParameters(const std::string & filename)
 	std::cout << "initType: " << initType << std::endl;
 	std::cout << "isElectricLorentzForceActive: " << isElectricLorentzForceActive << std::endl;
 	std::cout << "isMagneticLorentzForceActive: " << isMagneticLorentzForceActive << std::endl;
-	std::cout << "maxwellSolverBCType: " << maxwellSolverBCType << std::endl;
+	//std::cout << "maxwellSolverBCType: " << maxwellSolverBCType << std::endl;
 	std::cout << "=======================" << std::endl;
 }
 
@@ -2338,6 +2428,13 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
+	ss << "<Attribute Name=\"J_h_aux_Vector\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << "appm-" << iteration << ".h5:/J_h_aux_vector" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
 	ss << "</Grid>" << std::endl;
 	return ss.str();
 }
@@ -2484,17 +2581,17 @@ std::ostream & operator<<(std::ostream & os, const AppmSolver::MassFluxScheme & 
 	return os;
 }
 
-std::ostream & operator<<(std::ostream & os, const AppmSolver::MaxwellSolverBCType & obj) {
-	switch (obj) {
-	case AppmSolver::MaxwellSolverBCType::CURRENT_BC:
-		os << "CURRENT_BC";
-		break;
-	case AppmSolver::MaxwellSolverBCType::VOLTAGE_BC:
-		os << "VOLTAGE_BC";
-		break;
-	default:
-		os << "Not Implemented";
-		assert(false);
-	}
-	return os;
-}
+//std::ostream & operator<<(std::ostream & os, const AppmSolver::MaxwellSolverBCType & obj) {
+//	switch (obj) {
+//	case AppmSolver::MaxwellSolverBCType::CURRENT_BC:
+//		os << "CURRENT_BC";
+//		break;
+//	case AppmSolver::MaxwellSolverBCType::VOLTAGE_BC:
+//		os << "VOLTAGE_BC";
+//		break;
+//	default:
+//		os << "Not Implemented";
+//		assert(false);
+//	}
+//	return os;
+//}

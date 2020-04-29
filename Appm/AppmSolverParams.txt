@@ -1,6 +1,6 @@
-maxIterations: 1000
-maxTime: 7
-isFluidEnabled: 0
+maxIterations: 10
+maxTime: 25
+isFluidEnabled: 1
 isMaxwellEnabled: 1
 timestepSize: 0.25
 lambdaSquare: 1e-2
@@ -8,5 +8,4 @@ massFluxScheme: ImEx
 initType: 1
 isElectricLorentzForceActive: 0
 isMagneticLorentzForceActive: 0
-maxwellSolverBCType: Current
 

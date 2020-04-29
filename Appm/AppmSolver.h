@@ -78,12 +78,12 @@ private:
 	bool isElectricLorentzForceActive = false;
 	bool isMagneticLorentzForceActive = false;
 
-	enum class MaxwellSolverBCType {
-		VOLTAGE_BC, CURRENT_BC
-	};
-	friend std::ostream & operator<<(std::ostream & os, const MaxwellSolverBCType & obj);
+	//enum class MaxwellSolverBCType {
+	//	VOLTAGE_BC, CURRENT_BC
+	//};
+	//friend std::ostream & operator<<(std::ostream & os, const MaxwellSolverBCType & obj);
 
-	MaxwellSolverBCType maxwellSolverBCType = MaxwellSolverBCType::CURRENT_BC;
+	//MaxwellSolverBCType maxwellSolverBCType = MaxwellSolverBCType::CURRENT_BC;
 
 	bool isWriteEfield = false;
 	bool isWriteBfield = false;
@@ -107,6 +107,10 @@ private:
 	Eigen::VectorXd B_h;
 	Eigen::VectorXd J_h;
 	Eigen::VectorXd J_h_previous;
+
+	Eigen::VectorXd J_h_aux;
+	Eigen::VectorXd J_h_aux_mm1;
+
 
 	Eigen::Matrix3Xd E_cc; // Electric field at cell center
 
@@ -143,10 +147,12 @@ private:
 	const Eigen::Matrix3Xd getEfieldAtCellCenter();
 
 	// Matrix for Ohms law J_h = M_sigma * E_h
-	Eigen::SparseMatrix<double> M_sigma;
+	Eigen::SparseMatrix<double> Msigma;
 	void initMsigma();
+	void init_Msigma_solid();
+	void init_Msigma_fluid();
 
-	const double terminalVoltageBC_sideA(const double time, const double t0, const double tscale) const;
+	const double terminalVoltageBC_sideA(const double time, const double t0, const double t1, const double tscale) const;
 	const double terminalVoltageBC_sideB(const double time) const;
 	const double currentDensityBC(const double time) const;
 
