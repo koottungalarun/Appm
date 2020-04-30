@@ -93,7 +93,7 @@ void AppmSolver::run()
 	//	maxwellSolver->setTorusCurrent(x1, x2, z1, z2);
 	//}
 
-	
+
 
 	// Number of primal vertices on terminals
 	const int nPrimalTerminalVertices = primalMesh.getMeshInfo().nVerticesTerminal;
@@ -107,14 +107,14 @@ void AppmSolver::run()
 	const int nFaces = dualMesh.getNumberOfFaces();
 	faceFluxes = Eigen::MatrixXd::Zero(5*nFluids, nFaces);
 	faceFluxesImExRusanov = Eigen::MatrixXd::Zero(nFaces, nFluids);
+	
+	// write initial data to file (iteration = 0, time = 0)
 	writeOutput(iteration, time);
 
 	const std::string stopFilename = "stop.txt";
 	std::ofstream(stopFilename) << 0 << std::endl;
 
-	J_h_aux.setZero();
-	J_h_aux_mm1.setZero();
-
+	auto timer_startAppmSolver = std::chrono::high_resolution_clock::now();
 
 
 	std::vector<double> currentBCValue;
@@ -230,28 +230,37 @@ void AppmSolver::run()
 			//	rhs -= deltaJ;
 			//}
 
-			// Store values from previous timestep
-			J_h_aux_mm1 = J_h_aux;
-
 			// update data vector for J_h_aux
 			for (int i = 0; i < nEdges; i++) {
 				assert(getNFluids() == 1);
 				const Face * face = dualMesh.getFace(i);
-				assert(face->hasFluidCells());
+				//assert(face->hasFluidCells());
 				const std::vector<Cell*> adjacientCells = face->getCellList();
 				assert(adjacientCells.size() == 2);
+				int nAdjacientFluidCells = 0;
 				for (auto cell : adjacientCells) {
-					assert(cell->getFluidType() == Cell::FluidType::FLUID);
+					//assert(cell->getFluidType() == Cell::FluidType::FLUID);
+					if (cell->getFluidType() == Cell::FluidType::FLUID) {
+						nAdjacientFluidCells++;
+					}
+				}
+				if (nAdjacientFluidCells < 2) { // skip faces that are adjacient to a solid cell
+					continue;
 				}
 
+				assert(massFluxScheme == MassFluxScheme::IMPLICIT_EXPLICIT);
 				const double fA = face->getArea();
-				const double q = 1; // TODO fluid species ionization degree
 				const int faceIdx = face->getIndex();
-				const int fluidIdx = 0;
-				const Eigen::Vector3d implicitFlux = getRusanovFluxImEx(faceIdx, fluidIdx, dt);
-				const double implicitMassFlux = implicitFlux(0);
+				double value = 0;
 
-				const double value = q * implicitMassFlux * fA;
+				// Loop over all species
+				for (int fluidIdx = 0; fluidIdx < getNFluids(); fluidIdx++) {
+					const int q = particleParams[fluidIdx].electricCharge; 
+					const Eigen::Vector3d implicitFlux = getRusanovFluxImEx(faceIdx, fluidIdx, dt);
+					const double implicitMassFlux = implicitFlux(0); // first component is the mass flux
+					value += q * implicitMassFlux;
+				}
+				value *= fA;
 				J_h_aux(i) = value;
 			}
 
@@ -274,16 +283,29 @@ void AppmSolver::run()
 
 			// Solve system
 			std::cout << "Setup Maxwell solver" << std::endl;
-			Eigen::SparseLU<Eigen::SparseMatrix<double>> maxwellSolver(Mf);
+			Eigen::ConjugateGradient<Eigen::SparseMatrix<double>> maxwellSolver;
+
+			auto timer_start = std::chrono::high_resolution_clock::now();
+			maxwellSolver.compute(Mf);			
+			auto timer_afterCompute = std::chrono::high_resolution_clock::now();
+			auto delta_afterCompute = std::chrono::duration<double>(timer_afterCompute - timer_start);
+			std::cout << "Solver time for compute step: " << delta_afterCompute.count() << std::endl;
 			if (maxwellSolver.info() != Eigen::Success) {
 				std::cout << "Maxwell solver setup failed" << std::endl;
 			}
+			auto timer_startSolve = std::chrono::high_resolution_clock::now();
 			xf = maxwellSolver.solve(rhsFree);
+			auto timer_endSolve = std::chrono::high_resolution_clock::now();
 			std::cout << "Maxwell solver finished" << std::endl;
+			auto delta_solve = std::chrono::duration<double>(timer_endSolve - timer_startSolve);
+			std::cout << "Solver time for solve step: " << delta_solve.count() << std::endl;
 			if (maxwellSolver.info() != Eigen::Success) {
 				std::cout << "Maxwell solver solving failed" << std::endl;
 			}
 			assert(maxwellSolver.info() == Eigen::Success);
+
+			std::cout << "#iterations:     " << maxwellSolver.iterations() << std::endl;
+			std::cout << "estimated error: " << maxwellSolver.error() << std::endl;
 
 			// assemble new state vector
 			x.topRows(nFree) = xf;
@@ -305,6 +327,7 @@ void AppmSolver::run()
 			maxwellStatePrevious = maxwellState;
 			maxwellState = x;
 
+			J_h_aux_mm1 = J_h_aux;
 
 
 			// Get electric field at cell center (interpolated from primal edge values)
@@ -459,6 +482,10 @@ void AppmSolver::run()
 	std::cout << "Final time:      " << time << std::endl;
 	std::cout << "Final iteration: " << iteration << std::endl;
 
+	auto timer_endAppmSolver = std::chrono::high_resolution_clock::now();
+	auto delta_appmSolver = std::chrono::duration<double>(timer_endAppmSolver - timer_startAppmSolver);
+	std::cout << "Elapsed time for APPM solver: " << delta_appmSolver.count() << std::endl;
+
 	if (currentBCValue.size() > 0) {
 		std::string filename = "currentBC.dat";
 		std::cout << "Write data to file: " << filename << std::endl;
@@ -563,8 +590,13 @@ void AppmSolver::init_maxwellStates()
 
 
 	const int nFaces = dualMesh.getNumberOfFaces();
+
 	J_h_aux = Eigen::VectorXd(nFaces);
+	J_h_aux.setZero();
+
 	J_h_aux_mm1 = Eigen::VectorXd(nFaces);
+	J_h_aux_mm1.setZero();
+
 }
 
 Eigen::SparseMatrix<double> AppmSolver::getBoundaryGradientInnerInclusionOperator()

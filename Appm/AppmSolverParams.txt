@@ -1,4 +1,4 @@
-maxIterations: 10
+maxIterations: 100
 maxTime: 25
 isFluidEnabled: 1
 isMaxwellEnabled: 1
