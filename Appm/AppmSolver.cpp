@@ -49,6 +49,12 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 		exit(-1);
 	}
 
+	const int nFluids = this->getNFluids();
+	const int nFaces = dualMesh.getNumberOfFaces();
+	faceFluxes = Eigen::MatrixXd::Zero(5 * nFluids, nFaces);
+	faceFluxesImExRusanov = Eigen::MatrixXd::Zero(nFaces, nFluids);
+
+
 	init_maxwellStates();
 	B_vertex = Eigen::Matrix3Xd::Zero(3, primalMesh.getNumberOfVertices());
 	init_RaviartThomasInterpolation();
@@ -58,6 +64,21 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 		isWriteBfield = true;
 		isWriteEfield = true;
 	}
+
+	// Check implementation of Ohm's law in implicit-consistent formulation
+	// TODO: to be removed after testing
+	Eigen::SparseMatrix<double> Msigma;
+	double dt = timestepSize;
+
+	set_Bfield_azimuthal();
+	interpolateMagneticFluxToPrimalVertices();
+
+	get_Msigma_consistent(dt, Msigma, J_h_aux);
+
+	set_Efield_uniform(Eigen::Vector3d::UnitZ());
+	J_h = Msigma * E_h + J_h_aux;
+
+
 }
 
 
@@ -105,8 +126,8 @@ void AppmSolver::run()
 
 	const int nFluids = this->getNFluids();
 	const int nFaces = dualMesh.getNumberOfFaces();
-	faceFluxes = Eigen::MatrixXd::Zero(5*nFluids, nFaces);
-	faceFluxesImExRusanov = Eigen::MatrixXd::Zero(nFaces, nFluids);
+	//faceFluxes = Eigen::MatrixXd::Zero(5*nFluids, nFaces);
+	//faceFluxesImExRusanov = Eigen::MatrixXd::Zero(nFaces, nFluids);
 	
 	// write initial data to file (iteration = 0, time = 0)
 	writeOutput(iteration, time);
@@ -126,20 +147,28 @@ void AppmSolver::run()
 
 		dt_previous = dt;
 
-		// Determine timestep
-		if (isFluidEnabled) {
-			dt = getNextFluidTimestepSize();
-		}
 		fluidFluxes.setZero();
 		fluidSources.setZero();
 		faceFluxes.setZero();
 		faceFluxesImExRusanov.setZero();
+
+		// Determine timestep
+		if (isFluidEnabled) {
+			dt = getNextFluidTimestepSize();
+		}
+
 
 		// Maxwell equations
 		if (isMaxwellEnabled) {
 
 			// New state vector, solution of the implicit system of equation that we are setting up in the next lines
 			Eigen::VectorXd x(maxwellState.size());
+
+			Eigen::SparseMatrix<double> Msigma;
+			get_Msigma_consistent(dt , Msigma, J_h_aux);
+
+			Eigen::SparseMatrix<double> Msigma_inner;
+			Msigma_inner = Msigma.topLeftCorner(nEdges, nEdges);
 			
 			// System matrix on left hand side, i.e., M*x = rhs, to be solved for x
 			Eigen::SparseMatrix<double> M;
@@ -147,7 +176,7 @@ void AppmSolver::run()
 			assert(M1.nonZeros() > 0);
 			assert(M2.size() > 0);
 			assert(M2.nonZeros() > 0);
-			M = M1 + pow(dt, 2) * M2 + dt * Q.transpose() * Msigma * Q;
+			M = M1 + pow(dt, 2) * M2 + dt * Q.transpose() * Msigma_inner * Q;
 			M.makeCompressed();
 			//Eigen::sparseMatrixToFile(M, "M.dat");
 
@@ -204,7 +233,7 @@ void AppmSolver::run()
 			// Setup of rhs vector
 			double dt_ratio = dt / dt_previous;
 			rhs += M1 * (1 + dt_ratio) * maxwellState 
-				+ dt * Q.transpose() * Msigma * Q * maxwellState 
+				+ dt * Q.transpose() * Msigma_inner * Q * maxwellState 
 				- dt_ratio * M1 * maxwellStatePrevious;
 
 			// TODO: current source in Ampere equation
@@ -230,39 +259,41 @@ void AppmSolver::run()
 			//	rhs -= deltaJ;
 			//}
 
+			// TODO: this is the implicit-consistent face current due to fluid momentum flux
 			// update data vector for J_h_aux
-			for (int i = 0; i < nEdges; i++) {
-				assert(getNFluids() == 1);
-				const Face * face = dualMesh.getFace(i);
-				//assert(face->hasFluidCells());
-				const std::vector<Cell*> adjacientCells = face->getCellList();
-				assert(adjacientCells.size() == 2);
-				int nAdjacientFluidCells = 0;
-				for (auto cell : adjacientCells) {
-					//assert(cell->getFluidType() == Cell::FluidType::FLUID);
-					if (cell->getFluidType() == Cell::FluidType::FLUID) {
-						nAdjacientFluidCells++;
-					}
-				}
-				if (nAdjacientFluidCells < 2) { // skip faces that are adjacient to a solid cell
-					continue;
-				}
+			//for (int i = 0; i < nEdges; i++) {
+			//	assert(false);
+			//	assert(getNFluids() == 1);
+			//	const Face * face = dualMesh.getFace(i);
+			//	//assert(face->hasFluidCells());
+			//	const std::vector<Cell*> adjacientCells = face->getCellList();
+			//	assert(adjacientCells.size() == 2);
+			//	int nAdjacientFluidCells = 0;
+			//	for (auto cell : adjacientCells) {
+			//		//assert(cell->getFluidType() == Cell::FluidType::FLUID);
+			//		if (cell->getFluidType() == Cell::FluidType::FLUID) {
+			//			nAdjacientFluidCells++;
+			//		}
+			//	}
+			//	if (nAdjacientFluidCells < 2) { // skip faces that are adjacient to a solid cell
+			//		continue;
+			//	}
 
-				assert(massFluxScheme == MassFluxScheme::IMPLICIT_EXPLICIT);
-				const double fA = face->getArea();
-				const int faceIdx = face->getIndex();
-				double value = 0;
+			//	assert(massFluxScheme == MassFluxScheme::IMPLICIT_EXPLICIT);
+			//	const double fA = face->getArea();
+			//	const int faceIdx = face->getIndex();
+			//	double value = 0;
 
-				// Loop over all species
-				for (int fluidIdx = 0; fluidIdx < getNFluids(); fluidIdx++) {
-					const int q = particleParams[fluidIdx].electricCharge; 
-					const Eigen::Vector3d implicitFlux = getRusanovFluxImEx(faceIdx, fluidIdx, dt);
-					const double implicitMassFlux = implicitFlux(0); // first component is the mass flux
-					value += q * implicitMassFlux;
-				}
-				value *= fA;
-				J_h_aux(i) = value;
-			}
+			//	// Loop over all species
+			//	for (int fluidIdx = 0; fluidIdx < getNFluids(); fluidIdx++) {
+			//		const int q = particleParams[fluidIdx].electricCharge; 
+			//		const Eigen::Vector3d implicitFlux = getRusanovFluxImEx(faceIdx, fluidIdx, dt);
+			//		const double implicitMassFlux = implicitFlux(0); // first component is the mass flux
+			//		value += q * implicitMassFlux;
+			//	}
+			//	value *= fA;
+			//	J_h_aux(i) = value;
+			//}
 
 			
 
@@ -317,9 +348,10 @@ void AppmSolver::run()
 			B_h -= dt * C * E_h;
 
 			// Get electric current due to Ohms law (see implicit and consistent formulation of electric current)
-			assert(Msigma.rows() == nEdges);
-			assert(Msigma.cols() == E_h.size());
-			J_h.segment(0, nEdges) = Msigma * E_h;
+			//assert(Msigma.rows() == nEdges);
+			//assert(Msigma.cols() == E_h.size());
+			//J_h.segment(0, nEdges) = Msigma * E_h;
+			J_h = Msigma * E_h + J_h_aux;
 
 			//std::ofstream("E_h.dat") << E_h << std::endl;
 
@@ -586,7 +618,7 @@ void AppmSolver::init_maxwellStates()
 	E_cc = Eigen::Matrix3Xd::Zero(3, dualMesh.getNumberOfCells());
 
 	// Initialize matrix that maps electric field on primal edges to electric current on dual faces; see Lorentz force in Fluid equations
-	initMsigma();
+	//initMsigma();
 
 
 	const int nFaces = dualMesh.getNumberOfFaces();
@@ -835,9 +867,13 @@ void AppmSolver::init_Explosion(const Eigen::Vector3d refPos, const double radiu
 	}
 }
 
+/**
+* For Testing purposes. 
+* Set E_h uniform in a given direction. 
+*/
+
 void AppmSolver::set_Efield_uniform(const Eigen::Vector3d direction)
 {
-	// Set E_h uniform in a given direction
 	E_h.setZero();
 	assert(E_h.size() == primalMesh.getNumberOfEdges());
 	for (int i = 0; i < E_h.size(); i++) {
@@ -845,6 +881,30 @@ void AppmSolver::set_Efield_uniform(const Eigen::Vector3d direction)
 		const Eigen::Vector3d edgeDir = edge->getDirection().normalized();
 		const double edgeLength = edge->getLength();
 		E_h(i) = edgeDir.dot(direction) * edgeLength;
+	}
+}
+
+/** 
+* For testing purposes. 
+* Set B-field vectors azimuthally with respect to z-unit vector. 
+*/
+void AppmSolver::set_Bfield_azimuthal()
+{
+	const int nPrimalFaces = primalMesh.getNumberOfFaces();
+	const Eigen::Vector3d zvec = Eigen::Vector3d::UnitZ();	// z-Unit vector
+
+	for (int idx = 0; idx < nPrimalFaces; idx++) {
+		const Face * face = primalMesh.getFace(idx);
+		const Eigen::Vector3d fc = face->getCenter();
+		const Eigen::Vector3d fn = face->getNormal();
+		const double fA = face->getArea();
+
+		Eigen::Vector3d rvec = fc;
+		rvec(2) = 0; 		// Radial position
+
+		Eigen::Vector3d thetaVec;
+		thetaVec = zvec.cross(rvec);       // Azimuthal vector
+		B_h(idx) = thetaVec.dot(fn) * fA;  // Projection of azimuthal vector onto face normal
 	}
 }
 
@@ -925,16 +985,19 @@ const Eigen::Matrix3Xd AppmSolver::getEfieldAtCellCenter()
 	return result;
 }
 
-void AppmSolver::initMsigma()
-{
-	init_Msigma_solid();
-}
+//void AppmSolver::initMsigma()
+//{
+//	init_Msigma_solid();
+//}
 
 /**
 * Ohm's law for a solid body (j = Msigma * e).
 */
-void AppmSolver::init_Msigma_solid()
+Eigen::SparseMatrix<double> AppmSolver::init_Msigma_solid()
 {
+	assert(false);
+	// outdated; do not use this function anymore!
+
 	const int nEdges = primalMesh.getNumberOfEdges();
 	typedef Eigen::Triplet<double> T;
 	std::vector<T> triplets;
@@ -952,13 +1015,17 @@ void AppmSolver::init_Msigma_solid()
 		const double value = sigma * faceArea / edgeLength;
 		triplets.push_back(T(i, i, value));
 	}
-	Msigma = Eigen::SparseMatrix<double>(nEdges, nEdges);
+	Eigen::SparseMatrix<double> Msigma = Eigen::SparseMatrix<double>(nEdges, nEdges);
 	Msigma.setFromTriplets(triplets.begin(), triplets.end());
 	Msigma.makeCompressed();
+	return Msigma;
 }
 
-void AppmSolver::init_Msigma_fluid()
+Eigen::SparseMatrix<double> AppmSolver::init_Msigma_fluid()
 {
+	assert(false);
+	// outdated; Do not use this function anymore!
+
 	// Setup of equation J = M * E + Jb
 	assert(J_h.size() > E_h.size());
 
@@ -1020,41 +1087,174 @@ void AppmSolver::init_Msigma_fluid()
 				const Eigen::Vector3d r = fc - cc; // Position vector of face center relative to cell center
 				assert(r.norm() > 0);
 
-				// Use Perot's interpolation method to obtain a cell-centered value 
-				// of the electric field that is defined at dual faces (= primal edges)
-				const double r_dot_dualFaceNormal = r.dot(dualFaceNormal);
-				const int incidence = r.dot(nj) > 0 ? 1 : -1;
-				const double dL = edge->getLength();
-				const double dA = face->getArea();
-				const double dV = cell->getVolume();
-				double value = n * r_dot_dualFaceNormal * 1. / dL * (L.dot(nj)) * incidence * dA / dV;
+				if (isElectricLorentzForceActive) {
 
-				// factor due to definition of fluid flux: 
-				// - at interior faces: Rusanov scheme f = 0.5 * ( (nu)_k + (nu)_k+1 ) - 0.5 * (n_k+1 - n_k)
-				// - at fluid boundary faces: 
-				//      f = (nu)_k (opening condition)				
-				//      f = ...    (wall condition) (TODO)				
-				value *= (dualFace->getFluidType() == Face::FluidType::OPENING) ? 1 : 0.5;
+					// Use Perot's interpolation method to obtain a cell-centered value 
+					// of the electric field that is defined at dual faces (= primal edges)
+					const double r_dot_dualFaceNormal = r.dot(dualFaceNormal);
+					const int incidence = r.dot(nj) > 0 ? 1 : -1;
+					const double dL = edge->getLength();
+					const double dA = face->getArea();
+					const double dV = cell->getVolume();
+					double value = n * r_dot_dualFaceNormal * 1. / dL * (L.dot(nj)) * incidence * dA / dV;
 
-				// factor due to consistency of electric current and fluid flux: 
-				// J_h = j * A = q * f * A, where: 
-				//   J_h: face-integrated current
-				//   j:   current density at face
-				//   q:   ionization degree of fluid
-				//   f:   fluid flux at face
-				//   A:   face area
-				value *= q * dualFace->getArea();
+					// factor due to definition of fluid flux: 
+					// - at interior faces: Rusanov scheme f = 0.5 * ( (nu)_k + (nu)_k+1 ) - 0.5 * (n_k+1 - n_k)
+					// - at fluid boundary faces: 
+					//      f = (nu)_k (opening condition)				
+					//      f = ...    (wall condition) (TODO)				
+					value *= (dualFace->getFluidType() == Face::FluidType::OPENING) ? 1 : 0.5;
 
-				// Store coefficient in sparse matrix
-				const int row = dualFaceIdx;
-				const int col = edgeIdx;
-				triplets.push_back(T(row, col, value));
-			}
-		}
-	}
+					// factor due to consistency of electric current and fluid flux: 
+					// J_h = j * A = q * f * A, where: 
+					//   J_h: face-integrated current
+					//   j:   current density at face
+					//   q:   ionization degree of fluid
+					//   f:   fluid flux at face
+					//   A:   face area
+					value *= q * dualFace->getArea();
+
+					// Store coefficient in sparse matrix
+					const int row = dualFaceIdx;
+					const int col = edgeIdx;
+					triplets.push_back(T(row, col, value));
+				} // if isElectricLorentzForceActive
+			} // for cellFaces
+		} // for adjacientCells
+	} // for dualFaceIdx
+	Eigen::SparseMatrix<double> Msigma;
 	Msigma = Eigen::SparseMatrix<double>(J_h.size(), E_h.size());
 	Msigma.setFromTriplets(triplets.begin(), triplets.end());
 	Msigma.makeCompressed();
+	return Msigma;
+}
+
+/** 
+* Setup of equation J_h = Msigma * E_h + J_h_aux, which results of the consistent-implicit formulation.
+*/
+void AppmSolver::get_Msigma_consistent(const double dt, Eigen::SparseMatrix<double>& Msigma, Eigen::VectorXd & jaux)
+{
+	const int nPrimalEdges = primalMesh.getNumberOfEdges();
+	const int nDualFaces = dualMesh.getNumberOfFaces();
+	const int nFluids = getNFluids();
+
+	typedef Eigen::Triplet<double> T;
+	std::vector<T> triplets;
+
+	std::cout << "isElectricLorentzForceActive: " << isElectricLorentzForceActive << std::endl;
+	std::cout << "isMagneticLorentzForceActive: " << isMagneticLorentzForceActive << std::endl;
+	std::cout << "isMomentumFluxActive: " << isMomentumFluxActive << std::endl;
+	assert(isMomentumFluxActive);
+
+	std::cout << "Warning: check definition of implicit-consistent current: factors due to Rusanov scheme in magnetic Lorentz force" << std::endl;
+	std::cout << "Warning: check definition of implicit-consistent current: factors due to Rusanov scheme at domain boundary" << std::endl;
+
+	// Set parameters to zero
+	Msigma = Eigen::SparseMatrix<double>(nDualFaces, nPrimalEdges);
+	jaux = Eigen::VectorXd::Zero(nDualFaces);
+
+	// For each fluid ...
+	for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+		// species ionization degree 
+		const int q = particleParams[fluidIdx].electricCharge;
+		if (q == 0) { // skip species that are neutral
+			continue; 
+		}
+
+		// For each face in dual mesh at which we evaulate implicit-consistent current value
+		for (int jdx = 0; jdx < nDualFaces; jdx++) {
+			const Face * dualFace = dualMesh.getFace(jdx);
+			if (!dualFace->hasFluidCells()) { // skip faces that are not adjacient to a fluid cell
+				continue;
+			}
+
+			const Eigen::Vector3d fn = dualFace->getNormal();
+			const double fA = dualFace->getArea();
+			const std::vector<Cell*> adjacientCells = dualFace->getCellList();
+			assert(adjacientCells.size() >= 1);
+			assert(adjacientCells.size() <= 2);
+			assert((adjacientCells.size() == 1 &&  dualFace->isBoundary())
+				|| (adjacientCells.size() == 2 && !dualFace->isBoundary()));
+
+			// For each adjacient cell
+			for (auto cell : adjacientCells) {
+				// model is defined only for fluid cells; skip other cells
+				if (cell->getFluidType() != Cell::FluidType::FLUID) {
+					continue;
+				}
+
+				// Number density in dual cell
+				const double numberDensity = fluidStates(5 * fluidIdx, cell->getIndex());
+
+				// List of faces that make this cell
+				std::vector<Face*> cellFaces = cell->getFaceList();
+				for (auto face : cellFaces) {
+					// Index of primal edge that is associated with dual face
+					const int edx = dualMesh.getAssociatedPrimalEdgeIndex(face->getIndex());
+					assert(edx >= 0 && edx < primalMesh.getNumberOfEdges());
+					const Edge * edge = primalMesh.getEdge(edx);
+					
+					const Eigen::Vector3d fc = face->getCenter();
+					const Eigen::Vector3d cc = cell->getCenter();
+					
+					// Use Perot's interpolation method to obtain cell-centered value
+					// of the electric field that is defined at dual faces (= primal edges)
+
+					const Eigen::Vector3d rvec = fc - cc; // Position vector of face center relative to cell center
+					const Eigen::Vector3d nj = face->getNormal();
+					const int incidence = rvec.dot(nj) > 0 ? 1 : -1;
+					const Eigen::Vector3d Lhat = edge->getDirection().normalized();
+					const double rvec_proj_fn = rvec.dot(fn);
+					const double dL = edge->getLength();
+					const double dA = face->getArea();
+					const double dV = cell->getVolume();
+
+					
+					// Consistent-implicit electric current due to electric Lorentz force (F = q*n*E)
+					if (isElectricLorentzForceActive) {
+
+						// Electric field projected in direction of dual face and interpolated from dual face centers
+						double value = q * numberDensity * rvec_proj_fn * Lhat.dot(nj) * incidence * dA / dV * (1. / dL);
+						value *= dt * q * fA;
+
+						// Factor due to definition of reconstructed fluid flux:
+						// - At inner faces (Rusanov scheme): f = 0.5 * ( (nu)_k + (nu)_{k+1} ) - 0.5 * s * (n_{k+1} - n_k)
+						// - At opening faces: f = (nu)_k
+						// - At boundary faces: ???                  <<<---- TODO
+						const bool isFaceTypeOpening = dualFace->getFluidType() == Face::FluidType::OPENING;
+						value *= isFaceTypeOpening ? 1 : 0.5;
+
+						triplets.push_back(T(jdx, edx, value));
+					} // end if isElectricLorentzForceActive
+
+						
+					// Consistent-implicit electric current due to momentum flux 
+					if (isMomentumFluxActive) {
+						const double momentumFlux = getRusanovFluxExplicit(face->getIndex(), fluidIdx)(1);
+						jaux(jdx) += -dt / dV * dA * nj.dot(fn) * momentumFlux * q * fA;
+					}
+
+
+				} // end for cellFaces			
+
+				// Consistent-implicit electric current due to magnetic Lorentz force (F = q * (nu) x B)
+				if (isMagneticLorentzForceActive) {
+					const Eigen::Vector3d B = B_vertex.col(cell->getIndex());
+					const Eigen::Vector3d nu = fluidStates.col(cell->getIndex()).segment(5 * fluidIdx + 1, 3);
+					double value = q * nu.cross(B).dot(fn);
+					value *= dt * q * fA;
+					value *= 0.5; // this factor is due to defintion of reconstructed flux (Rusanov scheme)
+					jaux(jdx) += value;
+				}
+
+			} // end for adjacient cells
+		} // end for dual faces
+	} // end for fluidIdx
+
+	Msigma.setFromTriplets(triplets.begin(), triplets.end());
+	Msigma.makeCompressed();
+
+	assert(Msigma.nonZeros() > 0);
 }
 
 const double AppmSolver::terminalVoltageBC_sideA(const double time, const double t0, const double t1, const double tscale) const
@@ -1358,8 +1558,8 @@ void AppmSolver::interpolateMagneticFluxToPrimalVertices()
 
 	//const Eigen::VectorXd B_h = maxwellSolver->getBstate();
 	const int nPrimalFaces = primalMesh.getNumberOfFaces();
-	Eigen::VectorXd B_h(nPrimalFaces); 
-	B_h.setZero();
+	//Eigen::VectorXd B_h(nPrimalFaces); 
+	//B_h.setZero();
 
 	for (int cidx = 0; cidx < nCells; cidx++) {
 		const Cell * cell = primalMesh.getCell(cidx);
@@ -1703,15 +1903,15 @@ void AppmSolver::writeMaxwellStates(H5Writer & writer)
 	assert(J_h.size() > 0);
 	assert(J_h.size() == dualMesh.getNumberOfFaces());
 	//assert(J_h.size() == dualMesh.getNumberOfFaces() - 1);
-	Eigen::Matrix3Xd J_consistent(3, dualMesh.getNumberOfFaces());
-	J_consistent.setZero();
+	Eigen::Matrix3Xd currentDensity(3, dualMesh.getNumberOfFaces());
+	currentDensity.setZero();
 	for (int i = 0; i < J_h.size(); i++) {
 		const Face * face = dualMesh.getFace(i);
 		const double fA = face->getArea();
 		const Eigen::Vector3d fn = face->getNormal();
-		J_consistent.col(i) = J_h(i) / fA * fn;
+		currentDensity.col(i) = J_h(i) / fA * fn;
 	}
-	writer.writeData(J_consistent, "/CurrentDensity");
+	writer.writeData(currentDensity, "/CurrentDensity");
 
 
 	assert(dualMesh.getNumberOfFaces() == J_h_aux.size());

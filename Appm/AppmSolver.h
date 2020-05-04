@@ -80,6 +80,7 @@ private:
 	int initType = 1;
 	bool isElectricLorentzForceActive = false;
 	bool isMagneticLorentzForceActive = false;
+	bool isMomentumFluxActive = true;
 
 	//enum class MaxwellSolverBCType {
 	//	VOLTAGE_BC, CURRENT_BC
@@ -144,16 +145,18 @@ private:
 	void init_Explosion(const Eigen::Vector3d refPos, const double radius);
 
 	void set_Efield_uniform(const Eigen::Vector3d direction);
+	void set_Bfield_azimuthal();
 
 	Eigen::SparseMatrix<double> M_perot;
 	void initPerotInterpolationMatrix();
 	const Eigen::Matrix3Xd getEfieldAtCellCenter();
 
 	// Matrix for Ohms law J_h = M_sigma * E_h
-	Eigen::SparseMatrix<double> Msigma;
-	void initMsigma();
-	void init_Msigma_solid();
-	void init_Msigma_fluid();
+	//Eigen::SparseMatrix<double> Msigma;
+	//Eigen::SparseMatrix<double> initMsigma();
+	Eigen::SparseMatrix<double> init_Msigma_solid();
+	Eigen::SparseMatrix<double> init_Msigma_fluid();
+	void get_Msigma_consistent(const double dt, Eigen::SparseMatrix<double> & Msigma, Eigen::VectorXd & jaux);
 
 	const double terminalVoltageBC_sideA(const double time, const double t0, const double t1, const double tscale) const;
 	const double terminalVoltageBC_sideB(const double time) const;
