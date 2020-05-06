@@ -520,7 +520,7 @@ XdmfGrid DualMesh::getXdmfSurfaceGrid() const
 	XdmfGrid surfaceGrid = Mesh::getXdmfSurfaceGrid();
 
 	XdmfAttribute attribute(XdmfAttribute::Tags("Face Fluid Type", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
-	std::string attributeString = (std::stringstream() << getMeshDataFilename() << ":/faceFluidTypes").str();
+	std::string attributeString = (std::stringstream() << getMeshDataFilename() << ":/faceFluidType").str();
 	attribute.addChild(
 		XdmfDataItem(
 			XdmfDataItem::Tags(
@@ -539,7 +539,7 @@ XdmfGrid DualMesh::getXdmfVolumeGrid() const
 	XdmfGrid volumeGrid = Mesh::getXdmfVolumeGrid();
 
 	XdmfAttribute attribute(XdmfAttribute::Tags("Cell Fluid Type", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
-	std::string attributeString = (std::stringstream() << getMeshDataFilename() << ":/cellFluidTypes").str();
+	std::string attributeString = (std::stringstream() << getMeshDataFilename() << ":/cellFluidType").str();
 	attribute.addChild(
 		XdmfDataItem(
 			XdmfDataItem::Tags(

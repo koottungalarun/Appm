@@ -134,6 +134,8 @@ private:
 
 	const int faceIdxRef = -1;
 
+	std::string printSolverParameters() const;
+
 	// Isentropic expansion coefficient, aka ratio of heat capacities
 	//const double gamma = 1.4; 
 

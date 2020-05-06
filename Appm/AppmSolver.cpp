@@ -206,7 +206,7 @@ void AppmSolver::run()
 
 			Eigen::SparseMatrix<double> Msigma;
 			get_Msigma_consistent(dt , Msigma, J_h_aux);
-			assert(Msigma.nonZeros() == 0);
+			//assert(Msigma.nonZeros() == 0);
 
 			Eigen::SparseMatrix<double> Msigma_inner;
 			Msigma_inner = Msigma.topLeftCorner(nEdges, nEdges);
@@ -218,7 +218,7 @@ void AppmSolver::run()
 			assert(M2.size() > 0);
 			assert(M2.nonZeros() > 0);
 			M = M1 + pow(dt, 2) * M2;
-			// M += dt * Q.transpose() * Msigma_inner * Q; // TODO Msigma     <<<----------------
+			M += dt * Q.transpose() * Msigma_inner * Q; 
 			M.makeCompressed();
 			//Eigen::sparseMatrixToFile(M, "M.dat");
 
@@ -423,15 +423,17 @@ void AppmSolver::run()
 			const int nFaces = dualMesh.getNumberOfFaces();
 
 			// Set source term for electric Lorentz force (implicit)
-			for (int idx = 0; idx < nCells; idx++) {
-				const Cell * cell = dualMesh.getCell(idx);
-				if (cell->getFluidType() != Cell::FluidType::FLUID) {
-					continue; // Skip cells that are not of type Fluid
-				}
-				for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-					const int q = particleParams[fluidIdx].electricCharge;
-					const double n = fluidStates(5 * fluidIdx, idx);
-					LorentzForce_electric.col(idx).segment(3 * fluidIdx, 3) = q * n * E_cc.col(idx);
+			if (isElectricLorentzForceActive) {
+				for (int idx = 0; idx < nCells; idx++) {
+					const Cell * cell = dualMesh.getCell(idx);
+					if (cell->getFluidType() != Cell::FluidType::FLUID) {
+						continue; // Skip cells that are not of type Fluid
+					}
+					for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+						const int q = particleParams[fluidIdx].electricCharge;
+						const double n = fluidStates(5 * fluidIdx, idx);
+						LorentzForce_electric.col(idx).segment(3 * fluidIdx, 3) = q * n * E_cc.col(idx);
+					}
 				}
 			}
 			std::cout << "FL_el maxCoeff: " << LorentzForce_electric.cwiseAbs().maxCoeff() << std::endl;
@@ -586,6 +588,8 @@ void AppmSolver::run()
 	auto delta_appmSolver = std::chrono::duration<double>(timer_endAppmSolver - timer_startAppmSolver);
 	std::cout << "Elapsed time for APPM solver: " << delta_appmSolver.count() << std::endl;
 
+	std::cout << printSolverParameters() << std::endl;
+
 	if (currentBCValue.size() > 0) {
 		std::string filename = "currentBC.dat";
 		std::cout << "Write data to file: " << filename << std::endl;
@@ -614,6 +618,25 @@ void AppmSolver::run()
 const int AppmSolver::getNFluids() const
 {
 	return particleParams.size();
+}
+
+std::string AppmSolver::printSolverParameters() const
+{
+	std::stringstream ss;
+	ss << "Appm Solver parameters:" << std::endl;
+	ss << "=======================" << std::endl;
+	ss << "maxIterations:  " << maxIterations << std::endl;
+	ss << "maxTime:        " << maxTime << std::endl;
+	ss << "isFluidEnabled: " << isFluidEnabled << std::endl;
+	ss << "isMaxwellEnabled: " << isMaxwellEnabled << std::endl;
+	ss << "timestepSize: " << timestepSize << std::endl;
+	ss << "lambdaSquare: " << lambdaSquare << std::endl;
+	ss << "massFluxScheme: " << massFluxScheme << std::endl;
+	ss << "initType: " << initType << std::endl;
+	ss << "isElectricLorentzForceActive: " << isElectricLorentzForceActive << std::endl;
+	ss << "isMagneticLorentzForceActive: " << isMagneticLorentzForceActive << std::endl;
+	ss << "=======================" << std::endl;
+	return ss.str();
 }
 
 void AppmSolver::init_maxwellStates()
@@ -2388,20 +2411,7 @@ void AppmSolver::readParameters(const std::string & filename)
 	}
 
 	std::cout << std::endl;
-	std::cout << "Appm Solver parameters:" << std::endl;
-	std::cout << "======================="  << std::endl;
-	std::cout << "maxIterations:  " << maxIterations << std::endl;
-	std::cout << "maxTime:        " << maxTime << std::endl;
-	std::cout << "isFluidEnabled: " << isFluidEnabled << std::endl;
-	std::cout << "isMaxwellEnabled: " << isMaxwellEnabled << std::endl;
-	std::cout << "timestepSize: " << timestepSize << std::endl;
-	std::cout << "lambdaSquare: " << lambdaSquare << std::endl;
-	std::cout << "massFluxScheme: " << massFluxScheme << std::endl;
-	std::cout << "initType: " << initType << std::endl;
-	std::cout << "isElectricLorentzForceActive: " << isElectricLorentzForceActive << std::endl;
-	std::cout << "isMagneticLorentzForceActive: " << isMagneticLorentzForceActive << std::endl;
-	//std::cout << "maxwellSolverBCType: " << maxwellSolverBCType << std::endl;
-	std::cout << "=======================" << std::endl;
+	std::cout << printSolverParameters() << std::endl;
 }
 
 const std::string AppmSolver::xdmf_GridPrimalEdges(const int iteration) const
@@ -2473,6 +2483,14 @@ const std::string AppmSolver::xdmf_GridPrimalFaces(const int iteration) const
 	ss << datafilename << ":/faceIndex" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Vertex type\" AttributeType=\"Scalar\" Center=\"Node\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfVertices() << "\""
+		<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
+	ss << datafilename << ":/vertexType" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
 
 	if (isWriteBfield) {
 		ss << "<Attribute Name=\"Magnetic flux\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
