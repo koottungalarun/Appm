@@ -38,6 +38,6 @@ public:
 private:
 	Eigen::Vector3d position;
 	std::vector<Edge*> adjacientEdges;
-	Type type;
+	Type type = Vertex::Type::Undefined;
 };
 
