@@ -184,8 +184,9 @@ void AppmSolver::run()
 					assert(nu.allFinite());
 					const Eigen::Vector3d B = B_vertex.col(idx);
 					assert(B.allFinite());
-					const double q = particleParams[fluidIdx].electricCharge;
-					const Eigen::Vector3d result = q * nu.cross(B);
+					const int q = particleParams[fluidIdx].electricCharge;
+					const double massRatio = particleParams[fluidIdx].mass;
+					const Eigen::Vector3d result = q * 1./massRatio * nu.cross(B);
 					if (!result.allFinite()) {
 						std::cout << "result: " << result.transpose() << std::endl;
 					}
@@ -193,7 +194,7 @@ void AppmSolver::run()
 					LorentzForce_magnetic.col(idx).segment(3*fluidIdx, 3) = result;
 				}
 			}
-			//std::cout << "maxCoeff F_L: " << LorentzForce_magnetic.cwiseAbs().maxCoeff() << std::endl;
+			std::cout << "maxCoeff F_L magnetic: " << LorentzForce_magnetic.cwiseAbs().maxCoeff() << std::endl;
 		}
 
 
@@ -432,11 +433,12 @@ void AppmSolver::run()
 					for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
 						const int q = particleParams[fluidIdx].electricCharge;
 						const double n = fluidStates(5 * fluidIdx, idx);
-						LorentzForce_electric.col(idx).segment(3 * fluidIdx, 3) = q * n * E_cc.col(idx);
+						const double massRatio = particleParams[fluidIdx].mass;
+						LorentzForce_electric.col(idx).segment(3 * fluidIdx, 3) = q * 1./massRatio * n * E_cc.col(idx);
 					}
 				}
 			}
-			std::cout << "FL_el maxCoeff: " << LorentzForce_electric.cwiseAbs().maxCoeff() << std::endl;
+			std::cout << "maxCoeff F_L electric: " << LorentzForce_electric.cwiseAbs().maxCoeff() << std::endl;
 
 
 			
