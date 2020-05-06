@@ -419,13 +419,16 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal, const double terminalRad
 	const int nDefaultFaces = (faceTypes.array() == static_cast<int>(Face::FluidType::DEFAULT)).count();
 	const int nInteriorFaces = (faceTypes.array() == static_cast<int>(Face::FluidType::INTERIOR)).count();
 	const int nOpeningFaces = (faceTypes.array() == static_cast<int>(Face::FluidType::OPENING)).count();
+	const int nTerminalFaces = (faceTypes.array() == static_cast<int>(Face::FluidType::TERMINAL)).count(); 
 	const int nWallFaces = (faceTypes.array() == static_cast<int>(Face::FluidType::WALL)).count();
 	std::cout << "Number of face types: " << std::endl;
 	std::cout << "  Default:  " << nDefaultFaces << std::endl;
 	std::cout << "  Interior: " << nInteriorFaces << std::endl;
 	std::cout << "  Opening:  " << nOpeningFaces << std::endl;
+	std::cout << "  Terminal: " << nTerminalFaces << std::endl;
 	std::cout << "  Wall:     " << nWallFaces << std::endl;
 
+	assert(nFaces == nDefaultFaces + nInteriorFaces + nOpeningFaces + nTerminalFaces + nWallFaces);
 	//H5Writer h5writer("dualMeshTypes.h5");
 	//h5writer.writeData(cellTypes, "/cellFluidTypes");
 	//h5writer.writeData(faceTypes, "/faceFluidTypes");
@@ -611,7 +614,7 @@ void DualMesh::init_faceFluidType(const double terminalRadius)
 				const Eigen::Vector3d faceCenter = face->getCenter();
 				const Eigen::Vector2d faceCenter_2d = faceCenter.segment(0, 2);
 				const bool isTerminalFace = faceCenter_2d.norm() < terminalRadius;
-				faceFluidType = isTerminalFace ? Face::FluidType::WALL : Face::FluidType::OPENING;
+				faceFluidType = isTerminalFace ? Face::FluidType::TERMINAL : Face::FluidType::OPENING;
 			}
 			if (nSolidCells == 1 && nFluidCells == 0) {
 				faceFluidType = Face::FluidType::DEFAULT;

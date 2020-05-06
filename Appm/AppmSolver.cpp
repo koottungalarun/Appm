@@ -610,8 +610,8 @@ void AppmSolver::run()
 	// Xdmf3Reader3: can     read polyhedrons, but not grid-of-grids (i.e., grids with GridType=Tree).
 	// XDMF Reader:  can not read polyhedrons, but     grid-of-grids.
 	// Therefore, the mesh data for vertices, edges, and faces, are separated from the volume data.
-	writeXdmf();
-	writeXdmfDualVolume();
+	writeXdmf("appm.xdmf");
+	writeXdmfDualVolume("appm-volume.xdmf");
 	//writeXdmfDualFaceFluxes();
 }
 
@@ -635,6 +635,7 @@ std::string AppmSolver::printSolverParameters() const
 	ss << "initType: " << initType << std::endl;
 	ss << "isElectricLorentzForceActive: " << isElectricLorentzForceActive << std::endl;
 	ss << "isMagneticLorentzForceActive: " << isMagneticLorentzForceActive << std::endl;
+	ss << "isShowDataWriterOutput:" << isShowDataWriterOutput << std::endl;
 	ss << "=======================" << std::endl;
 	return ss.str();
 }
@@ -853,6 +854,16 @@ void AppmSolver::init_multiFluid(const std::string & filename)
 	fluidStates_new = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
 	fluidSources = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
 	fluidFluxes = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
+
+	const int nFaces = dualMesh.getNumberOfFaces();
+	faceTypeFluids = Eigen::MatrixXi::Zero(nFaces, nFluids);
+	for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+		for (int i = 0; i < nFaces; i++) {
+			const Face * face = dualMesh.getFace(i);
+			Face::FluidType faceType = getFaceTypeOfFluid(face, fluidIdx);
+			faceTypeFluids(i, fluidIdx) = static_cast<int>(faceType);
+		}
+	}
 }
 
 const int AppmSolver::getFluidStateLength() const {
@@ -1637,11 +1648,20 @@ void AppmSolver::init_meshes(const PrimalMesh::PrimalMeshParams & primalParams)
 	std::cout << "Dual mesh has " << dualMesh.getNumberOfVertices() << " vertices" << std::endl;
 }
 
-void AppmSolver::writeXdmf()
+/**
+* Write XDMF output file for edges and faces of primal and dual meshes.
+*/
+void AppmSolver::writeXdmf(const std::string & filename)
 {
+	std::cout << "Write XDMF output file: " << filename << std::endl;
+	
+	// Check that filename has correct extension
+	std::size_t pos = filename.rfind(".xdmf");
+	assert(pos != std::string::npos);
+	assert(pos > 0);
+
 	const int nTimesteps = timeStamps.size();
 	
-	const std::string filename = "appm.xdmf";
 	std::string gridPrimalEdges;
 	std::string gridPrimalFaces;
 	std::string gridDualEdges;
@@ -1669,10 +1689,20 @@ void AppmSolver::writeXdmf()
 	file << "</Xdmf>" << std::endl;
 }
 
-void AppmSolver::writeXdmfDualVolume()
+/**
+* Write XDMF output file for cells of dual mesh. 
+*/
+void AppmSolver::writeXdmfDualVolume(const std::string & filename)
 {
+	std::cout << "Write XDMF output file: " << filename << std::endl;
+
+	// Check that filename has correct extension
+	std::size_t pos = filename.rfind(".xdmf");
+	assert(pos != std::string::npos);
+	assert(pos > 0);
+
 	const int nTimesteps = timeStamps.size();
-	const std::string filename = "appm-volume.xdmf";
+
 	std::ofstream file(filename);
 	file << "<?xml version = \"1.0\" ?>" << std::endl;
 	file << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << std::endl;
@@ -1689,27 +1719,9 @@ void AppmSolver::writeXdmfDualVolume()
 	file << "</Xdmf>" << std::endl;
 }
 
-//void AppmSolver::writeXdmfDualFaceFluxes()
-//{
-//	const int nTimesteps = timeStamps.size();
-//	const std::string filename = "appm-faceFluxes.xdmf";
-//	std::ofstream file(filename);
-//	file << "<?xml version = \"1.0\" ?>" << std::endl;
-//	file << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << std::endl;
-//	file << "<Xdmf Version=\"3.0\" xmlns:xi=\"[http://www.w3.org/2001/XInclude]\">" << std::endl;
-//	file << "<Domain>" << std::endl;
-//	file << "<Grid Name=\"Time Grid\" GridType=\"Collection\" CollectionType=\"Temporal\">" << std::endl;
-//	for (int i = 0; i < nTimesteps; i++) {
-//		const double time = this->timeStamps[i];
-//		file << "<Time Value=\"" << time << "\" />" << std::endl;
-//		file << xdmf_GridDualFaces(i) << std::endl;
-//	}
-//	file << "</Grid>" << std::endl;
-//	file << "</Domain>" << std::endl;
-//	file << "</Xdmf>" << std::endl;
-//}
-
-
+/**
+* Write data to output file.
+*/
 void AppmSolver::writeOutput(const int iteration, const double time)
 {
 	timeStamps.push_back(time);
@@ -1722,17 +1734,13 @@ void AppmSolver::writeOutput(const int iteration, const double time)
 	const int nDualCells = dualMesh.getNumberOfCells();
 
 	H5Writer h5writer(filename);
+	h5writer.setShowOutput(this->isShowDataWriterOutput);
 
 	// Fluid states
-	//fluidSolver->writeStates(h5writer);
 	writeFluidStates(h5writer);
 
 	// Maxwell states
-	//maxwellSolver->writeStates(h5writer);
 	writeMaxwellStates(h5writer);
-
-	// Interpolated values of B-field to primal vertices
-	h5writer.writeData(B_vertex, "/Bvertex");
 
 	Eigen::VectorXd timeVec(1);
 	timeVec(0) = time;
@@ -1740,33 +1748,6 @@ void AppmSolver::writeOutput(const int iteration, const double time)
 	Eigen::VectorXi iterVec(1);
 	iterVec(0) = iteration;
 	h5writer.writeData(iterVec, "/iteration");
-
-	for (int nf = 0; nf < getNFluids(); nf++) {
-		//std::cout << "Face fluxes size: ";
-		//std::cout << faceFluxes.rows() << " x " << faceFluxes.cols() << std::endl;
-		//assert(nDualFaces == faceFluxes.cols());
-		assert(getNFluids() == 1);
-		assert(faceFluxes.cols() > 0);
-		assert(faceFluxes.rows() > 0);
-		assert(nDualFaces == faceFluxes.cols());
-		{
-			Eigen::VectorXd faceFluxMass(nDualFaces);
-			faceFluxMass = faceFluxes.row(0);
-			h5writer.writeData(faceFluxMass, "/faceFluxMass" + nf);
-		}
-		{
-			Eigen::MatrixXd faceFluxMomentum(3, nDualFaces);
-			faceFluxMomentum = faceFluxes.block(1, 0, 3, nDualFaces);
-			h5writer.writeData(faceFluxMomentum, "/faceFluxMomentum" + nf);
-		} 
-		{
-			Eigen::VectorXd faceFluxEnergy(nDualFaces);
-			faceFluxEnergy = faceFluxes.row(4);
-			h5writer.writeData(faceFluxEnergy, "/faceFluxEnergy" + nf);
-		}
-	}
-
-	h5writer.writeData(faceFluxesImExRusanov, "/faceFluxesImExRusanov");
 }
 
 void AppmSolver::writeFluidStates(H5Writer & writer)
@@ -1829,11 +1810,45 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 			writer.writeData(qE, stateE);
 		}
 	}
+
+	const int nFaces = dualMesh.getNumberOfFaces();
+	for (int nf = 0; nf < nFluids; nf++) {
+		assert(faceFluxes.cols() == nFaces);
+		assert(faceFluxes.rows() == 5 * getNFluids());
+		{
+			Eigen::VectorXd faceFluxMass;
+			faceFluxMass = faceFluxes.row(5 * nf + 0);
+			assert(faceFluxMass.size() == nFaces);
+			writer.writeData(faceFluxMass, (std::stringstream() << "/faceFluxMass" << nf).str());
+		}
+		{
+			Eigen::MatrixXd faceFluxMomentum;
+			faceFluxMomentum = faceFluxes.block(5 * nf + 1, 0, 3, nFaces);
+			assert(faceFluxMomentum.rows() == 3);
+			assert(faceFluxMomentum.cols() == nFaces);
+			writer.writeData(faceFluxMomentum, (std::stringstream() << "/faceFluxMomentum" << nf).str());
+		}
+		{
+			Eigen::VectorXd faceFluxEnergy;
+			faceFluxEnergy = faceFluxes.row(5 * nf + 4);
+			assert(faceFluxEnergy.size() == nFaces);
+			writer.writeData(faceFluxEnergy, (std::stringstream() << "/faceFluxEnergy" << nf).str());
+		}
+		{
+			const Eigen::VectorXi faceTypeFluid = faceTypeFluids.col(nf);
+			writer.writeData(faceTypeFluid, (std::stringstream() << "/faceTypeFluid" << nf).str());
+		}
+	}
+
+	writer.writeData(faceFluxesImExRusanov, "/faceFluxesImExRusanov");
 }
 
 void AppmSolver::writeMaxwellStates(H5Writer & writer)
 {
 	writer.writeData(maxwellState, "/x");
+
+	// Interpolated values of B-field to primal vertices
+	writer.writeData(B_vertex, "/Bvertex");
 
 	assert(B_h.size() > 0);
 	writer.writeData(B_h, "/bvec");
@@ -2397,6 +2412,9 @@ void AppmSolver::readParameters(const std::string & filename)
 		if (tag == "isMagneticLorentzForceActive") {
 			std::istringstream(line.substr(pos + 1)) >> isMagneticLorentzForceActive;
 		}
+		if (tag == "isShowDataWriterOutput") {
+			std::istringstream(line.substr(pos + 1)) >> isShowDataWriterOutput;
+		}
 		//if (tag == "maxwellSolverBCType") {
 		//	std::string temp;
 		//	std::istringstream(line.substr(pos + 1)) >> temp;
@@ -2588,26 +2606,40 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
-	ss << "<Attribute Name=\"Face Flux Mass\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
-	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
-		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << "appm-" << iteration << ".h5:/faceFluxMass" << std::endl;
-	ss << "</DataItem>" << std::endl;
-	ss << "</Attribute>" << std::endl;
+	for (int i = 0; i < getNFluids(); i++) {
+		std::string attributeName = (std::stringstream() << "Face Type Fluid " << i).str();
+		std::string dataName = (std::stringstream() << "faceTypeFluid" << i).str();
+		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
+			<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
+		ss << "appm-" << iteration << ".h5:/" << dataName << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
 
-	ss << "<Attribute Name=\"Face Flux Momentum\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
-	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
-		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << "appm-" << iteration << ".h5:/faceFluxMomentum" << std::endl;
-	ss << "</DataItem>" << std::endl;
-	ss << "</Attribute>" << std::endl;
+		attributeName = (std::stringstream() << "Face Flux Mass " << i).str();
+		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << "appm-" << iteration << ".h5:/faceFluxMass" << i << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
 
-	ss << "<Attribute Name=\"Face Flux Energy\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
-	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
-		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << "appm-" << iteration << ".h5:/faceFluxEnergy" << std::endl;
-	ss << "</DataItem>" << std::endl;
-	ss << "</Attribute>" << std::endl;
+		attributeName = (std::stringstream() << "Face Flux Momentum " << i).str();
+		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << "appm-" << iteration << ".h5:/faceFluxMomentum" << i << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+
+		attributeName = (std::stringstream() << "Face Flux Energy " << i).str();
+		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << "appm-" << iteration << ".h5:/faceFluxEnergy" << i << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+	}
 
 	ss << "<Attribute Name=\"Current density\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
@@ -2615,6 +2647,7 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 	ss << "appm-" << iteration << ".h5:/CurrentDensity" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
+	
 
 	ss << "<Attribute Name=\"J_h_aux_Vector\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
@@ -2769,6 +2802,15 @@ const std::string AppmSolver::fluidXdmfOutput(const std::string & datafilename) 
 		}
 	}
 	return ss.str();
+}
+
+const Face::FluidType AppmSolver::getFaceTypeOfFluid(const Face * face, const int fluidIdx) const
+{
+	Face::FluidType faceTypeOfFluid = face->getFluidType();
+	if (faceTypeOfFluid == Face::FluidType::TERMINAL) {
+		faceTypeOfFluid = (particleParams[fluidIdx].electricCharge >= 0) ? Face::FluidType::WALL : Face::FluidType::OPENING;
+	}
+	return faceTypeOfFluid;
 }
 
 std::ostream & operator<<(std::ostream & os, const AppmSolver::MassFluxScheme & obj) {

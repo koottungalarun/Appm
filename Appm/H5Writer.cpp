@@ -19,9 +19,19 @@ H5Writer::H5Writer(const std::string & filename)
 	this->file = H5File(filename.c_str(), H5F_ACC_TRUNC);
 }
 
+H5Writer::H5Writer(const std::string & filename, const bool showOutput)
+	: H5Writer(filename)
+{
+	this->showOutputInfo = showOutput;
+}
 
 H5Writer::~H5Writer()
 {
+}
+
+void H5Writer::setShowOutput(const bool isShowOutput) 
+{
+	this->showOutputInfo = isShowOutput;
 }
 
 //void H5Writer::writeData(const Eigen::MatrixXd & matrix, const std::string & dataname)

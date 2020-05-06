@@ -11,7 +11,7 @@ class Face :
 public:
 
 	enum class FluidType {
-		DEFAULT, INTERIOR, OPENING, WALL
+		DEFAULT, INTERIOR, OPENING, TERMINAL, WALL
 	};
 	//enum class EmagType {
 	//	DEFAULT

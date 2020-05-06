@@ -191,9 +191,10 @@ private:
 
 	void init_meshes(const PrimalMesh::PrimalMeshParams & primalParams);
 
-	void writeXdmf();
-	void writeXdmfDualVolume();
+	void writeXdmf(const std::string & filename);
+	void writeXdmfDualVolume(const std::string & filename);
 	
+	bool isShowDataWriterOutput = false;
 	void writeOutput(const int iteration, const double time);
 
 	void writeFluidStates(H5Writer & writer);
@@ -220,5 +221,8 @@ private:
 	const std::string xdmf_GridDualCells(const int iteration) const;
 
 	const std::string fluidXdmfOutput(const std::string & filename) const;
+
+	Eigen::MatrixXi faceTypeFluids;
+	const Face::FluidType getFaceTypeOfFluid(const Face * face, const int fluidIdx) const;
 };
 

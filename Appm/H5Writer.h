@@ -13,6 +13,7 @@ class H5Writer
 public:
 	H5Writer();
 	H5Writer(const std::string & filename);
+	H5Writer(const std::string & filename, const bool showOutput);
 	~H5Writer();
 	
 	template <typename T, int cols, int rows>
@@ -28,9 +29,13 @@ public:
 
 	void writeData(const std::vector<int> & vector, const std::string & dataname);
 
+	void setShowOutput(bool isShowOutput);
+
 private:
 	std::string filename;
 	H5File file;
+
+	bool showOutputInfo = false;
 };
 
 template<typename T, int cols, int rows>
@@ -41,7 +46,9 @@ inline void H5Writer::writeData(const Eigen::Matrix<T, cols, rows>& matrix, cons
 
 inline void H5Writer::writeData(const std::vector<int>& vector, const std::string & dataname)
 {
-	std::cout << "Write int data to " << this->filename << ": " << dataname << std::endl;
+	if (showOutputInfo) {
+		std::cout << "Write int data to " << this->filename << ": " << dataname << std::endl;
+	}
 	const int rank = 1;
 	hsize_t dims[rank];
 	dims[0] = vector.size();
@@ -55,7 +62,9 @@ inline void H5Writer::writeData(const std::vector<int>& vector, const std::strin
 template <int cols, int rows>
 inline void H5Writer::writeData(const Eigen::Matrix<int, cols, rows> & matrix, const std::string & dataname)
 {
-	std::cout << "Write int data to " << this->filename << ": " << dataname << std::endl;
+	if (showOutputInfo) {
+		std::cout << "Write int data to " << this->filename << ": " << dataname << std::endl;
+	}
 	const int rank = 2;
 	hsize_t dims[rank];
 	dims[1] = matrix.rows();
@@ -70,7 +79,9 @@ inline void H5Writer::writeData(const Eigen::Matrix<int, cols, rows> & matrix, c
 template <int cols, int rows>
 inline void H5Writer::writeData(const Eigen::Matrix<double, cols, rows> & matrix, const std::string & dataname)
 {
-	std::cout << "Write double data to " << this->filename << ": " << dataname << std::endl;
+	if (showOutputInfo) {
+		std::cout << "Write double data to " << this->filename << ": " << dataname << std::endl;
+	}
 	const int rank = 2;
 	hsize_t dims[rank];
 	dims[1] = matrix.rows();
