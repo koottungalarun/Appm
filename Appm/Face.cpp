@@ -458,3 +458,23 @@ std::ostream & operator<<(std::ostream & os, const Face & obj)
 	os << "}";
 	return os;
 }
+
+std::ostream & operator<<(std::ostream & os, const Face::FluidType & obj)
+{
+	switch (obj) {
+	case Face::FluidType::DEFAULT:
+		os << "DEFAULT"; break;
+	case Face::FluidType::INTERIOR:
+		os << "INTERIOR"; break;
+	case Face::FluidType::OPENING:
+		os << "OPENING"; break;
+	case Face::FluidType::TERMINAL:
+		os << "TERMINAL"; break;
+	case Face::FluidType::WALL:
+		os << "WALL"; break;
+	default:
+		os << "Not implemented";
+		assert(false);
+	}
+	return os;
+}

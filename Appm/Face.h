@@ -13,6 +13,8 @@ public:
 	enum class FluidType {
 		DEFAULT, INTERIOR, OPENING, TERMINAL, WALL
 	};
+
+	friend std::ostream & operator<<(std::ostream & os, const Face::FluidType & obj);
 	//enum class EmagType {
 	//	DEFAULT
 	//};
