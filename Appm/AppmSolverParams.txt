@@ -1,7 +1,7 @@
-maxIterations: 0
+maxIterations: 200
 maxTime: 25
 isFluidEnabled: 1
-isMaxwellEnabled: 1
+isMaxwellEnabled: 0
 timestepSize: 1
 lambdaSquare: 1e-2
 massFluxScheme: ImEx

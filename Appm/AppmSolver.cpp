@@ -484,7 +484,7 @@ void AppmSolver::run()
 					faceFlux3d(4) = flux(2);
 					
 					// store data
-					faceFluxes.col(fidx) = faceFlux3d; 
+					faceFluxes.col(fidx).segment(5 * fluidIdx, 5) = faceFlux3d;
 					if (fidx == faceIdxRef) {
 						std::cout << "face flux 3d: " << faceFlux3d.transpose() << std::endl;
 					}
@@ -492,20 +492,26 @@ void AppmSolver::run()
 					// multiply flux by face area
 					faceFlux3d *= faceArea;
 
-					if (face->getFluidType() == Face::FluidType::INTERIOR) {
+					const Face::FluidType faceType = getFaceTypeOfFluid(face, fluidIdx);
+					switch (faceType) {
+					case Face::FluidType::INTERIOR: {
 						assert(faceCells.size() == 2);
 						const int idx0 = faceCells[0]->getIndex();
 						const int idx1 = faceCells[1]->getIndex();
 						fluidFluxes.col(idx0).segment(5 * fluidIdx, 5) += orientation * faceFlux3d;
 						fluidFluxes.col(idx1).segment(5 * fluidIdx, 5) -= orientation * faceFlux3d;
+						break;
 					}
-					if (face->getFluidType() == Face::FluidType::OPENING) {
+
+					case Face::FluidType::OPENING: {
 						assert(faceCells.size() == 1);
 						const Cell * cell = faceCells[0];
 						assert(cell->getFluidType() == Cell::FluidType::FLUID);
 						fluidFluxes.col(cell->getIndex()).segment(5 * fluidIdx, 5) += orientation * faceFlux3d;
+						break;
 					}
-					if (face->getFluidType() == Face::FluidType::WALL) {
+
+					case Face::FluidType::WALL: {
 						assert(faceCells.size() == 1 || faceCells.size() == 2);
 						const Cell * cell = faceCells[0];
 						if (cell->getFluidType() == Cell::FluidType::FLUID) {
@@ -515,6 +521,14 @@ void AppmSolver::run()
 						else {
 							assert(false);
 						}
+						break;
+					}
+
+					default: {
+						std::cout << "Face type not implemented" << std::endl;
+						assert(false);
+						exit(-1);
+					}
 					}
 				}
 			}
@@ -531,6 +545,8 @@ void AppmSolver::run()
 				for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
 					Eigen::VectorXd srcLocal(5);
 					srcLocal.setZero();
+
+					srcLocal = testcase_001_FluidSourceTerm(time, cell, fluidIdx);
 
 					//// Define geometric position of source region: ball of radius r around reference position
 					//const Eigen::Vector3d cc = cell->getCenter();
@@ -1363,7 +1379,8 @@ const Eigen::Vector3d AppmSolver::getRusanovFluxImEx(const int faceIdx, const in
 {
 	const Face * face = dualMesh.getFace(faceIdx);
 	const Eigen::Vector3d faceNormal = face->getNormal();
-	const Face::FluidType faceFluidType = face->getFluidType();
+	//const Face::FluidType faceFluidType = face->getFluidType();
+	const Face::FluidType faceFluidType = getFaceTypeOfFluid(face, fluidIdx);
 
 	Eigen::Vector3d qL, qR;
 	const std::pair<int, int> adjacientCellIdx = getAdjacientCellStates(faceIdx, fluidIdx, qL, qR);
@@ -1434,7 +1451,8 @@ const std::pair<int,int> AppmSolver::getAdjacientCellStates(const int faceIdx, c
 	int idxL = -1;
 	int idxR = -1;
 
-	const Face::FluidType faceFluidType = face->getFluidType();
+	//const Face::FluidType faceFluidType = face->getFluidType();
+	const Face::FluidType faceFluidType = getFaceTypeOfFluid(face, fluidIdx);
 	switch (faceFluidType) {
 	case Face::FluidType::INTERIOR:
 		assert(faceCells.size() == 2);
@@ -1489,9 +1507,14 @@ const std::pair<int,int> AppmSolver::getAdjacientCellStates(const int faceIdx, c
 		}
 		break;
 
+	case Face::FluidType::TERMINAL:
+		std::cout << "FaceFluidType TERMINAL should not be used directly; call getFaceTypeOfFluid(face,fluidIdx) instead" << std::endl;
+		assert(false); // Not yet implemented
+		break;
+
 	default:
-		std::cout << "Face Fluid Type not implemented" << std::endl;
-		exit(-1);
+		std::cout << "Face Fluid Type not implemented: " << faceFluidType << std::endl;
+		assert(false);
 	}
 
 	return std::pair<int, int>(idxL, idxR);
@@ -2813,6 +2836,22 @@ const Face::FluidType AppmSolver::getFaceTypeOfFluid(const Face * face, const in
 		faceTypeOfFluid = (particleParams[fluidIdx].electricCharge >= 0) ? Face::FluidType::WALL : Face::FluidType::OPENING;
 	}
 	return faceTypeOfFluid;
+}
+
+/**
+* Testcase: apply energy source if cell center is inside a given radius and time smaller than a threshold.
+*/
+const Eigen::VectorXd AppmSolver::testcase_001_FluidSourceTerm(const double time, const Cell * cell, const int fluidIdx) const
+{
+	Eigen::VectorXd srcVector(5);
+	srcVector.setZero();
+	const double radius = 0.2;
+	const double t0 = 1;
+
+	if (cell->getCenter().norm() < radius && time < t0) {
+		srcVector(4) = 10;
+	}
+	return srcVector;
 }
 
 std::ostream & operator<<(std::ostream & os, const AppmSolver::MassFluxScheme & obj) {

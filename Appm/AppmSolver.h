@@ -224,5 +224,8 @@ private:
 
 	Eigen::MatrixXi faceTypeFluids;
 	const Face::FluidType getFaceTypeOfFluid(const Face * face, const int fluidIdx) const;
+
+
+	const Eigen::VectorXd testcase_001_FluidSourceTerm(const double time, const Cell * cell, const int fluidIdx) const;
 };
 
