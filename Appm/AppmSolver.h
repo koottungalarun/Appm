@@ -1,6 +1,8 @@
 #pragma once
 
 #define _USE_MATH_DEFINES
+#define EIGEN_USE_MKL_ALL
+
 #include <cmath>
 #include <iostream>
 #include <iomanip>
@@ -21,6 +23,7 @@
 
 #include <Eigen/SparseLU>
 #include <Eigen/IterativeLinearSolvers> 	
+#include <Eigen/PardisoSupport>
 
 #include <chrono>
 
@@ -159,10 +162,6 @@ private:
 
 	void get_Msigma_consistent(const double dt, Eigen::SparseMatrix<double> & Msigma, Eigen::VectorXd & jaux);
 
-	const double terminalVoltageBC_sideA(const double time, const double t0, const double t1, const double tscale) const;
-	const double terminalVoltageBC_sideB(const double time) const;
-	const double currentDensityBC(const double time) const;
-
 	const int getFluidStateLength() const;
 	const double getNextFluidTimestepSize() const;
 
@@ -225,7 +224,13 @@ private:
 	Eigen::MatrixXi faceTypeFluids;
 	const Face::FluidType getFaceTypeOfFluid(const Face * face, const int fluidIdx) const;
 
+	const Eigen::VectorXd solveMaxwell_PardisoLU(Eigen::SparseMatrix<double> & Mf, Eigen::VectorXd & rhs);
+	const Eigen::VectorXd solveMaxwell_sparseLU(Eigen::SparseMatrix<double> & Mf, Eigen::VectorXd & rhs);
+	const Eigen::VectorXd solveMaxwell_BiCGStab(Eigen::SparseMatrix<double> & Mf, Eigen::VectorXd & rhs);
+	const Eigen::VectorXd solveMaxwell_LSCG(Eigen::SparseMatrix<double> & Mf, Eigen::VectorXd & rhs);
+
 
 	const Eigen::VectorXd testcase_001_FluidSourceTerm(const double time, const Cell * cell, const int fluidIdx) const;
+	const Eigen::VectorXd setVoltageBoundaryConditions(const int nDirichlet, const double time) const;
 };
 

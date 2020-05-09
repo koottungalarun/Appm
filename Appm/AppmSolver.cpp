@@ -49,6 +49,7 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	break;
 
 	default:
+		std::cout << "InitType unknown: " << initType << std::endl;
 		exit(-1);
 	}
 
@@ -82,6 +83,7 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 
 	// Check implementation of Ohm's law in implicit-consistent formulation
 	// TODO: to be removed after testing
+	
 	//Eigen::SparseMatrix<double> Msigma;
 	//double dt = timestepSize;
 
@@ -207,11 +209,22 @@ void AppmSolver::run()
 
 			Eigen::SparseMatrix<double> Msigma;
 			get_Msigma_consistent(dt , Msigma, J_h_aux);
-			//assert(Msigma.nonZeros() == 0);
+			//{
+			//	const std::string filename = (std::stringstream() << "Msigma-" << iteration << ".dat").str();
+			//	std::cout << "Msigma nnz: " << Msigma.nonZeros() << std::endl;
+			//	std::cout << "Msigma size: " << Msigma.rows() << " x " << Msigma.cols() << std::endl;
+			//	Eigen::sparseMatrixToFile(Msigma, filename);
+			//}
 
 			Eigen::SparseMatrix<double> Msigma_inner;
 			Msigma_inner = Msigma.topLeftCorner(nEdges, nEdges);
-			
+			//{
+			//	const std::string filename = (std::stringstream() << "MsigmaInner-" << iteration << ".dat").str();
+			//	std::cout << "Msigma_inner nnz: " << Msigma_inner.nonZeros() << std::endl;
+			//	std::cout << "Msigma_inner size: " << Msigma_inner.rows() << " x " << Msigma_inner.cols() << std::endl;
+			//	Eigen::sparseMatrixToFile(Msigma_inner, filename);
+			//}
+
 			// System matrix on left hand side, i.e., M*x = rhs, to be solved for x
 			Eigen::SparseMatrix<double> M;
 			assert(M1.size() > 0);
@@ -239,34 +252,8 @@ void AppmSolver::run()
 
 			// Dirichlet conditions
 			Eigen::SparseMatrix<double> Md = M.rightCols(nDirichlet);
-			Eigen::VectorXd xd = Eigen::VectorXd::Zero(nDirichlet);
-			
-			//switch (maxwellSolverBCType) {
-			//	case MaxwellSolverBCType::VOLTAGE_BC:
-			//	{
-					assert(nDirichlet % 2 == 0);
-					const double t0 = 1;
-					const double t1 = 11;
-					const double tscale = 0.2;
-					xd.topRows(nDirichlet / 2) = /*terminalVoltageBC_sideA(time, t0, t1, tscale) */ 1 * Eigen::VectorXd::Ones(nDirichlet / 2);
-					xd.bottomRows(nDirichlet / 2) = terminalVoltageBC_sideB(time) * Eigen::VectorXd::Ones(nDirichlet / 2);
-					//break;
-			//	}
 
-			//	case MaxwellSolverBCType::CURRENT_BC:
-			//	{
-			//		xd.bottomRows(nDirichlet) = terminalVoltageBC_sideB(time) * Eigen::VectorXd::Ones(nDirichlet);
-			//		break;
-			//	}
-
-			//	default:
-			//	{
-			//		std::cout << "Maxwell Solver Boundary Type not implemented" << std::endl;
-			//		assert(false);
-			//	}
-			//}
-
-
+			Eigen::VectorXd xd = setVoltageBoundaryConditions(nDirichlet, time);
 			Eigen::VectorXd src = Eigen::VectorXd::Zero(maxwellState.size());
 
 			// Vector on right hand side
@@ -356,31 +343,26 @@ void AppmSolver::run()
 			Eigen::SparseMatrix<double> Mf = M.topLeftCorner(nFree, nFree);
 			Mf.makeCompressed();
 
+			//Eigen::sparseMatrixToFile(Mf, (std::stringstream() << "Mf-" << iteration << ".dat").str());
+
 			
 
 			// Solve system
 			std::cout << "Setup Maxwell solver" << std::endl;
-			//Eigen::ConjugateGradient<Eigen::SparseMatrix<double>> maxwellSolver; // NOTE: the matrix Msigma is not necessarily symmetric, and Mf not spd!
-			Eigen::SparseLU<Eigen::SparseMatrix<double>> maxwellSolver;
 
-			auto timer_start = std::chrono::high_resolution_clock::now();
-			maxwellSolver.compute(Mf);			
-			auto timer_afterCompute = std::chrono::high_resolution_clock::now();
-			auto delta_afterCompute = std::chrono::duration<double>(timer_afterCompute - timer_start);
-			std::cout << "Solver time for compute step: " << delta_afterCompute.count() << std::endl;
-			if (maxwellSolver.info() != Eigen::Success) {
-				std::cout << "Maxwell solver setup failed" << std::endl;
-			}
-			auto timer_startSolve = std::chrono::high_resolution_clock::now();
-			xf = maxwellSolver.solve(rhsFree);
-			auto timer_endSolve = std::chrono::high_resolution_clock::now();
-			std::cout << "Maxwell solver finished" << std::endl;
-			auto delta_solve = std::chrono::duration<double>(timer_endSolve - timer_startSolve);
-			std::cout << "Solver time for solve step: " << delta_solve.count() << std::endl;
-			if (maxwellSolver.info() != Eigen::Success) {
-				std::cout << "Maxwell solver solving failed" << std::endl;
-			}
-			assert(maxwellSolver.info() == Eigen::Success);
+			// Note: the matrix Mf is not symmetric, neither positive definite!
+			//xf = solveMaxwell_sparseLU(Mf, rhsFree);
+			//Eigen::VectorXd delta1 = xf;
+			//Eigen::VectorXd delta2 = xf;
+			//xf = solveMaxwell_BiCGStab(Mf, rhsFree);
+			//delta1 -= xf;
+			//std::cout << "delta max: " << delta1.cwiseAbs().maxCoeff() << std::endl;
+			xf = solveMaxwell_PardisoLU(Mf, rhsFree);
+			//delta2 -= xf;
+			//std::cout << "delta max: " << delta2.cwiseAbs().maxCoeff() << std::endl;
+
+			//xf = solveMaxwell_LSCG(Mf, rhsFree);
+
 
 			//std::cout << "#iterations:     " << maxwellSolver.iterations() << std::endl;
 			//std::cout << "estimated error: " << maxwellSolver.error() << std::endl;
@@ -1241,26 +1223,6 @@ void AppmSolver::get_Msigma_consistent(const double dt, Eigen::SparseMatrix<doub
 	//assert(Msigma.nonZeros() > 0);
 }
 
-const double AppmSolver::terminalVoltageBC_sideA(const double time, const double t0, const double t1, const double tscale) const
-{
-	double f1 = 0.5 * (1 + tanh((time - t0) / tscale)) ; 
-	double f2 = 0.5 * (1 + tanh(- (time - t1) / tscale));
-	return f1 * f2;
-}
-
-const double AppmSolver::terminalVoltageBC_sideB(const double time) const
-{
-	return 0.0;
-}
-
-const double AppmSolver::currentDensityBC(const double time) const
-{
-	const double t0 = 2;
-	const double t1 = 5;
-	const double tscale = 0.5;
-	const double currentValue = std::exp(-pow((time - t0) / tscale, 2)) - std::exp(-pow((time - t1) / tscale, 2));
-	return currentValue;
-}
 
 /** 
 * Get timestep size for next iteration.
@@ -2838,6 +2800,150 @@ const Face::FluidType AppmSolver::getFaceTypeOfFluid(const Face * face, const in
 	return faceTypeOfFluid;
 }
 
+const Eigen::VectorXd AppmSolver::solveMaxwell_PardisoLU(Eigen::SparseMatrix<double>& Mf, Eigen::VectorXd & rhs)
+{
+	std::cout << "Setup solver for Maxwell system: PardisoLU" << std::endl;
+	Eigen::VectorXd xf(rhs.size());
+	Eigen::PardisoLU<Eigen::SparseMatrix<double>> maxwellSolver;
+
+	auto timer_start = std::chrono::high_resolution_clock::now();
+	maxwellSolver.compute(Mf);
+	auto timer_afterCompute = std::chrono::high_resolution_clock::now();
+
+	auto delta_afterCompute = std::chrono::duration<double>(timer_afterCompute - timer_start);
+	std::cout << "Solver time for compute step: " << delta_afterCompute.count() << std::endl;
+
+	if (maxwellSolver.info() != Eigen::Success) {
+		std::cout << "Maxwell solver setup failed" << std::endl;
+	}
+
+	auto timer_startSolve = std::chrono::high_resolution_clock::now();
+	xf = maxwellSolver.solve(rhs);
+	auto timer_endSolve = std::chrono::high_resolution_clock::now();
+
+	std::cout << "Maxwell solver finished" << std::endl;
+
+	auto delta_solve = std::chrono::duration<double>(timer_endSolve - timer_startSolve);
+	std::cout << "Solver time for solve step: " << delta_solve.count() << std::endl;
+
+	if (maxwellSolver.info() != Eigen::Success) {
+		std::cout << "Maxwell solver solving failed" << std::endl;
+	}
+
+	assert(maxwellSolver.info() == Eigen::Success);
+	return xf;
+}
+
+const Eigen::VectorXd AppmSolver::solveMaxwell_sparseLU(Eigen::SparseMatrix<double>& Mf, Eigen::VectorXd & rhs)
+{
+	std::cout << "Setup solver for Maxwell system: SparseLU" << std::endl;
+	Eigen::VectorXd xf(rhs.size());
+	Eigen::SparseLU<Eigen::SparseMatrix<double>> maxwellSolver; 
+
+	auto timer_start = std::chrono::high_resolution_clock::now();
+	maxwellSolver.compute(Mf);
+	auto timer_afterCompute = std::chrono::high_resolution_clock::now();
+
+	auto delta_afterCompute = std::chrono::duration<double>(timer_afterCompute - timer_start);
+	std::cout << "Solver time for compute step: " << delta_afterCompute.count() << std::endl;
+	
+	if (maxwellSolver.info() != Eigen::Success) {
+		std::cout << "Maxwell solver setup failed" << std::endl;
+	}
+
+	auto timer_startSolve = std::chrono::high_resolution_clock::now();
+	xf = maxwellSolver.solve(rhs);
+	auto timer_endSolve = std::chrono::high_resolution_clock::now();
+	
+	std::cout << "Maxwell solver finished" << std::endl;
+	
+	auto delta_solve = std::chrono::duration<double>(timer_endSolve - timer_startSolve);
+	std::cout << "Solver time for solve step: " << delta_solve.count() << std::endl;
+	
+	if (maxwellSolver.info() != Eigen::Success) {
+		std::cout << "Maxwell solver solving failed" << std::endl;
+	}
+	
+	assert(maxwellSolver.info() == Eigen::Success);
+	return xf;
+}
+
+const Eigen::VectorXd AppmSolver::solveMaxwell_BiCGStab(Eigen::SparseMatrix<double>& Mf, Eigen::VectorXd & rhs)
+{
+	std::cout << "Setup solver for Maxwell system: BiCGStab" << std::endl;
+	Eigen::VectorXd xf(rhs.size());
+	Eigen::BiCGSTAB<Eigen::SparseMatrix<double>, Eigen::IncompleteLUT<double>> maxwellSolver;
+	maxwellSolver.preconditioner().setDroptol(0.1);
+	maxwellSolver.preconditioner().setFillfactor(0.1);
+
+	auto timer_start = std::chrono::high_resolution_clock::now();
+	maxwellSolver.compute(Mf);
+	auto timer_afterCompute = std::chrono::high_resolution_clock::now();
+
+	auto delta_afterCompute = std::chrono::duration<double>(timer_afterCompute - timer_start);
+	std::cout << "Solver time for compute step: " << delta_afterCompute.count() << std::endl;
+
+	if (maxwellSolver.info() != Eigen::Success) {
+		std::cout << "Maxwell solver setup failed" << std::endl;
+	}
+
+	auto timer_startSolve = std::chrono::high_resolution_clock::now();
+	xf = maxwellSolver.solve(rhs);
+	auto timer_endSolve = std::chrono::high_resolution_clock::now();
+
+	std::cout << "Maxwell solver finished" << std::endl;
+
+	auto delta_solve = std::chrono::duration<double>(timer_endSolve - timer_startSolve);
+	std::cout << "Solver time for solve step: " << delta_solve.count() << std::endl;
+
+	if (maxwellSolver.info() != Eigen::Success) {
+		std::cout << "Maxwell solver solving failed" << std::endl;
+	}
+
+	std::cout << "# Iterations: " << maxwellSolver.iterations() << std::endl;
+	std::cout << "error:        " << maxwellSolver.error() << std::endl;
+	
+	assert(maxwellSolver.info() == Eigen::Success);
+	return xf;
+}
+
+const Eigen::VectorXd AppmSolver::solveMaxwell_LSCG(Eigen::SparseMatrix<double>& Mf, Eigen::VectorXd & rhs)
+{
+	std::cout << "Setup solver for Maxwell system: LeastSquaresCG" << std::endl;
+	Eigen::VectorXd xf(rhs.size());
+	Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> maxwellSolver;
+	maxwellSolver.setTolerance(Eigen::NumTraits<double>::epsilon() * 1024);
+
+	auto timer_start = std::chrono::high_resolution_clock::now();
+	maxwellSolver.compute(Mf);
+	auto timer_afterCompute = std::chrono::high_resolution_clock::now();
+
+	auto delta_afterCompute = std::chrono::duration<double>(timer_afterCompute - timer_start);
+	std::cout << "Solver time for compute step: " << delta_afterCompute.count() << std::endl;
+
+	if (maxwellSolver.info() != Eigen::Success) {
+		std::cout << "Maxwell solver setup failed" << std::endl;
+	}
+
+	auto timer_startSolve = std::chrono::high_resolution_clock::now();
+	xf = maxwellSolver.solve(rhs);
+	auto timer_endSolve = std::chrono::high_resolution_clock::now();
+
+	std::cout << "Maxwell solver finished" << std::endl;
+
+	auto delta_solve = std::chrono::duration<double>(timer_endSolve - timer_startSolve);
+	std::cout << "Solver time for solve step: " << delta_solve.count() << std::endl;
+
+	if (maxwellSolver.info() != Eigen::Success) {
+		std::cout << "Maxwell solver solving failed" << std::endl;
+	}
+
+	std::cout << "# Iterations: " << maxwellSolver.iterations() << std::endl;
+
+	assert(maxwellSolver.info() == Eigen::Success);
+	return xf;
+}
+
 /**
 * Testcase: apply energy source if cell center is inside a given radius and time smaller than a threshold.
 */
@@ -2852,6 +2958,21 @@ const Eigen::VectorXd AppmSolver::testcase_001_FluidSourceTerm(const double time
 		srcVector(4) = 10;
 	}
 	return srcVector;
+}
+
+const Eigen::VectorXd AppmSolver::setVoltageBoundaryConditions(const int nDirichlet, const double time) const
+{
+	Eigen::VectorXd xd = Eigen::VectorXd::Zero(nDirichlet);
+
+	assert(nDirichlet % 2 == 0);
+
+	// Set voltage values at terminal A (stressed electrode)
+	xd.topRows(nDirichlet / 2).array() = 1;
+
+	// Set voltage condition to zero at terminal B (grounded electrode)
+	xd.bottomRows(nDirichlet / 2).array() = 0;
+
+	return xd;
 }
 
 std::ostream & operator<<(std::ostream & os, const AppmSolver::MassFluxScheme & obj) {

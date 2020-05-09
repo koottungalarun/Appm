@@ -26,6 +26,9 @@ namespace Eigen {
 				file << it.row() << "," << it.col() << "," << it.value() << std::endl;
 			}
 		}
+		if (M.coeff(M.rows() - 1, M.cols() - 1) != 0) {
+			file << M.rows() - 1 << "," << M.cols() - 1 << "," << 0 << std::endl;
+		}
 	}
 
 
