@@ -84,6 +84,13 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	// Check implementation of Ohm's law in implicit-consistent formulation
 	// TODO: to be removed after testing
 	
+	//J_h.setZero();
+	//Eigen::SparseMatrix<double> Msigma;
+	//Msigma = check_Msigma_spd();
+	//set_Efield_uniform(Eigen::Vector3d::UnitZ());
+	//J_h = Msigma * E_h;
+	//J_h = Msigma * E_h + J_h_aux;
+
 	//Eigen::SparseMatrix<double> Msigma;
 	//double dt = timestepSize;
 
@@ -92,10 +99,14 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 
 	//get_Msigma_consistent(dt, Msigma, J_h_aux);
 
-	//set_Efield_uniform(Eigen::Vector3d::UnitZ());
-	//J_h = Msigma * E_h + J_h_aux;
 
 
+	// write initial data to file (iteration = 0, time = 0)
+	const int iteration = 0;
+	const double time = 0;
+	writeOutput(iteration, time);
+
+	
 }
 
 
@@ -147,9 +158,7 @@ void AppmSolver::run()
 	//faceFluxes = Eigen::MatrixXd::Zero(5*nFluids, nFaces);
 	//faceFluxesImExRusanov = Eigen::MatrixXd::Zero(nFaces, nFluids);
 	
-	// write initial data to file (iteration = 0, time = 0)
-	writeOutput(iteration, time);
-
+	
 	const std::string stopFilename = "stop.txt";
 	std::ofstream(stopFilename) << 0 << std::endl;
 
@@ -1865,6 +1874,7 @@ void AppmSolver::writeMaxwellStates(H5Writer & writer)
 
 	assert(J_h.size() > 0);
 	assert(J_h.size() == dualMesh.getNumberOfFaces());
+	assert(J_h.allFinite());
 	//assert(J_h.size() == dualMesh.getNumberOfFaces() - 1);
 	Eigen::Matrix3Xd currentDensity(3, dualMesh.getNumberOfFaces());
 	currentDensity.setZero();
@@ -1878,6 +1888,7 @@ void AppmSolver::writeMaxwellStates(H5Writer & writer)
 
 
 	assert(dualMesh.getNumberOfFaces() == J_h_aux.size());
+	assert(J_h_aux.allFinite());
 	Eigen::Matrix3Xd J_h_aux_vector(3, J_h_aux.size());
 	for (int i = 0; i < J_h_aux.size(); i++) {
 		const Face * face = dualMesh.getFace(i);
@@ -2942,6 +2953,123 @@ const Eigen::VectorXd AppmSolver::solveMaxwell_LSCG(Eigen::SparseMatrix<double>&
 
 	assert(maxwellSolver.info() == Eigen::Success);
 	return xf;
+}
+
+Eigen::SparseMatrix<double> AppmSolver::check_Msigma_spd()
+{
+	const int nEdges = primalMesh.getNumberOfEdges();
+
+	// Check if primal edges and dual face normals are oriented in same direction
+	Eigen::VectorXd orientation(nEdges);
+	orientation.setZero();
+	for (int i = 0; i < nEdges; i++) {
+		const Edge * edge = primalMesh.getEdge(i);
+		const Eigen::Vector3d Lhat = edge->getDirection().normalized();
+
+		const Face * face = dualMesh.getFace(i);
+		const Eigen::Vector3d nhat = face->getNormal();
+
+		orientation(i) = Lhat.dot(nhat);
+	}
+	const double tol = std::numeric_limits<double>::epsilon();
+	assert(orientation.minCoeff() >= (1 - tol) && orientation.maxCoeff() <= (1 + tol));
+
+	// Setup of matrix Meps such that: J_h = Meps * E_h + J_aux
+	const int nDualFaces = dualMesh.getNumberOfFaces();
+	typedef Eigen::Triplet<double> T;
+	std::vector<T> triplets;
+	std::vector<T> triplets_rjNi;
+	for (int i = 0; i < nDualFaces; i++) {
+		const Face * dualFace = dualMesh.getFace(i);
+		const Eigen::Vector3d nhat_i = dualFace->getNormal();
+		const double Ai = dualFace->getArea();
+
+		if (i >= nEdges) { continue; }
+		auto cellList = dualFace->getCellList();
+		for (auto cell : cellList) {
+			auto cellFaces = cell->getFaceList();
+			const int idxC = cell->getIndex();
+			//auto cc = cell->getCenter();
+			auto cc = primalMesh.getVertex(idxC)->getPosition(); // use vertex position instead of dual cell center (consistent!)
+			const double Vk = cell->getVolume();
+
+			for (auto face : cellFaces) {
+				const int j = face->getIndex();
+				
+				if (j >= nEdges) { continue; }
+				
+				const Edge * edge = primalMesh.getEdge(j);
+
+				const Eigen::Vector3d fc = edge->getHalfwayPosition(); // use edge halfway position instead of face center (consistent!)
+				const Eigen::Vector3d rj = fc - cc;
+
+				const double Aj = face->getArea();
+				const double Lj = edge->getLength();
+				const int s_kj = cell->getOrientation(face);
+				const double rj_dot_nhat_i = rj.dot(nhat_i);
+
+				double ni_dot_nj = rj.normalized().dot(nhat_i);
+				if (i == j) {
+					assert(abs(abs(ni_dot_nj) - 1) < 1e-14);
+					ni_dot_nj = (ni_dot_nj > 0) ? 1 : -1; // analytical expression to simplify
+				}
+
+				// skip elements that form a small angle; indicate numerical artifacts.
+				if (abs(ni_dot_nj) > 1e-10) {
+					triplets_rjNi.push_back(T(i, j, ni_dot_nj));
+
+					for (int fidx = 0; fidx < getNFluids(); fidx++) {
+						double value = 0;
+						value = rj_dot_nhat_i * Ai / Vk * Aj / Lj * s_kj; // numerically correct value
+						value = 0.5 * s_kj * ni_dot_nj * (Ai * Aj) / Vk;  // using analytical expression to simplify
+						const int q = particleParams[fidx].electricCharge;
+						const double massRatio = particleParams[fidx].mass;
+						double nk = fluidStates(5 * fidx + 0, idxC);
+						if (!std::isfinite(nk)) {
+							nk = 0;
+						}
+
+						
+						if (q != 0) {
+							value *= 0.5 * q; // factor because of Rusanov flux
+							value *= 1. / massRatio;
+							value *= nk;
+							triplets.push_back(T(i, j, value));
+						}
+					}
+				} // end if (abs(ni_dot_nj))
+			}
+		}
+	}
+	Eigen::SparseMatrix<double> M_rjNi(nEdges, nEdges);
+	M_rjNi.setFromTriplets(triplets_rjNi.begin(), triplets_rjNi.end());
+	M_rjNi.makeCompressed();
+	Eigen::sparseMatrixToFile(M_rjNi, "M_rjni.dat");
+
+
+	Eigen::SparseMatrix<double> Msigma(nDualFaces, nEdges);
+	Msigma.setFromTriplets(triplets.begin(), triplets.end());
+	Msigma.makeCompressed();
+
+	const int nInnerEdges = primalMesh.getMeshInfo().nEdgesInner;
+
+	Eigen::SparseMatrix<double> Msigma_inner = Msigma.topLeftCorner(nInnerEdges, nInnerEdges);
+	Eigen::sparseMatrixToFile(Msigma, "Msigma.dat");
+	Eigen::sparseMatrixToFile(Msigma_inner, "Msigma_inner.dat");
+
+	if (Eigen::isSymmetric(Msigma_inner, true)) {
+		std::cout << "Matrix is symmetric" << std::endl;
+	}
+	if (Eigen::isPositiveDefinite(Msigma_inner, true)) {
+		std::cout << "Matrix is positive definite" << std::endl;
+	}
+
+	//const double showInfo = true;
+	//assert(Eigen::isSymmetricPositiveDefinite(Meps_inner, showInfo));
+
+	//Eigen::sparseMatrixToFile(Q, "Q.dat");
+
+	return Msigma;
 }
 
 /**

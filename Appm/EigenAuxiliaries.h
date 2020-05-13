@@ -2,7 +2,9 @@
 
 #include <vector>
 #include <Eigen/Sparse>
+#include <Eigen/SparseCholesky>
 #include <iostream>
+#include <iomanip>
 #include <fstream>
 
 namespace Eigen {
@@ -23,12 +25,51 @@ namespace Eigen {
 		std::ofstream file(filename);
 		for (int i = 0; i < M.outerSize(); i++) {
 			for (typename Eigen::SparseMatrix<T>::InnerIterator it(M, i); it; ++it) {
-				file << it.row() << "," << it.col() << "," << it.value() << std::endl;
+				file << it.row() << "," << it.col() << "," << std::scientific << std::setprecision(20) << it.value() << std::endl;
 			}
 		}
 		if (M.coeff(M.rows() - 1, M.cols() - 1) != 0) {
 			file << M.rows() - 1 << "," << M.cols() - 1 << "," << 0 << std::endl;
 		}
+	}
+
+	/** 
+	* @return if the sparse matrix is symmetric.
+	*/
+	template <typename T>
+	bool isSymmetric(const SparseMatrix<T> & M, const bool showInfo = false) {
+		if (!M.isApprox(M.transpose())) {
+			if (showInfo) {
+				std::cout << "Matrix is not symmetric" << std::endl;
+			}
+			return false;
+		}
+		return true;
+	}
+
+	/**
+	* @return if the sparse matrix is positive definite.
+	*/
+	template <typename T>
+	bool isPositiveDefinite(const SparseMatrix<T> & M, const bool showInfo = false) {
+		Eigen::SimplicialLLT<Eigen::SparseMatrix<T>> llt(M);
+		if (llt.info() != Eigen::Success) {
+			if (showInfo) {
+				std::cout << "Matrix is not positive definite (according to Cholesky factorization)" << std::endl;
+			}
+			return false;
+		}
+		return true;
+	}
+
+	/**
+	* @return if the sparse matrix is symmetric positive definite. 
+	* 
+	* See also: https://stackoverflow.com/a/35230714
+	*/
+	template <typename T>
+	bool isSymmetricPositiveDefinite(const SparseMatrix<T> & M, const bool showInfo = false) {
+		return isSymmetric(M, showInfo) && isPositiveDefinite(M, showInfo);
 	}
 
 

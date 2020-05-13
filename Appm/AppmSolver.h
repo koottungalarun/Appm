@@ -229,6 +229,7 @@ private:
 	const Eigen::VectorXd solveMaxwell_BiCGStab(Eigen::SparseMatrix<double> & Mf, Eigen::VectorXd & rhs);
 	const Eigen::VectorXd solveMaxwell_LSCG(Eigen::SparseMatrix<double> & Mf, Eigen::VectorXd & rhs);
 
+	Eigen::SparseMatrix<double> check_Msigma_spd();
 
 	const Eigen::VectorXd testcase_001_FluidSourceTerm(const double time, const Cell * cell, const int fluidIdx) const;
 	const Eigen::VectorXd setVoltageBoundaryConditions(const int nDirichlet, const double time) const;
