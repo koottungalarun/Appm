@@ -30,18 +30,18 @@ const double FluidSolver::updateFluidState()
 		const Eigen::Vector3d faceNormal = face->getNormal();
 		const double faceArea = face->getArea();
 
-		const Face::FluidType faceFluidType =  face->getFluidType();
+		const Face::Type faceFluidType =  face->getType();
 
 		switch (faceFluidType) {
-		case Face::FluidType::INTERIOR:
+		case Face::Type::INTERIOR:
 			updateFaceFluxInterior(i);
 			break;
 			
-		case Face::FluidType::OPENING:
+		case Face::Type::OPENING:
 			updateFaceFluxOpening(i);
 			break;
 
-		case Face::FluidType::WALL:
+		case Face::Type::WALL:
 			updateFaceFluxWall(i);
 			break;
 
@@ -68,7 +68,7 @@ const double FluidSolver::updateFluidState()
 void FluidSolver::updateFaceFluxInterior(const int faceIdx)
 {
 	const Face * face = mesh->getFace(faceIdx);
-	assert(face->getFluidType() == Face::FluidType::INTERIOR);
+	assert(face->getType() == Face::Type::INTERIOR);
 
 	const Eigen::Vector3d faceNormal = face->getNormal();
 	const double faceArea = face->getArea();
@@ -118,7 +118,7 @@ void FluidSolver::updateFaceFluxInterior(const int faceIdx)
 void FluidSolver::updateFaceFluxOpening(const int faceIdx)
 {
 	const Face * face = mesh->getFace(faceIdx);
-	assert(face->getFluidType() == Face::FluidType::OPENING);
+	assert(face->getType() == Face::Type::OPENING);
 
 	const Eigen::Vector3d faceNormal = face->getNormal();
 	const double faceArea = face->getArea();
@@ -158,7 +158,7 @@ void FluidSolver::updateFaceFluxOpening(const int faceIdx)
 void FluidSolver::updateFaceFluxWall(const int faceIdx)
 {
 	const Face * face = mesh->getFace(faceIdx);
-	assert(face->getFluidType() == Face::FluidType::WALL);
+	assert(face->getType() == Face::Type::WALL);
 
 	const Eigen::Vector3d faceNormal = face->getNormal();
 	const double faceArea = face->getArea();

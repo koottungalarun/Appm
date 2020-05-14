@@ -428,13 +428,13 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal, const double terminalRad
 	Eigen::VectorXi faceTypes(nFaces);
 	faceTypes.setZero();
 	for (int i = 0; i < nFaces; i++) {
-		faceTypes(i) = static_cast<int>(getFace(i)->getFluidType());
+		faceTypes(i) = static_cast<int>(getFace(i)->getType());
 	}
-	const int nDefaultFaces = (faceTypes.array() == static_cast<int>(Face::FluidType::DEFAULT)).count();
-	const int nInteriorFaces = (faceTypes.array() == static_cast<int>(Face::FluidType::INTERIOR)).count();
-	const int nOpeningFaces = (faceTypes.array() == static_cast<int>(Face::FluidType::OPENING)).count();
-	const int nTerminalFaces = (faceTypes.array() == static_cast<int>(Face::FluidType::TERMINAL)).count(); 
-	const int nWallFaces = (faceTypes.array() == static_cast<int>(Face::FluidType::WALL)).count();
+	const int nDefaultFaces = (faceTypes.array() == static_cast<int>(Face::Type::DEFAULT)).count();
+	const int nInteriorFaces = (faceTypes.array() == static_cast<int>(Face::Type::INTERIOR)).count();
+	const int nOpeningFaces = (faceTypes.array() == static_cast<int>(Face::Type::OPENING)).count();
+	const int nTerminalFaces = (faceTypes.array() == static_cast<int>(Face::Type::TERMINAL)).count(); 
+	const int nWallFaces = (faceTypes.array() == static_cast<int>(Face::Type::WALL)).count();
 	std::cout << "Number of face types: " << std::endl;
 	std::cout << "  Default:  " << nDefaultFaces << std::endl;
 	std::cout << "  Interior: " << nInteriorFaces << std::endl;
@@ -594,7 +594,7 @@ void DualMesh::init_faceFluidType(const double terminalRadius)
 	const int nFaces = this->getNumberOfFaces();
 	for (int i = 0; i < nFaces; i++) {
 		Face * face = getFace(i);
-		Face::FluidType faceFluidType = Face::FluidType::DEFAULT;
+		Face::Type faceType = Face::Type::DEFAULT;
 
 		std::vector<Cell*> faceCells = face->getCellList();
 		const int nAdjacientCells = faceCells.size();
@@ -624,13 +624,19 @@ void DualMesh::init_faceFluidType(const double terminalRadius)
 
 		if (nAdjacientCells == 2) {
 			if (nSolidCells == 0 && nFluidCells == 2) {
-				faceFluidType = Face::FluidType::INTERIOR;
+				faceType = Face::Type::INTERIOR;
 			}
-			if (nSolidCells == 1 && nFluidCells == 1) {
-				faceFluidType = Face::FluidType::WALL;
-			}
-			if (nFluidCells == 1 && nElectrodeCells == 1) {
-				faceFluidType = Face::FluidType::TERMINAL;
+			if (nFluidCells == 1) {
+				if (nSolidCells == 1) {
+					faceType = Face::Type::WALL;
+				}
+				if (nElectrodeCells == 1) {
+					faceType = Face::Type::TERMINAL;
+				}
+				if (nGhostCells == 1) {
+					faceType = Face::Type::OPENING;
+				}
+				assert(faceType != Face::Type::DEFAULT);
 			}
 		}
 
@@ -639,12 +645,12 @@ void DualMesh::init_faceFluidType(const double terminalRadius)
 				const Eigen::Vector3d faceCenter = face->getCenter();
 				const Eigen::Vector2d faceCenter_2d = faceCenter.segment(0, 2);
 				const bool isTerminalFace = faceCenter_2d.norm() < terminalRadius;
-				faceFluidType = isTerminalFace ? Face::FluidType::TERMINAL : Face::FluidType::OPENING;
+				faceType = isTerminalFace ? Face::Type::TERMINAL : Face::Type::OPENING;
 			}
 			if (nSolidCells == 1 && nFluidCells == 0) {
-				faceFluidType = Face::FluidType::DEFAULT;
+				faceType = Face::Type::DEFAULT;
 			}
 		}
-		face->setFluidType(faceFluidType);
+		face->setType(faceType);
 	}
 }

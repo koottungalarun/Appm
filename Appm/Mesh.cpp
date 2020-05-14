@@ -160,7 +160,7 @@ void Mesh::writeToFile()
 		faceIdx(i) = getFace(i)->getIndex();
 		faceBoundary(i) = getFace(i)->isBoundary();
 		faceArea(i) = getFace(i)->getArea();
-		faceType(i) = static_cast<int>(getFace(i)->getFluidType());
+		faceType(i) = static_cast<int>(getFace(i)->getType());
 	}
 	h5writer.writeData(fc, "/faceCenter");
 	h5writer.writeData(faceIdx, "/faceIndex");

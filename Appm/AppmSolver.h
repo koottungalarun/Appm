@@ -231,7 +231,7 @@ private:
 	const std::string fluidXdmfOutput(const std::string & filename) const;
 
 	Eigen::MatrixXi faceTypeFluids;
-	const Face::FluidType getFaceTypeOfFluid(const Face * face, const int fluidIdx) const;
+	const Face::Type getFaceTypeOfFluid(const Face * face, const int fluidIdx) const;
 
 	const Eigen::VectorXd solveMaxwell_PardisoLU(Eigen::SparseMatrix<double> & Mf, Eigen::VectorXd & rhs);
 	const Eigen::VectorXd solveMaxwell_sparseLU(Eigen::SparseMatrix<double> & Mf, Eigen::VectorXd & rhs);

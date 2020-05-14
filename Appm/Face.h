@@ -10,11 +10,11 @@ class Face :
 {
 public:
 
-	enum class FluidType {
+	enum class Type {
 		DEFAULT, INTERIOR, OPENING, TERMINAL, WALL
 	};
 
-	friend std::ostream & operator<<(std::ostream & os, const Face::FluidType & obj);
+	friend std::ostream & operator<<(std::ostream & os, const Face::Type & obj);
 	//enum class EmagType {
 	//	DEFAULT
 	//};
@@ -53,8 +53,8 @@ public:
 	const Eigen::Vector3d getNormal() const;
 	void setNormal(const Eigen::Vector3d & fn);
 
-	void setFluidType(const FluidType & fluidType);
-	const FluidType getFluidType() const;
+	void setType(const Type & fluidType);
+	const Type getType() const;
 
 
 private:
@@ -66,7 +66,7 @@ private:
 	Eigen::Vector3d faceNormal;
 	double area = 0;
 
-	FluidType fluidType = FluidType::DEFAULT;
+	Type fluidType = Type::DEFAULT;
 
 	void init();
 	bool isListOfVerticesUnique() const;

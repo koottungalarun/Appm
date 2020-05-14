@@ -81,6 +81,8 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 		isWriteEfield = true;
 	}
 
+	setFluidFaceFluxes();
+
 	//set_Bfield_azimuthal();
 	//interpolateMagneticFluxToPrimalVertices();
 
@@ -511,7 +513,7 @@ void AppmSolver::init_multiFluid(const std::string & filename)
 	for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
 		for (int i = 0; i < nFaces; i++) {
 			const Face * face = dualMesh.getFace(i);
-			Face::FluidType faceType = getFaceTypeOfFluid(face, fluidIdx);
+			Face::Type faceType = getFaceTypeOfFluid(face, fluidIdx);
 			faceTypeFluids(i, fluidIdx) = static_cast<int>(faceType);
 		}
 	}
@@ -838,7 +840,7 @@ void AppmSolver::get_Msigma_consistent(const double dt, Eigen::SparseMatrix<doub
 						// - At inner faces (Rusanov scheme): f = 0.5 * ( (nu)_k + (nu)_{k+1} ) - 0.5 * s * (n_{k+1} - n_k)
 						// - At opening faces: f = (nu)_k
 						// - At boundary faces: ???                  <<<---- TODO
-						const bool isFaceTypeOpening = dualFace->getFluidType() == Face::FluidType::OPENING;
+						const bool isFaceTypeOpening = dualFace->getType() == Face::Type::OPENING;
 						value *= isFaceTypeOpening ? 1 : 0.5;
 
 						triplets.push_back(T(jdx, edx, value));
@@ -980,10 +982,10 @@ const Eigen::Vector3d AppmSolver::getRusanovFluxExplicit(const int faceIdx, cons
 	faceFlux.setZero();
 
 	const Face * face = dualMesh.getFace(faceIdx);
-	const Face::FluidType faceFluidType = getFaceTypeOfFluid(face, fluidIdx);
+	const Face::Type faceFluidType = getFaceTypeOfFluid(face, fluidIdx);
 
 	switch (faceFluidType) {
-	case Face::FluidType::INTERIOR:
+	case Face::Type::INTERIOR:
 		getAdjacientCellStates(face, fluidIdx, qL, qR);
 		faceFlux = Physics::getRusanovFlux(qL, qR, showOutput);
 		break;
@@ -999,7 +1001,7 @@ const Eigen::Vector3d AppmSolver::getRusanovFluxImEx(const int faceIdx, const in
 	const Face * face = dualMesh.getFace(faceIdx);
 	const Eigen::Vector3d faceNormal = face->getNormal();
 	//const Face::FluidType faceFluidType = face->getFluidType();
-	const Face::FluidType faceFluidType = getFaceTypeOfFluid(face, fluidIdx);
+	const Face::Type faceFluidType = getFaceTypeOfFluid(face, fluidIdx);
 
 	Eigen::Vector3d qL, qR;
 	const std::pair<int, int> adjacientCellIdx = getAdjacientCellStates(face, fluidIdx, qL, qR);
@@ -1007,11 +1009,11 @@ const Eigen::Vector3d AppmSolver::getRusanovFluxImEx(const int faceIdx, const in
 	double implicitExtraTerms = 0;
 	int cellIndex;
 
-	if (faceFluidType != Face::FluidType::INTERIOR) {
+	if (faceFluidType != Face::Type::INTERIOR) {
 		assert(adjacientCellIdx.first == -1 || adjacientCellIdx.second == -1);
 	}
 	const bool isMassFluxImexScheme = this->massFluxScheme == MassFluxScheme::IMPLICIT_EXPLICIT;
-	const bool isInteriorFace = faceFluidType == Face::FluidType::INTERIOR;
+	const bool isInteriorFace = faceFluidType == Face::Type::INTERIOR;
 	const bool isBoundaryFace = !isInteriorFace;
 	if (isMassFluxImexScheme) {
 		cellIndex = adjacientCellIdx.first;
@@ -1071,9 +1073,9 @@ const std::pair<int,int> AppmSolver::getAdjacientCellStates(const Face * face, c
 	int idxR = -1;
 
 	//const Face::FluidType faceFluidType = face->getFluidType();
-	const Face::FluidType faceFluidType = getFaceTypeOfFluid(face, fluidIdx);
+	const Face::Type faceFluidType = getFaceTypeOfFluid(face, fluidIdx);
 	switch (faceFluidType) {
-	case Face::FluidType::INTERIOR:
+	case Face::Type::INTERIOR:
 		assert(faceCells.size() == 2);
 		assert(faceCells[0]->getFluidType() == Cell::FluidType::FLUID);
 		assert(faceCells[1]->getFluidType() == Cell::FluidType::FLUID);
@@ -1089,8 +1091,7 @@ const std::pair<int,int> AppmSolver::getAdjacientCellStates(const Face * face, c
 		qR = getFluidState(idxR, fluidIdx, faceNormal);
 		break;
 
-	case Face::FluidType::OPENING:
-		assert(faceCells.size() == 1);
+	case Face::Type::OPENING:
 		if (orientation > 0) {
 			idxL = faceCells[0]->getIndex();
 			qL = getFluidState(idxL, fluidIdx, faceNormal);
@@ -1103,7 +1104,7 @@ const std::pair<int,int> AppmSolver::getAdjacientCellStates(const Face * face, c
 		}
 		break;
 
-	case Face::FluidType::WALL:
+	case Face::Type::WALL:
 		assert(faceCells.size() >= 1 && faceCells.size() <= 2);
 		if (faceCells[0]->getFluidType() == Cell::FluidType::FLUID) {
 			const int idx = faceCells[0]->getIndex();
@@ -1126,7 +1127,7 @@ const std::pair<int,int> AppmSolver::getAdjacientCellStates(const Face * face, c
 		}
 		break;
 
-	case Face::FluidType::TERMINAL:
+	case Face::Type::TERMINAL:
 		std::cout << "FaceFluidType TERMINAL should not be used directly; call getFaceTypeOfFluid(face,fluidIdx) instead" << std::endl;
 		assert(false); // Not yet implemented
 		break;
@@ -1194,6 +1195,8 @@ void AppmSolver::setFluidFaceFluxes()
 		// skip faces that have no adjacient fluid cell
 		if (!face->hasFluidCells()) { continue;	}
 
+		assert(face->getType() != Face::Type::DEFAULT);
+
 		for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
 			Eigen::VectorXd faceFlux3d(5);
 			Eigen::Vector3d flux = getSpeciesFaceFlux(face, fluidIdx);
@@ -1214,9 +1217,9 @@ Eigen::Vector3d AppmSolver::getSpeciesFaceFlux(const Face * face, const int flui
 	Eigen::Vector3d flux;
 	flux.setZero();
 
-	Face::FluidType faceFluidType = face->getFluidType();
+	Face::Type faceFluidType = face->getType();
 	const bool isElectronFluid = particleParams[fluidIdx].electricCharge < 0;
-	const bool isCathode = faceFluidType == Face::FluidType::TERMINAL && face->getCenter()(2) < 0; // TODO
+	const bool isCathode = faceFluidType == Face::Type::TERMINAL && face->getCenter()(2) < 0; // TODO
 
 	if (false && isCathode && isElectronFluid) {
 		flux = getSpeciesFaceFluxAtCathode(face, fluidIdx);
@@ -1238,8 +1241,8 @@ const Eigen::Vector3d AppmSolver::getSpeciesFaceFluxAtCathode(const Face * face,
 	// Check if face is at cathode terminal and we have an electron fluid
 	const bool isElectronFluid = particleParams[fluidIdx].electricCharge < 0;
 	assert(isElectronFluid);
-	Face::FluidType faceFluidType = face->getFluidType();
-	assert(faceFluidType == Face::FluidType::TERMINAL);
+	Face::Type faceFluidType = face->getType();
+	assert(faceFluidType == Face::Type::TERMINAL);
 
 	// Set a default value for testing
 	Eigen::Vector3d flux;
@@ -2721,11 +2724,11 @@ const std::string AppmSolver::fluidXdmfOutput(const std::string & datafilename) 
 	return ss.str();
 }
 
-const Face::FluidType AppmSolver::getFaceTypeOfFluid(const Face * face, const int fluidIdx) const
+const Face::Type AppmSolver::getFaceTypeOfFluid(const Face * face, const int fluidIdx) const
 {
-	Face::FluidType faceTypeOfFluid = face->getFluidType();
-	if (faceTypeOfFluid == Face::FluidType::TERMINAL) {
-		faceTypeOfFluid = (particleParams[fluidIdx].electricCharge >= 0) ? Face::FluidType::WALL : Face::FluidType::OPENING;
+	Face::Type faceTypeOfFluid = face->getType();
+	if (faceTypeOfFluid == Face::Type::TERMINAL) {
+		faceTypeOfFluid = (particleParams[fluidIdx].electricCharge >= 0) ? Face::Type::WALL : Face::Type::OPENING;
 	}
 	return faceTypeOfFluid;
 }

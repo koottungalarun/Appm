@@ -439,12 +439,12 @@ const double Face::computeArea() const
 	return area;
 }
 
-void Face::setFluidType(const Face::FluidType & fluidType)
+void Face::setType(const Face::Type & fluidType)
 {
 	this->fluidType = fluidType;
 }
 
-const Face::FluidType Face::getFluidType() const
+const Face::Type Face::getType() const
 {
 	return this->fluidType;
 }
@@ -459,18 +459,18 @@ std::ostream & operator<<(std::ostream & os, const Face & obj)
 	return os;
 }
 
-std::ostream & operator<<(std::ostream & os, const Face::FluidType & obj)
+std::ostream & operator<<(std::ostream & os, const Face::Type & obj)
 {
 	switch (obj) {
-	case Face::FluidType::DEFAULT:
+	case Face::Type::DEFAULT:
 		os << "DEFAULT"; break;
-	case Face::FluidType::INTERIOR:
+	case Face::Type::INTERIOR:
 		os << "INTERIOR"; break;
-	case Face::FluidType::OPENING:
+	case Face::Type::OPENING:
 		os << "OPENING"; break;
-	case Face::FluidType::TERMINAL:
+	case Face::Type::TERMINAL:
 		os << "TERMINAL"; break;
-	case Face::FluidType::WALL:
+	case Face::Type::WALL:
 		os << "WALL"; break;
 	default:
 		os << "Not implemented";
