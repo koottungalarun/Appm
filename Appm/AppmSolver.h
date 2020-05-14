@@ -59,6 +59,13 @@ private:
 	};
 	std::vector<ParticleParameters> particleParams;
 
+	struct AppmParameters {
+		bool isFluidEnabled = false;
+		bool isMaxwellEnabled = false;
+		bool isEulerMaxwellCouplingEnabled = false;
+	} appmParams;
+
+
 	enum class MassFluxScheme {
 		EXPLICIT, IMPLICIT_EXPLICIT
 
@@ -72,9 +79,6 @@ private:
 	bool isStateWrittenToOutput = false;
 
 
-
-	bool isMaxwellEnabled = false;
-	bool isFluidEnabled = true;
 	int maxIterations = 0;
 	double maxTime = 0;
 	double lambdaSquare = 1.0;
@@ -83,7 +87,6 @@ private:
 	bool isElectricLorentzForceActive = false;
 	bool isMagneticLorentzForceActive = false;
 	bool isMomentumFluxActive = false;
-	bool isMaxwellCurrentSourceActive = false;
 
 
 	//enum class MaxwellSolverBCType {
@@ -174,12 +177,17 @@ private:
 	const std::pair<int,int> getAdjacientCellStates(const Face * face, const int fluidIdx, Eigen::Vector3d & qL, Eigen::Vector3d & qR) const;
 
 	//const double getMomentumUpdate(const int k, const Eigen::Vector3d & nvec, const int fluidIdx) const;
+	const std::string stopFilename = "stop.txt";
+	void createStopFile();
+	bool isStopFileActive();
 
 	void setFluidFaceFluxes();
 	Eigen::Vector3d getSpeciesFaceFlux(const Face * face, const int fluidIdx);
 	const Eigen::Vector3d getSpeciesFaceFluxAtCathode(const Face * face, const int fluidIdx);
 	void setFluidSourceTerm();
 	void updateFluidStates(const double dt);
+
+	void solveMaxwellSystem(const double time, const double dt, const double dt_previous);
 	
 
 	void interpolateMagneticFluxToPrimalVertices();
@@ -229,6 +237,8 @@ private:
 	const Eigen::VectorXd solveMaxwell_sparseLU(Eigen::SparseMatrix<double> & Mf, Eigen::VectorXd & rhs);
 	const Eigen::VectorXd solveMaxwell_BiCGStab(Eigen::SparseMatrix<double> & Mf, Eigen::VectorXd & rhs);
 	const Eigen::VectorXd solveMaxwell_LSCG(Eigen::SparseMatrix<double> & Mf, Eigen::VectorXd & rhs);
+	const Eigen::VectorXd solveMaxwell_CG(Eigen::SparseMatrix<double> & Mf, Eigen::VectorXd & rhs);
+
 
 	Eigen::SparseMatrix<double> get_Msigma_spd(Eigen::VectorXd & Jaux, const double dt);
 

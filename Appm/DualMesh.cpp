@@ -396,6 +396,20 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal, const double terminalRad
 
 	// Cell fluid type
 	init_cellFluidType();
+
+	// Set terminals and ghost cells
+	for (int i = 0; i < primal.getNumberOfVertices(); i++) {
+		const Vertex * vertex = primal.getVertex(i);
+		Cell * cell = getCell(i);
+		if (vertex->getType() == Vertex::Type::Terminal) {
+			cell->setFluidType(Cell::FluidType::ELECTRODE);
+		}
+		if (vertex->isBoundary() && cell->getFluidType() == Cell::FluidType::FLUID) {
+			cell->setFluidType(Cell::FluidType::GHOST);
+		}
+	}
+
+
 	const int nCells = this->getNumberOfCells();
 	Eigen::VectorXi cellTypes(nCells);
 	cellTypes.setZero();
@@ -588,6 +602,8 @@ void DualMesh::init_faceFluidType(const double terminalRadius)
 
 		int nSolidCells = 0;
 		int nFluidCells = 0;
+		int nGhostCells = 0;
+		int nElectrodeCells = 0;
 		for (auto cell : faceCells) {
 			if (cell->getFluidType() == Cell::FluidType::FLUID) {
 				nFluidCells++;
@@ -595,10 +611,16 @@ void DualMesh::init_faceFluidType(const double terminalRadius)
 			if (cell->getFluidType() == Cell::FluidType::SOLID) {
 				nSolidCells++;
 			}
+			if (cell->getFluidType() == Cell::FluidType::GHOST) {
+				nGhostCells++;
+			}
+			if (cell->getFluidType() == Cell::FluidType::ELECTRODE) {
+				nElectrodeCells++;
+			}
 		}
 		assert(nSolidCells >= 0 && nSolidCells <= faceCells.size());
 		assert(nFluidCells >= 0 && nFluidCells <= faceCells.size());
-		assert(nFluidCells + nSolidCells == faceCells.size());
+		assert(nFluidCells + nSolidCells + nGhostCells + nElectrodeCells == faceCells.size());
 
 		if (nAdjacientCells == 2) {
 			if (nSolidCells == 0 && nFluidCells == 2) {
@@ -606,6 +628,9 @@ void DualMesh::init_faceFluidType(const double terminalRadius)
 			}
 			if (nSolidCells == 1 && nFluidCells == 1) {
 				faceFluidType = Face::FluidType::WALL;
+			}
+			if (nFluidCells == 1 && nElectrodeCells == 1) {
+				faceFluidType = Face::FluidType::TERMINAL;
 			}
 		}
 

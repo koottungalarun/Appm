@@ -11,7 +11,7 @@ class Cell :
 public:
 
 	enum class FluidType {
-		DEFAULT, FLUID, SOLID
+		DEFAULT, FLUID, SOLID, GHOST, ELECTRODE
 	};
 
 	Cell();

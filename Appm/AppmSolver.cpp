@@ -76,7 +76,7 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	init_RaviartThomasInterpolation();
 
 
-	if (isMaxwellEnabled) {
+	if (appmParams.isMaxwellEnabled) {
 		isWriteBfield = true;
 		isWriteEfield = true;
 	}
@@ -102,10 +102,9 @@ void AppmSolver::run()
 	}
 
 	double dt = 1.0;
-	double dt_previous = dt;
+	double dt_previous = 1.0;
 	double time = 0;
 	int iteration = 0;
-
 
 	// For testing of RT interpolation:
 	//setAzimuthalMagneticFluxField();
@@ -123,33 +122,17 @@ void AppmSolver::run()
 	//	maxwellSolver->setTorusCurrent(x1, x2, z1, z2);
 	//}
 
-
-
-	// Number of primal vertices on terminals
-	const int nPrimalTerminalVertices = primalMesh.getMeshInfo().nVerticesTerminal;
-	assert(nPrimalTerminalVertices > 0);
-
-	// Number of primal edges
-	const int nEdges = primalMesh.getNumberOfEdges();
-
-
 	const int nFluids = this->getNFluids();
 	const int nFaces = dualMesh.getNumberOfFaces();
 	const int nCells = dualMesh.getNumberOfCells();
-	//faceFluxes = Eigen::MatrixXd::Zero(5*nFluids, nFaces);
-	//faceFluxesImExRusanov = Eigen::MatrixXd::Zero(nFaces, nFluids);
 	
-	
-	const std::string stopFilename = "stop.txt";
-	std::ofstream(stopFilename) << 0 << std::endl;
 
 	auto timer_startAppmSolver = std::chrono::high_resolution_clock::now();
 
-	std::vector<double> currentBCValue;
 	/*
 	* Time integration loop 
 	*/
-	while (iteration < maxIterations && time < maxTime) {
+	while (iteration < maxIterations && time < maxTime && !isStopFileActive()) {
 		std::cout << "Iteration " << iteration << ",\t time = " << time << std::endl;
 
 		dt_previous = dt;
@@ -160,12 +143,12 @@ void AppmSolver::run()
 		faceFluxesImExRusanov.setZero();
 
 		// Determine timestep
-		if (isFluidEnabled) {
+		if (appmParams.isFluidEnabled) {
 			dt = getNextFluidTimestepSize();
 		}
 
 		// Set explicit fluid source terms
-		if (isFluidEnabled) {
+		if (appmParams.isFluidEnabled) {
 			if (isMagneticLorentzForceActive) {
 				for (int idx = 0; idx < nCells; idx++) {
 					const Cell * cell = dualMesh.getCell(idx);
@@ -193,208 +176,13 @@ void AppmSolver::run()
 			}
 		}
 
-
-
 		// Maxwell equations
-		if (isMaxwellEnabled) {
-
-			// New state vector, solution of the implicit system of equation that we are setting up in the next lines
-			Eigen::VectorXd x(maxwellState.size());
-
-			Eigen::SparseMatrix<double> Msigma;
-			get_Msigma_consistent(dt , Msigma, J_h_aux);
-			//{
-			//	const std::string filename = (std::stringstream() << "Msigma-" << iteration << ".dat").str();
-			//	std::cout << "Msigma nnz: " << Msigma.nonZeros() << std::endl;
-			//	std::cout << "Msigma size: " << Msigma.rows() << " x " << Msigma.cols() << std::endl;
-			//	Eigen::sparseMatrixToFile(Msigma, filename);
-			//}
-
-			Eigen::SparseMatrix<double> Msigma_inner;
-			Msigma_inner = Msigma.topLeftCorner(nEdges, nEdges);
-			//{
-			//	const std::string filename = (std::stringstream() << "MsigmaInner-" << iteration << ".dat").str();
-			//	std::cout << "Msigma_inner nnz: " << Msigma_inner.nonZeros() << std::endl;
-			//	std::cout << "Msigma_inner size: " << Msigma_inner.rows() << " x " << Msigma_inner.cols() << std::endl;
-			//	Eigen::sparseMatrixToFile(Msigma_inner, filename);
-			//}
-
-			// System matrix on left hand side, i.e., M*x = rhs, to be solved for x
-			Eigen::SparseMatrix<double> M;
-			assert(M1.size() > 0);
-			assert(M1.nonZeros() > 0);
-			assert(M2.size() > 0);
-			assert(M2.nonZeros() > 0);
-			M = M1 + pow(dt, 2) * M2;
-			M += dt * Q.transpose() * Msigma_inner * Q; 
-			M.makeCompressed();
-			//Eigen::sparseMatrixToFile(M, "M.dat");
-
-			// The system of equations has fixed and free values; 
-			// - fixed values: electric potential at terminals (Dirichlet boundary condition)
-			// - free  values: electric potential at non-terminal vertices, and electric voltages at non-boundary edges
-			int nDirichlet = nPrimalTerminalVertices;
-			//if (maxwellSolverBCType == MaxwellSolverBCType::CURRENT_BC) {
-			//	nDirichlet = nPrimalTerminalVertices / 2;
-			//}
-			const int nFree = maxwellState.size() - nDirichlet;
-
-			// The vector of degrees of freedom (DoF) is sorted such that free values are in front of fixed values:
-			// x = [freeValues, fixedValues]
-			// Therefore, the system of free DoF is given as: (without considering proper array sizes)
-			// M_free * x_free = -M_fixed * x_fixed + rhs
-
-			// Dirichlet conditions
-			Eigen::SparseMatrix<double> Md = M.rightCols(nDirichlet);
-
-			Eigen::VectorXd xd = setVoltageBoundaryConditions(nDirichlet, time);
-			Eigen::VectorXd src = Eigen::VectorXd::Zero(maxwellState.size());
-
-			// Vector on right hand side
-			Eigen::VectorXd rhs(x.size());
-			rhs.setZero();
-
-			// Setup of rhs vector
-			double dt_ratio = dt / dt_previous;
-			rhs += M1 * (1 + dt_ratio) * maxwellState 
-				+ dt * Q.transpose() * Msigma_inner * Q * maxwellState 
-				- dt_ratio * M1 * maxwellStatePrevious;
-
-			// TODO: current source in Ampere equation
-			//if (maxwellSolverBCType == MaxwellSolverBCType::CURRENT_BC) {
-			//	J_h_previous = J_h;
-			//	
-			//	const double currentValue = currentDensityBC(time);
-			//	currentBCValue.push_back(currentValue);
-			//	const Eigen::VectorXd zUnitVec = Eigen::Vector3d::UnitZ();
-			//	Eigen::VectorXd dualFacesInZDirection(dualMesh.getNumberOfFaces());
-			//	dualFacesInZDirection.setZero();
-			//	for (int i = 0; i < dualFacesInZDirection.size(); i++) {
-			//		const Face * face = dualMesh.getFace(i);
-			//		const Eigen::Vector3d fc = face->getCenter();
-			//		if (true || fc.segment(0, 2).norm() < 0.35) {
-			//			const Eigen::Vector3d fn = face->getNormal();
-			//			const double fA = face->getArea();
-			//			dualFacesInZDirection(i) = fn.dot(zUnitVec) * fA;
-			//		}
-			//	}
-			//	J_h = currentValue * dualFacesInZDirection;
-			//	const Eigen::VectorXd deltaJ = dt * Q.transpose() * (J_h - J_h_previous).segment(0, nEdges);
-			//	rhs -= deltaJ;
-			//}
-
-			// TODO: this is the implicit-consistent face current due to fluid momentum flux
-			// update data vector for J_h_aux
-			//for (int i = 0; i < nEdges; i++) {
-			//	assert(false);
-			//	assert(getNFluids() == 1);
-			//	const Face * face = dualMesh.getFace(i);
-			//	//assert(face->hasFluidCells());
-			//	const std::vector<Cell*> adjacientCells = face->getCellList();
-			//	assert(adjacientCells.size() == 2);
-			//	int nAdjacientFluidCells = 0;
-			//	for (auto cell : adjacientCells) {
-			//		//assert(cell->getFluidType() == Cell::FluidType::FLUID);
-			//		if (cell->getFluidType() == Cell::FluidType::FLUID) {
-			//			nAdjacientFluidCells++;
-			//		}
-			//	}
-			//	if (nAdjacientFluidCells < 2) { // skip faces that are adjacient to a solid cell
-			//		continue;
-			//	}
-
-			//	assert(massFluxScheme == MassFluxScheme::IMPLICIT_EXPLICIT);
-			//	const double fA = face->getArea();
-			//	const int faceIdx = face->getIndex();
-			//	double value = 0;
-
-			//	// Loop over all species
-			//	for (int fluidIdx = 0; fluidIdx < getNFluids(); fluidIdx++) {
-			//		const int q = particleParams[fluidIdx].electricCharge; 
-			//		const Eigen::Vector3d implicitFlux = getRusanovFluxImEx(faceIdx, fluidIdx, dt);
-			//		const double implicitMassFlux = implicitFlux(0); // first component is the mass flux
-			//		value += q * implicitMassFlux;
-			//	}
-			//	value *= fA;
-			//	J_h_aux(i) = value;
-			//}
-
-			
-			if (isMaxwellCurrentSourceActive) {
-				assert(false);
-				rhs -= dt * Q.transpose() * (J_h_aux - J_h_aux_mm1).segment(0, nEdges);
-			}
-
-			rhs -= Md * xd;
-
-			// Vector of free coefficients
-			Eigen::VectorXd xf(nFree);
-
-			// Load vector for free coefficients
-			Eigen::VectorXd rhsFree = rhs.topRows(nFree);
-
-			// Matrix of free coefficients
-			Eigen::SparseMatrix<double> Mf = M.topLeftCorner(nFree, nFree);
-			Mf.makeCompressed();
-
-			//Eigen::sparseMatrixToFile(Mf, (std::stringstream() << "Mf-" << iteration << ".dat").str());
-
-			
-
-			// Solve system
-			std::cout << "Setup Maxwell solver" << std::endl;
-
-			// Note: the matrix Mf is not symmetric, neither positive definite!
-			//xf = solveMaxwell_sparseLU(Mf, rhsFree);
-			//Eigen::VectorXd delta1 = xf;
-			//Eigen::VectorXd delta2 = xf;
-			//xf = solveMaxwell_BiCGStab(Mf, rhsFree);
-			//delta1 -= xf;
-			//std::cout << "delta max: " << delta1.cwiseAbs().maxCoeff() << std::endl;
-			xf = solveMaxwell_PardisoLU(Mf, rhsFree);
-			//delta2 -= xf;
-			//std::cout << "delta max: " << delta2.cwiseAbs().maxCoeff() << std::endl;
-
-			//xf = solveMaxwell_LSCG(Mf, rhsFree);
-
-
-			//std::cout << "#iterations:     " << maxwellSolver.iterations() << std::endl;
-			//std::cout << "estimated error: " << maxwellSolver.error() << std::endl;
-
-			// assemble new state vector
-			x.topRows(nFree) = xf;
-			x.bottomRows(nDirichlet) = xd;
-			//std::ofstream("x.dat") << x << std::endl;
-
-			// Update state vectors for discrete states
-			E_h = Q * x;
-			B_h -= dt * C * E_h;
-
-			// Get electric current due to Ohms law (see implicit and consistent formulation of electric current)
-			//assert(Msigma.rows() == nEdges);
-			//assert(Msigma.cols() == E_h.size());
-			//J_h.segment(0, nEdges) = Msigma * E_h;
-			J_h = Msigma * E_h + J_h_aux;
-
-			//std::ofstream("E_h.dat") << E_h << std::endl;
-
-			// Set new state vector
-			maxwellStatePrevious = maxwellState;
-			maxwellState = x;
-
-			J_h_aux_mm1 = J_h_aux;
-
-
-			// Get electric field at cell center (interpolated from primal edge values)
-			E_cc = getEfieldAtCellCenter();
-
-			// Interpolation of B-field to dual cell centers
-			interpolateMagneticFluxToPrimalVertices();
+		if (appmParams.isMaxwellEnabled) {
+			solveMaxwellSystem(time, dt, dt_previous);
 		}
 
-
 		// Fluid equations
-		if (isFluidEnabled) {
+		if (appmParams.isFluidEnabled) {
 			const int nFluids = this->getNFluids();
 			const int nCells = dualMesh.getNumberOfCells();
 			const int nFaces = dualMesh.getNumberOfFaces();
@@ -451,22 +239,9 @@ void AppmSolver::run()
 			updateFluidStates(dt);
 		}
 		std::cout << "dt = " << dt << std::endl;
-
-
 		iteration++;
 		time += dt;
 		writeOutput(iteration, time);
-
-		int stopValue = 0;
-		std::ifstream(stopFilename) >> stopValue;
-		if (stopValue > 0) {
-			std::cout << "Stop because of value set in stop-file (" << stopFilename << ")" << std::endl;
-			std::cout << "Stop value: " << stopValue << std::endl;
-			break;
-		}
-		else {
-			std::cout << "Continue; value in stop-file is non-positive" << std::endl;
-		}
 	}
 	std::cout << "Final time:      " << time << std::endl;
 	std::cout << "Final iteration: " << iteration << std::endl;
@@ -476,15 +251,6 @@ void AppmSolver::run()
 	std::cout << "Elapsed time for APPM solver: " << delta_appmSolver.count() << std::endl;
 
 	std::cout << printSolverParameters() << std::endl;
-
-	if (currentBCValue.size() > 0) {
-		std::string filename = "currentBC.dat";
-		std::cout << "Write data to file: " << filename << std::endl;
-		std::ofstream currentBCoutput(filename);
-		for (auto value : currentBCValue) {
-			currentBCoutput << value << std::endl;
-		}
-	}
 
 	// test_raviartThomas();
 
@@ -514,8 +280,8 @@ std::string AppmSolver::printSolverParameters() const
 	ss << "=======================" << std::endl;
 	ss << "maxIterations:  " << maxIterations << std::endl;
 	ss << "maxTime:        " << maxTime << std::endl;
-	ss << "isFluidEnabled: " << isFluidEnabled << std::endl;
-	ss << "isMaxwellEnabled: " << isMaxwellEnabled << std::endl;
+	ss << "isFluidEnabled: " << appmParams.isFluidEnabled << std::endl;
+	ss << "isMaxwellEnabled: " << appmParams.isMaxwellEnabled << std::endl;
 	ss << "lambdaSquare: " << lambdaSquare << std::endl;
 	ss << "massFluxScheme: " << massFluxScheme << std::endl;
 	ss << "initType: " << initType << std::endl;
@@ -1391,6 +1157,29 @@ const std::pair<int,int> AppmSolver::getAdjacientCellStates(const Face * face, c
 //}
 
 /**
+* Create stop file with default value.
+*/
+void AppmSolver::createStopFile()
+{
+	std::ofstream(stopFilename) << 0 << std::endl;
+}
+
+/**
+* @return if value in stop file is positive; this indicates to stop the solver iteration loop. 
+*/
+bool AppmSolver::isStopFileActive()
+{
+	int stopValue = 0;
+	std::ifstream(stopFilename) >> stopValue;
+	std::cout << "Check for value in stop file: " << stopValue << std::endl;
+	if (stopValue > 0) {
+		std::cout << "!!! Stop !!!" << std::endl;
+		return true;
+	}
+	return false;
+}
+
+/**
 * Set fluid face fluxes at each dual face.
 */
 void AppmSolver::setFluidFaceFluxes()
@@ -1520,6 +1309,121 @@ void AppmSolver::updateFluidStates(const double dt)
 		// Update state values
 		fluidStates.col(k) += -dt / cellVolume * sumOfFaceFluxes + dt * fluidSources.col(k);
 	}
+}
+
+void AppmSolver::solveMaxwellSystem(const double time, const double dt, const double dt_previous)
+{
+	// Number of primal edges
+	const int nEdges = primalMesh.getNumberOfEdges();
+
+	// Number of primal vertices on terminals
+	const int nPrimalTerminalVertices = primalMesh.getMeshInfo().nVerticesTerminal;
+	assert(nPrimalTerminalVertices > 0);
+
+
+	// Setup of implicit system of equations for the reformulated Ampere equation, 
+	//     d_tt (Meps * e) + C' * Mnu * C * e = -d_t (j), 
+	// with j = Msigma * e  (+ j_aux)  
+
+	// New state vector
+	Eigen::VectorXd x(maxwellState.size());
+
+	// Get matrix such that J_h = Msigma * E_h + J_h_aux
+	Eigen::SparseMatrix<double> Msigma;
+	Msigma = get_Msigma_spd(J_h_aux, dt);
+
+	// Get interior matrix 
+	Eigen::SparseMatrix<double> Msigma_inner;
+	Msigma_inner = Msigma.topLeftCorner(nEdges, nEdges);
+
+	// System matrix on left hand side, i.e., M*x = rhs, to be solved for x
+	Eigen::SparseMatrix<double> M;
+	assert(M1.size() > 0);
+	assert(M1.nonZeros() > 0);
+	assert(M2.size() > 0);
+	assert(M2.nonZeros() > 0);
+
+	M = M1 + pow(dt, 2) * M2;
+	M += dt * Q.transpose() * Msigma_inner * Q;
+	M.makeCompressed();
+	//Eigen::sparseMatrixToFile(M, "M.dat");
+
+	// The system of equations has fixed and free values; 
+	// - fixed values: electric potential at terminals (Dirichlet boundary condition)
+	// - free  values: electric potential at non-terminal vertices, and electric voltages at non-boundary edges
+	const int nDirichlet = nPrimalTerminalVertices;
+	const int nFree = maxwellState.size() - nDirichlet;
+
+	// The vector of degrees of freedom (DoF) is sorted such that free values are in front of fixed values:
+	// x = [freeValues, fixedValues]
+	// Therefore, the system of free DoF is given as: (without considering proper array sizes)
+	// M_free * x_free = -M_fixed * x_fixed + rhs
+
+	// Dirichlet conditions
+	Eigen::SparseMatrix<double> Md = M.rightCols(nDirichlet);
+
+	// Data vector for degrees of freedom
+	Eigen::VectorXd xf(nFree); // Vector of free coefficients
+	Eigen::VectorXd xd = setVoltageBoundaryConditions(nDirichlet, time);
+
+	double dt_ratio = dt / dt_previous;
+
+	// Data vector for right hand side
+	Eigen::VectorXd rhs(x.size());
+	rhs.setZero();
+	rhs = M1 * (1 + dt_ratio) * maxwellState
+		+ dt * Q.transpose() * Msigma_inner * Q * maxwellState
+		- dt_ratio * M1 * maxwellStatePrevious;
+
+	// Subtract Dirichlet values from left side
+	rhs -= Md * xd;
+
+	// Load vector for free coefficients
+	Eigen::VectorXd rhsFree = rhs.topRows(nFree);
+
+	// Matrix of free coefficients
+	Eigen::SparseMatrix<double> Mf = M.topLeftCorner(nFree, nFree);
+	Mf.makeCompressed();
+
+	// Solve system
+	std::cout << "Setup Maxwell solver" << std::endl;
+
+	// Note: the matrix Mf is not symmetric, neither positive definite!
+	//xf = solveMaxwell_sparseLU(Mf, rhsFree);
+	//xf = solveMaxwell_BiCGStab(Mf, rhsFree); // Slow solver
+	//xf = solveMaxwell_LSCG(Mf, rhsFree); // error: iterative solver base is not initialized
+	//xf = solveMaxwell_CG(Mf, rhsFree);
+	xf = solveMaxwell_PardisoLU(Mf, rhsFree);
+
+	// assemble new state vector
+	x.topRows(nFree) = xf;
+	x.bottomRows(nDirichlet) = xd;
+	//std::ofstream("x.dat") << x << std::endl;
+
+	// Update state vectors for discrete states
+	E_h = Q * x;
+	B_h -= dt * C * E_h;
+
+	// Get electric current due to Ohms law (see implicit and consistent formulation of electric current)
+	//assert(Msigma.rows() == nEdges);
+	//assert(Msigma.cols() == E_h.size());
+	//J_h.segment(0, nEdges) = Msigma * E_h;
+	J_h = Msigma * E_h + J_h_aux;
+
+	//std::ofstream("E_h.dat") << E_h << std::endl;
+
+	// Set new state vector
+	maxwellStatePrevious = maxwellState;
+	maxwellState = x;
+
+	J_h_aux_mm1 = J_h_aux;
+
+
+	// Get electric field at cell center (interpolated from primal edge values)
+	E_cc = getEfieldAtCellCenter();
+
+	// Interpolation of B-field to dual cell centers
+	interpolateMagneticFluxToPrimalVertices();
 }
 
 
@@ -2376,6 +2280,8 @@ void AppmSolver::init_RaviartThomasInterpolation()
 
 void AppmSolver::readParameters(const std::string & filename)
 {
+	appmParams = AppmParameters();
+
 	std::ifstream file(filename);
 	if (!file.is_open()) {
 		std::cout << "File not opened: " << filename;
@@ -2396,10 +2302,10 @@ void AppmSolver::readParameters(const std::string & filename)
 			std::istringstream(line.substr(pos + 1)) >> this->maxTime;
 		}
 		if (tag == "isFluidEnabled") {
-			std::istringstream(line.substr(pos + 1)) >> this->isFluidEnabled;
+			std::istringstream(line.substr(pos + 1)) >> appmParams.isFluidEnabled;
 		}
 		if (tag == "isMaxwellEnabled") {
-			std::istringstream(line.substr(pos + 1)) >> this->isMaxwellEnabled;
+			std::istringstream(line.substr(pos + 1)) >> appmParams.isMaxwellEnabled;
 		}
 		if (tag == "lambdaSquare") {
 			std::istringstream(line.substr(pos + 1)) >> this->lambdaSquare;
@@ -2422,6 +2328,9 @@ void AppmSolver::readParameters(const std::string & filename)
 		}
 		if (tag == "isShowDataWriterOutput") {
 			std::istringstream(line.substr(pos + 1)) >> isShowDataWriterOutput;
+		}
+		if (tag == "isEulerMaxwellCouplingEnabled") {
+			std::istringstream(line.substr(pos + 1)) >> appmParams.isEulerMaxwellCouplingEnabled;
 		}
 		//if (tag == "maxwellSolverBCType") {
 		//	std::string temp;
@@ -2960,18 +2869,61 @@ const Eigen::VectorXd AppmSolver::solveMaxwell_LSCG(Eigen::SparseMatrix<double>&
 	}
 
 	std::cout << "# Iterations: " << maxwellSolver.iterations() << std::endl;
+	std::cout << "error:        " << maxwellSolver.error() << std::endl;
 
 	assert(maxwellSolver.info() == Eigen::Success);
 	return xf;
 }
 
+const Eigen::VectorXd AppmSolver::solveMaxwell_CG(Eigen::SparseMatrix<double>& Mf, Eigen::VectorXd & rhs)
+{
+	std::cout << "Setup solver for Maxwell system: ConjugateGradient" << std::endl;
+	Eigen::VectorXd xf(rhs.size());
+	Eigen::ConjugateGradient<Eigen::SparseMatrix<double>> maxwellSolver;
+	maxwellSolver.setTolerance(Eigen::NumTraits<double>::epsilon() * 1024);
+
+	auto timer_start = std::chrono::high_resolution_clock::now();
+	maxwellSolver.compute(Mf);
+	auto timer_afterCompute = std::chrono::high_resolution_clock::now();
+
+	auto delta_afterCompute = std::chrono::duration<double>(timer_afterCompute - timer_start);
+	std::cout << "Solver time for compute step: " << delta_afterCompute.count() << std::endl;
+
+	if (maxwellSolver.info() != Eigen::Success) {
+		std::cout << "Maxwell solver setup failed" << std::endl;
+	}
+
+	auto timer_startSolve = std::chrono::high_resolution_clock::now();
+	xf = maxwellSolver.solve(rhs);
+	auto timer_endSolve = std::chrono::high_resolution_clock::now();
+
+	std::cout << "Maxwell solver finished" << std::endl;
+
+	auto delta_solve = std::chrono::duration<double>(timer_endSolve - timer_startSolve);
+	std::cout << "Solver time for solve step: " << delta_solve.count() << std::endl;
+
+	if (maxwellSolver.info() != Eigen::Success) {
+		std::cout << "Maxwell solver solving failed" << std::endl;
+	}
+
+	std::cout << "# Iterations: " << maxwellSolver.iterations() << std::endl;
+	std::cout << "error:        " << maxwellSolver.error() << std::endl;
+
+	assert(maxwellSolver.info() == Eigen::Success);
+	return xf;
+}
+
+/** 
+* @return matrix Meps such that: J_h = Meps * E_h + J_aux. 
+*/
 Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, const double dt)
 {
-	const bool debug = false;
-
-	Jaux.setZero();
+	const int nDualFaces = dualMesh.getNumberOfFaces();
 	const int nEdges = primalMesh.getNumberOfEdges();
+	Eigen::SparseMatrix<double> Msigma(nDualFaces, nEdges);
+	Jaux.setZero();
 
+	const bool debug = false;
 	if (debug) {
 		// Check if primal edges and dual face normals are oriented in same direction
 		Eigen::VectorXd orientation(nEdges);
@@ -2990,121 +2942,121 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 		assert((orientation.cwiseAbs().array() <= tol).all());
 	}
 
-	// Setup of matrix Meps such that: J_h = Meps * E_h + J_aux
-	const int nDualFaces = dualMesh.getNumberOfFaces();
-	typedef Eigen::Triplet<double> T;
-	std::vector<T> triplets;
-	std::vector<T> triplets_rjNi;
-	for (int i = 0; i < nDualFaces; i++) {
-		const Face * dualFace = dualMesh.getFace(i);
-		const Eigen::Vector3d nhat_i = dualFace->getNormal();
-		const double Ai = dualFace->getArea();
+	if (appmParams.isEulerMaxwellCouplingEnabled) {
 
-		if (i >= nEdges) { continue; }
 
-		auto cellList = dualFace->getCellList();
-		for (auto cell : cellList) {
-			auto cellFaces = cell->getFaceList();
-			const int idxC = cell->getIndex();
-			//auto cc = cell->getCenter();
-			auto cc = primalMesh.getVertex(idxC)->getPosition(); // use vertex position instead of dual cell center (consistent!)
-			const double Vk = cell->getVolume();
+		typedef Eigen::Triplet<double> T;
+		std::vector<T> triplets;
+		std::vector<T> triplets_rjNi;
+		for (int i = 0; i < nDualFaces; i++) {
+			const Face * dualFace = dualMesh.getFace(i);
+			const Eigen::Vector3d nhat_i = dualFace->getNormal();
+			const double Ai = dualFace->getArea();
 
-			for (auto face : cellFaces) {
-				const int j = face->getIndex();
-				
-				if (j >= nEdges) { continue; }
-				
-				const Edge * edge = primalMesh.getEdge(j);
+			if (i >= nEdges) { continue; }
 
-				const Eigen::Vector3d fc = edge->getHalfwayPosition(); // use edge halfway position instead of face center (consistent!)
-				const Eigen::Vector3d rj = fc - cc;
+			auto cellList = dualFace->getCellList();
+			for (auto cell : cellList) {
+				auto cellFaces = cell->getFaceList();
+				const int idxC = cell->getIndex();
+				//auto cc = cell->getCenter();
+				auto cc = primalMesh.getVertex(idxC)->getPosition(); // use vertex position instead of dual cell center (consistent!)
+				const double Vk = cell->getVolume();
 
-				const double Aj = face->getArea();
-				const double Lj = edge->getLength();
-				const int s_kj = cell->getOrientation(face);
-				const double rj_dot_nhat_i = rj.dot(nhat_i);
+				for (auto face : cellFaces) {
+					const int j = face->getIndex();
 
-				double ni_dot_nj = rj.normalized().dot(nhat_i);
-				if (i == j) {
-					assert(abs(abs(ni_dot_nj) - 1) < 1e-14);
-					ni_dot_nj = (ni_dot_nj > 0) ? 1 : -1; // analytical expression to simplify
-				}
+					if (j >= nEdges) { continue; }
 
-				// skip elements that form a small angle; indicate numerical artifacts.
-				if (abs(ni_dot_nj) > 1e-10) {
-					if (debug) {
-						triplets_rjNi.push_back(T(i, j, ni_dot_nj));
+					const Edge * edge = primalMesh.getEdge(j);
+
+					const Eigen::Vector3d fc = edge->getHalfwayPosition(); // use edge halfway position instead of face center (consistent!)
+					const Eigen::Vector3d rj = fc - cc;
+
+					const double Aj = face->getArea();
+					const double Lj = edge->getLength();
+					const int s_kj = cell->getOrientation(face);
+					const double rj_dot_nhat_i = rj.dot(nhat_i);
+
+					double ni_dot_nj = rj.normalized().dot(nhat_i);
+					if (i == j) {
+						assert(abs(abs(ni_dot_nj) - 1) < 1e-14);
+						ni_dot_nj = (ni_dot_nj > 0) ? 1 : -1; // analytical expression to simplify
 					}
 
-					// For all fluid species
-					for (int fidx = 0; fidx < getNFluids(); fidx++) {
-						double value = 0;
-						value = rj_dot_nhat_i * Ai / Vk * Aj / Lj * s_kj; // numerically correct value
-						value = 0.5 * s_kj * ni_dot_nj * (Ai * Aj) / Vk;  // using analytical expression to simplify
-						const int q = particleParams[fidx].electricCharge;
-						const double massRatio = particleParams[fidx].mass;
-						double nk = fluidStates(5 * fidx + 0, idxC);
-						if (!std::isfinite(nk)) {
-							nk = 0;
+					// skip elements that form a small angle; indicate numerical artifacts.
+					if (abs(ni_dot_nj) > 1e-10) {
+						if (debug) {
+							triplets_rjNi.push_back(T(i, j, ni_dot_nj));
 						}
 
-						if (q != 0) {
-							value *= 0.5 * q; // factor because of Rusanov flux
-							value *= 1. / massRatio;
-							value *= nk;
-							triplets.push_back(T(i, j, value));
-
-							if (isFluidEnabled) {
-								double momentumFlux = faceFluxes.col(i).segment(5 * fidx + 1, 3).dot(nhat_i);
-								Jaux(i) -= 0.5 * q * Ai / Vk * Aj * ni_dot_nj * momentumFlux;
+						// For all fluid species
+						for (int fidx = 0; fidx < getNFluids(); fidx++) {
+							double value = 0;
+							value = rj_dot_nhat_i * Ai / Vk * Aj / Lj * s_kj; // numerically correct value
+							value = 0.5 * s_kj * ni_dot_nj * (Ai * Aj) / Vk;  // using analytical expression to simplify
+							const int q = particleParams[fidx].electricCharge;
+							const double massRatio = particleParams[fidx].mass;
+							double nk = fluidStates(5 * fidx + 0, idxC);
+							if (!std::isfinite(nk)) {
+								nk = 0;
 							}
 
-							//if (isMagneticLorentzForceActive) {
-							//	const Eigen::Vector3d nj = face->getNormal();
-							//	//const Eigen::Vector3d nu = fluidStates.col(cell->getIndex()).segment(5*fidx + 1, 3);
-							//	//const Eigen::Vector3d B = Eigen::Vector3d::Zero();
-							//	const Eigen::Vector3d nu_x_B = LorentzForce_magnetic.col(cell->getIndex());;
-							//	Jaux(i) += q * (nu_x_B).dot(nj);
-							//}
+							if (q != 0) {
+								value *= 0.5 * q; // factor because of Rusanov flux
+								value *= 1. / massRatio;
+								value *= nk;
+								triplets.push_back(T(i, j, value));
+
+								if (appmParams.isFluidEnabled) {
+									double momentumFlux = faceFluxes.col(i).segment(5 * fidx + 1, 3).dot(nhat_i);
+									Jaux(i) -= 0.5 * q * Ai / Vk * Aj * ni_dot_nj * momentumFlux;
+								}
+
+								//if (isMagneticLorentzForceActive) {
+								//	const Eigen::Vector3d nj = face->getNormal();
+								//	//const Eigen::Vector3d nu = fluidStates.col(cell->getIndex()).segment(5*fidx + 1, 3);
+								//	//const Eigen::Vector3d B = Eigen::Vector3d::Zero();
+								//	const Eigen::Vector3d nu_x_B = LorentzForce_magnetic.col(cell->getIndex());;
+								//	Jaux(i) += q * (nu_x_B).dot(nj);
+								//}
+							}
 						}
-					}
-				} // end if (abs(ni_dot_nj))
+					} // end if (abs(ni_dot_nj))
+				}
 			}
 		}
+		Jaux *= dt;
+
+		// For debug purpose: geometric informations 
+		if (debug) {
+			Eigen::SparseMatrix<double> M_rjNi(nEdges, nEdges);
+			M_rjNi.setFromTriplets(triplets_rjNi.begin(), triplets_rjNi.end());
+			M_rjNi.makeCompressed();
+			Eigen::sparseMatrixToFile(M_rjNi, "M_rjni.dat");
+		}
+
+		Msigma.setFromTriplets(triplets.begin(), triplets.end());
+		Msigma.makeCompressed();
+
+		const int nInnerEdges = primalMesh.getMeshInfo().nEdgesInner;
+
+		Eigen::SparseMatrix<double> Msigma_inner = Msigma.topLeftCorner(nInnerEdges, nInnerEdges);
+		//Eigen::sparseMatrixToFile(Msigma, "Msigma.dat");
+		//Eigen::sparseMatrixToFile(Msigma_inner, "Msigma_inner.dat");
+
+		//if (Eigen::isSymmetric(Msigma_inner, true)) {
+		//	std::cout << "Matrix is symmetric" << std::endl;
+		//}
+		//if (Eigen::isPositiveDefinite(Msigma_inner, true)) {
+		//	std::cout << "Matrix is positive definite" << std::endl;
+		//}
+
+		//const double showInfo = true;
+		//assert(Eigen::isSymmetricPositiveDefinite(Meps_inner, showInfo));
+
+		//Eigen::sparseMatrixToFile(Q, "Q.dat");
 	}
-	Jaux *= dt;
-
-	// For debug purpose: geometric informations 
-	if (debug) {
-		Eigen::SparseMatrix<double> M_rjNi(nEdges, nEdges);
-		M_rjNi.setFromTriplets(triplets_rjNi.begin(), triplets_rjNi.end());
-		M_rjNi.makeCompressed();
-		Eigen::sparseMatrixToFile(M_rjNi, "M_rjni.dat");
-	}
-
-
-	Eigen::SparseMatrix<double> Msigma(nDualFaces, nEdges);
-	Msigma.setFromTriplets(triplets.begin(), triplets.end());
-	Msigma.makeCompressed();
-
-	const int nInnerEdges = primalMesh.getMeshInfo().nEdgesInner;
-
-	Eigen::SparseMatrix<double> Msigma_inner = Msigma.topLeftCorner(nInnerEdges, nInnerEdges);
-	//Eigen::sparseMatrixToFile(Msigma, "Msigma.dat");
-	//Eigen::sparseMatrixToFile(Msigma_inner, "Msigma_inner.dat");
-
-	//if (Eigen::isSymmetric(Msigma_inner, true)) {
-	//	std::cout << "Matrix is symmetric" << std::endl;
-	//}
-	//if (Eigen::isPositiveDefinite(Msigma_inner, true)) {
-	//	std::cout << "Matrix is positive definite" << std::endl;
-	//}
-
-	//const double showInfo = true;
-	//assert(Eigen::isSymmetricPositiveDefinite(Meps_inner, showInfo));
-
-	//Eigen::sparseMatrixToFile(Q, "Q.dat");
 
 	return Msigma;
 }
