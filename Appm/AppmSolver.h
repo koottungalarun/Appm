@@ -75,7 +75,6 @@ private:
 
 	bool isMaxwellEnabled = false;
 	bool isFluidEnabled = true;
-	double timestepSize = 1.0;
 	int maxIterations = 0;
 	double maxTime = 0;
 	double lambdaSquare = 1.0;
@@ -126,16 +125,12 @@ private:
 
 
 	Eigen::MatrixXd fluidStates;
-	Eigen::MatrixXd fluidStates_new;
 	Eigen::MatrixXd fluidSources;
 	Eigen::MatrixXd LorentzForce_magnetic;
 	Eigen::MatrixXd LorentzForce_electric;
-	Eigen::MatrixXd fluidFluxes;
 	Eigen::MatrixXd faceFluxes;
 
 	Eigen::MatrixXd faceFluxesImExRusanov;
-
-	const int faceIdxRef = -1;
 
 	std::string printSolverParameters() const;
 
@@ -176,9 +171,15 @@ private:
 
 	const double getImplicitExtraTermMomentumFlux(const int cellIdx, const Eigen::Vector3d & faceNormal, const int fluidIdx) const;
 
-	const std::pair<int,int> getAdjacientCellStates(const int faceIdx, const int fluidIdx, Eigen::Vector3d & qL, Eigen::Vector3d & qR) const;
+	const std::pair<int,int> getAdjacientCellStates(const Face * face, const int fluidIdx, Eigen::Vector3d & qL, Eigen::Vector3d & qR) const;
 
-	const double getMomentumUpdate(const int k, const Eigen::Vector3d & nvec, const int fluidIdx) const;
+	//const double getMomentumUpdate(const int k, const Eigen::Vector3d & nvec, const int fluidIdx) const;
+
+	void setFluidFaceFluxes();
+	Eigen::Vector3d getSpeciesFaceFlux(const Face * face, const int fluidIdx);
+	const Eigen::Vector3d getSpeciesFaceFluxAtCathode(const Face * face, const int fluidIdx);
+	void setFluidSourceTerm();
+	void updateFluidStates(const double dt);
 	
 
 	void interpolateMagneticFluxToPrimalVertices();
@@ -229,7 +230,7 @@ private:
 	const Eigen::VectorXd solveMaxwell_BiCGStab(Eigen::SparseMatrix<double> & Mf, Eigen::VectorXd & rhs);
 	const Eigen::VectorXd solveMaxwell_LSCG(Eigen::SparseMatrix<double> & Mf, Eigen::VectorXd & rhs);
 
-	Eigen::SparseMatrix<double> check_Msigma_spd();
+	Eigen::SparseMatrix<double> get_Msigma_spd(Eigen::VectorXd & Jaux, const double dt);
 
 	const Eigen::VectorXd testcase_001_FluidSourceTerm(const double time, const Cell * cell, const int fluidIdx) const;
 	const Eigen::VectorXd setVoltageBoundaryConditions(const int nDirichlet, const double time) const;

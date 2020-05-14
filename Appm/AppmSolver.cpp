@@ -34,7 +34,7 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 		std::cout << "Initialize fluid states: " << "Uniform" << std::endl;
 		double p = 1.0;
 		double n = 1.0;
-		double u = 0.0;
+		double u = 1.0;
 		init_Uniformly(n, p, u);
 	}
 		break;
@@ -81,32 +81,13 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 		isWriteEfield = true;
 	}
 
-	// Check implementation of Ohm's law in implicit-consistent formulation
-	// TODO: to be removed after testing
-	
-	//J_h.setZero();
-	//Eigen::SparseMatrix<double> Msigma;
-	//Msigma = check_Msigma_spd();
-	//set_Efield_uniform(Eigen::Vector3d::UnitZ());
-	//J_h = Msigma * E_h;
-	//J_h = Msigma * E_h + J_h_aux;
-
-	//Eigen::SparseMatrix<double> Msigma;
-	//double dt = timestepSize;
-
 	//set_Bfield_azimuthal();
 	//interpolateMagneticFluxToPrimalVertices();
-
-	//get_Msigma_consistent(dt, Msigma, J_h_aux);
-
-
 
 	// write initial data to file (iteration = 0, time = 0)
 	const int iteration = 0;
 	const double time = 0;
 	writeOutput(iteration, time);
-
-	
 }
 
 
@@ -120,7 +101,7 @@ void AppmSolver::run()
 		return;
 	}
 
-	double dt = timestepSize;
+	double dt = 1.0;
 	double dt_previous = dt;
 	double time = 0;
 	int iteration = 0;
@@ -173,7 +154,7 @@ void AppmSolver::run()
 
 		dt_previous = dt;
 
-		fluidFluxes.setZero();
+		//fluidFluxes.setZero();
 		fluidSources.setZero();
 		faceFluxes.setZero();
 		faceFluxesImExRusanov.setZero();
@@ -181,31 +162,35 @@ void AppmSolver::run()
 		// Determine timestep
 		if (isFluidEnabled) {
 			dt = getNextFluidTimestepSize();
+		}
 
-			// Set explicit fluid source terms
-			for (int idx = 0; idx < nCells; idx++) {
-				const Cell * cell = dualMesh.getCell(idx);
-				if (cell->getFluidType() != Cell::FluidType::FLUID) {
-					continue; // Skip cell that are not of type Fluid 
-				}
-				for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-					assert(idx < fluidStates.cols());
-					assert(5 * fluidIdx + 3 < fluidStates.rows());
-					const Eigen::Vector3d nu = fluidStates.col(idx).segment(5 * fluidIdx + 1, 3);
-					assert(nu.allFinite());
-					const Eigen::Vector3d B = B_vertex.col(idx);
-					assert(B.allFinite());
-					const int q = particleParams[fluidIdx].electricCharge;
-					const double massRatio = particleParams[fluidIdx].mass;
-					const Eigen::Vector3d result = q * 1./massRatio * nu.cross(B);
-					if (!result.allFinite()) {
-						std::cout << "result: " << result.transpose() << std::endl;
+		// Set explicit fluid source terms
+		if (isFluidEnabled) {
+			if (isMagneticLorentzForceActive) {
+				for (int idx = 0; idx < nCells; idx++) {
+					const Cell * cell = dualMesh.getCell(idx);
+					if (cell->getFluidType() != Cell::FluidType::FLUID) {
+						continue; // Skip cell that are not of type Fluid 
 					}
-					assert(result.allFinite());
-					LorentzForce_magnetic.col(idx).segment(3*fluidIdx, 3) = result;
+					for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+						assert(idx < fluidStates.cols());
+						assert(5 * fluidIdx + 3 < fluidStates.rows());
+						const Eigen::Vector3d nu = fluidStates.col(idx).segment(5 * fluidIdx + 1, 3);
+						assert(nu.allFinite());
+						const Eigen::Vector3d B = B_vertex.col(idx);
+						assert(B.allFinite());
+						const int q = particleParams[fluidIdx].electricCharge;
+						const double massRatio = particleParams[fluidIdx].mass;
+						const Eigen::Vector3d result = q * 1. / massRatio * nu.cross(B);
+						if (!result.allFinite()) {
+							std::cout << "result: " << result.transpose() << std::endl;
+							assert(result.allFinite());
+						}
+						LorentzForce_magnetic.col(idx).segment(3 * fluidIdx, 3) = result;
+					}
 				}
+				std::cout << "maxCoeff F_L magnetic: " << LorentzForce_magnetic.cwiseAbs().maxCoeff() << std::endl;
 			}
-			std::cout << "maxCoeff F_L magnetic: " << LorentzForce_magnetic.cwiseAbs().maxCoeff() << std::endl;
 		}
 
 
@@ -431,146 +416,39 @@ void AppmSolver::run()
 			}
 			std::cout << "maxCoeff F_L electric: " << LorentzForce_electric.cwiseAbs().maxCoeff() << std::endl;
 
-
-			
-			// Calculate flux at each dual face
-			for (int fidx = 0; fidx < nFaces; fidx++) {
-				const Face * face = dualMesh.getFace(fidx);
-				const Eigen::Vector3d faceNormal = face->getNormal();
-				assert(std::fabs(faceNormal.norm() -  1) < 16*std::numeric_limits<double>::epsilon());
-				const double faceArea = face->getArea();
-				const std::vector<Cell*> faceCells = face->getCellList();
-				assert(faceCells.size() >= 1);
-
-				// skip faces that have no adjacient fluid cell
-				if (!face->hasFluidCells()) {
-					continue;
-				}
-
-				for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-					Eigen::Vector3d qL, qR;  // left and right cell state at this face
-					double s = 0;            // wavespeed at face
-					const int orientation = getOrientation(faceCells[0], face);
-
-					if (fidx == faceIdxRef) {
-						std::cout << "face idx ref: " << faceIdxRef << std::endl;
-						std::cout << "Face center: " << face->getCenter().transpose() << std::endl;
-						std::cout << "Face normal: " << faceNormal.transpose() << std::endl;
-						std::cout << "orientation: " << orientation << std::endl;
-					}
-
-					// Explicit Rusanov scheme
-					Eigen::Vector3d flux = Eigen::Vector3d::Zero();
-					bool isCollinearZ = faceNormal.cross(Eigen::Vector3d::UnitZ()).norm() < (std::numeric_limits<double>::epsilon() * 128);
-					const Face::FluidType faceFluidType = face->getFluidType();
-					//if (true || isCollinearZ) {
-						//flux = getRusanovFluxExplicit(fidx, fluidIdx);
-					flux = getRusanovFluxImEx(fidx, fluidIdx, dt);
-					//}
-
-					// 3D face flux data vector 
-					Eigen::VectorXd faceFlux3d(5);
-					faceFlux3d(0) = flux(0);
-					faceFlux3d.segment(1, 3) = flux(1) * faceNormal;
-					faceFlux3d(4) = flux(2);
-					
-					// store data
-					faceFluxes.col(fidx).segment(5 * fluidIdx, 5) = faceFlux3d;
-					if (fidx == faceIdxRef) {
-						std::cout << "face flux 3d: " << faceFlux3d.transpose() << std::endl;
-					}
-
-					// multiply flux by face area
-					faceFlux3d *= faceArea;
-
-					const Face::FluidType faceType = getFaceTypeOfFluid(face, fluidIdx);
-					switch (faceType) {
-					case Face::FluidType::INTERIOR: {
-						assert(faceCells.size() == 2);
-						const int idx0 = faceCells[0]->getIndex();
-						const int idx1 = faceCells[1]->getIndex();
-						fluidFluxes.col(idx0).segment(5 * fluidIdx, 5) += orientation * faceFlux3d;
-						fluidFluxes.col(idx1).segment(5 * fluidIdx, 5) -= orientation * faceFlux3d;
-						break;
-					}
-
-					case Face::FluidType::OPENING: {
-						assert(faceCells.size() == 1);
-						const Cell * cell = faceCells[0];
-						assert(cell->getFluidType() == Cell::FluidType::FLUID);
-						fluidFluxes.col(cell->getIndex()).segment(5 * fluidIdx, 5) += orientation * faceFlux3d;
-						break;
-					}
-
-					case Face::FluidType::WALL: {
-						assert(faceCells.size() == 1 || faceCells.size() == 2);
-						const Cell * cell = faceCells[0];
-						if (cell->getFluidType() == Cell::FluidType::FLUID) {
-							const int idx = cell->getIndex();
-							fluidFluxes.col(idx).segment(5 * fluidIdx, 5) += orientation * faceFlux3d;
-						}
-						else {
-							assert(false);
-						}
-						break;
-					}
-
-					default: {
-						std::cout << "Face type not implemented" << std::endl;
-						assert(false);
-						exit(-1);
-					}
-					}
-				}
+			setFluidSourceTerm();
+			setFluidFaceFluxes();
+			// Add momentum terms for implicit mass flux scheme
+			if (massFluxScheme == MassFluxScheme::IMPLICIT_EXPLICIT) {
+				assert(false);
+				//for (int i = 0; i < nFaces; i++) {
+				//	double result = 0;
+				//	const Face * face = dualMesh.getFace(i);
+				//	const Eigen::Vector3d faceNormal = face->getNormal();
+				//	if (!face->hasFluidCells()) { continue; }
+				//	for (int fluidIdx = 0; fluidIdx < getNFluids(); fluidIdx++) {
+				//		if (isRusanovApplied(face, fluidIdx)) {
+				//			double sum = 0;
+				//			std::vector<Cell*> faceCells = face->getCellList();
+				//			for (auto cell : faceCells) {
+				//				const double volume = cell->getVolume();
+				//				double sumOfProjectedMomentumFluxes = 0;
+				//				std::vector<Face*> cellFaces = cell->getFaceList();
+				//				for (auto cellFace : cellFaces) {
+				//					const Eigen::Vector3d faceFlux = faceFluxes.col(cellFace->getIndex()).segment(5 * fluidIdx + 1, 3);
+				//					const double fA = cellFace->getArea();
+				//					sumOfProjectedMomentumFluxes += faceFlux.dot(faceNormal) * fA;
+				//				}								
+				//				sumOfProjectedMomentumFluxes *= 1. / volume;
+				//				sum -= sumOfProjectedMomentumFluxes;
+				//				sum += fluidSources.col(cell->getIndex()).dot(faceNormal);
+				//			}							
+				//			faceFluxes(5 * fluidIdx + 0, i) -= 0.5 * dt * sum;
+				//		}
+				//	}
+				//}
 			}
-
-			// Set source term
-			for (int cIdx = 0; cIdx < nCells; cIdx++) {
-				const Cell * cell = dualMesh.getCell(cIdx);
-
-				// Skip cell that ore not of type Fluid
-				if (cell->getFluidType() != Cell::FluidType::FLUID) {
-					continue;
-				}
-				// For all fluids ... 
-				for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-					Eigen::VectorXd srcLocal(5);
-					srcLocal.setZero();
-
-					srcLocal = testcase_001_FluidSourceTerm(time, cell, fluidIdx);
-
-					//// Define geometric position of source region: ball of radius r around reference position
-					//const Eigen::Vector3d cc = cell->getCenter();
-					//const Eigen::Vector3d srcRefPos(0, 0, 0);
-					//const double srcRadius = 0.2;
-					//if ((cc - srcRefPos).norm() < srcRadius) {
-					//	srcLocal(0) = 0; // mass source
-					//	srcLocal.segment(1, 3) = Eigen::Vector3d::Zero(); // momentum source
-					//	srcLocal(4) = 1; // energy source
-					//}
-
-					// TODO: Lorentz force (electrostatic)
-					// const Eigen::Vector3d Efield_atCellCenter = getEfieldAtDualCellCenter(cIdx);
-					if (isElectricLorentzForceActive) {
-						srcLocal.segment(1, 3) += LorentzForce_electric.col(cIdx).segment(3 * fluidIdx, 3);
-					}
-					if (isMagneticLorentzForceActive) {
-						srcLocal.segment(1, 3) += LorentzForce_magnetic.col(cIdx).segment(3 * fluidIdx, 3);
-					}
-
-					fluidSources.col(cIdx).segment(5 * fluidIdx, 5) = srcLocal;
-				}
-			}
-			std::cout << "fluid sources maxCoeff: " << fluidSources.cwiseAbs().maxCoeff() << std::endl;
-			
-			// Update to next timestep: U(m+1) = U(m) - dt / volume * sum(fluxes)
-			for (int i = 0; i < nCells; i++) {
-				const Cell * cell = dualMesh.getCell(i);
-				double cellVolume = cell->getVolume();
-				fluidStates_new.col(i) = fluidStates.col(i) - dt / cellVolume * fluidFluxes.col(i) + dt * fluidSources.col(i);
-			}
-			fluidStates = fluidStates_new; // update data storage to new timestep
-			fluidStates_new.setZero();     // clear auxiliary data storage
+			updateFluidStates(dt);
 		}
 		std::cout << "dt = " << dt << std::endl;
 
@@ -638,7 +516,6 @@ std::string AppmSolver::printSolverParameters() const
 	ss << "maxTime:        " << maxTime << std::endl;
 	ss << "isFluidEnabled: " << isFluidEnabled << std::endl;
 	ss << "isMaxwellEnabled: " << isMaxwellEnabled << std::endl;
-	ss << "timestepSize: " << timestepSize << std::endl;
 	ss << "lambdaSquare: " << lambdaSquare << std::endl;
 	ss << "massFluxScheme: " << massFluxScheme << std::endl;
 	ss << "initType: " << initType << std::endl;
@@ -656,8 +533,6 @@ void AppmSolver::init_maxwellStates()
 
 	E_h = Eigen::VectorXd::Zero(primalMesh.getNumberOfEdges());
 	B_h = Eigen::VectorXd::Zero(primalMesh.getNumberOfFaces());
-	J_h = Eigen::VectorXd::Zero(dualMesh.getNumberOfFaces());
-	J_h_previous = J_h;
 
 	const Eigen::VectorXi vertexTypes = primalMesh.getVertexTypes();
 	const Eigen::VectorXi edgeTypes = primalMesh.getEdgeTypes();
@@ -723,6 +598,8 @@ void AppmSolver::init_maxwellStates()
 
 
 	const int nFaces = dualMesh.getNumberOfFaces();
+	J_h = Eigen::VectorXd::Zero(nFaces);
+	J_h_previous = J_h;
 
 	J_h_aux = Eigen::VectorXd(nFaces);
 	J_h_aux.setZero();
@@ -860,9 +737,8 @@ void AppmSolver::init_multiFluid(const std::string & filename)
 	const int nCells = dualMesh.getNumberOfCells();
 	const int fluidStateLength = getFluidStateLength();
 	fluidStates = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
-	fluidStates_new = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
 	fluidSources = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
-	fluidFluxes = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
+	//fluidFluxes = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
 
 	const int nFaces = dualMesh.getNumberOfFaces();
 	faceTypeFluids = Eigen::MatrixXi::Zero(nFaces, nFluids);
@@ -1325,25 +1201,31 @@ const int AppmSolver::getOrientation(const Cell * cell, const Face * face) const
 	return orientation;
 }
 
-//const Eigen::Vector3d AppmSolver::getFluidFluxFromState(const Eigen::Vector3d & q) const
-//{
-//	assert(q.norm() > 0);
-//	Eigen::Vector3d flux;
-//	flux(0) = q(1);
-//	flux(1) = 0.5 * (3 - Physics::gamma) * pow(q(1), 2) / q(0) + (Physics::gamma - 1) * q(2);
-//	flux(2) = Physics::gamma * q(1) * q(2) / q(0) - 0.5 * (Physics::gamma - 1) * pow(q(1) / q(0), 2) * q(1);
-//	return flux;
-//}
-
 /**
 * Get the face flux with explicit Rusanov scheme. 
 */
 const Eigen::Vector3d AppmSolver::getRusanovFluxExplicit(const int faceIdx, const int fluidIdx) const
 {
+	assert(false); // Do not use this anymore
+
+	const bool showOutput = false;
 	Eigen::Vector3d qL, qR;
-	getAdjacientCellStates(faceIdx, fluidIdx, qL, qR);
-	const double showOutput = faceIdx == faceIdxRef;
-	return Physics::getRusanovFlux(qL, qR, showOutput); 
+	Eigen::Vector3d faceFlux;
+	faceFlux.setZero();
+
+	const Face * face = dualMesh.getFace(faceIdx);
+	const Face::FluidType faceFluidType = getFaceTypeOfFluid(face, fluidIdx);
+
+	switch (faceFluidType) {
+	case Face::FluidType::INTERIOR:
+		getAdjacientCellStates(face, fluidIdx, qL, qR);
+		faceFlux = Physics::getRusanovFlux(qL, qR, showOutput);
+		break;
+
+
+	}
+
+	return faceFlux; 
 }
 
 const Eigen::Vector3d AppmSolver::getRusanovFluxImEx(const int faceIdx, const int fluidIdx, const double dt) 
@@ -1354,7 +1236,7 @@ const Eigen::Vector3d AppmSolver::getRusanovFluxImEx(const int faceIdx, const in
 	const Face::FluidType faceFluidType = getFaceTypeOfFluid(face, fluidIdx);
 
 	Eigen::Vector3d qL, qR;
-	const std::pair<int, int> adjacientCellIdx = getAdjacientCellStates(faceIdx, fluidIdx, qL, qR);
+	const std::pair<int, int> adjacientCellIdx = getAdjacientCellStates(face, fluidIdx, qL, qR);
 
 	double implicitExtraTerms = 0;
 	int cellIndex;
@@ -1409,9 +1291,9 @@ const double AppmSolver::getImplicitExtraTermMomentumFlux(const int cellIdx, con
 	return result;
 }
 
-const std::pair<int,int> AppmSolver::getAdjacientCellStates(const int faceIdx, const int fluidIdx, Eigen::Vector3d & qL, Eigen::Vector3d & qR) const
+const std::pair<int,int> AppmSolver::getAdjacientCellStates(const Face * face, const int fluidIdx, Eigen::Vector3d & qL, Eigen::Vector3d & qR) const
 {
-	const Face * face = dualMesh.getFace(faceIdx);
+	assert(face != nullptr);
 	const std::vector<Cell*> faceCells = face->getCellList();
 	assert(faceCells.size() >= 1);
 
@@ -1491,21 +1373,153 @@ const std::pair<int,int> AppmSolver::getAdjacientCellStates(const int faceIdx, c
 	return std::pair<int, int>(idxL, idxR);
 }
 
-const double AppmSolver::getMomentumUpdate(const int k, const Eigen::Vector3d & nvec, const int fluidIdx) const
+//const double AppmSolver::getMomentumUpdate(const int k, const Eigen::Vector3d & nvec, const int fluidIdx) const
+//{
+//	double result = 0;
+//	const Cell * cell = dualMesh.getCell(k);
+//	const std::vector<Face*> cellFaces = cell->getFaceList();
+//	for (auto face : cellFaces) {
+//		const double faceArea = face->getArea();
+//		const Eigen::Vector3d faceNormal = face->getNormal();
+//		const Eigen::Vector3d faceFlux = getRusanovFluxExplicit(face->getIndex(), fluidIdx);
+//		const double momentumFlux = faceFlux(1);
+//		double localResult = momentumFlux * faceArea * faceNormal.dot(nvec);
+//		result += localResult;
+//	}
+//	result /= cell->getVolume();
+//	return result;
+//}
+
+/**
+* Set fluid face fluxes at each dual face.
+*/
+void AppmSolver::setFluidFaceFluxes()
 {
-	double result = 0;
-	const Cell * cell = dualMesh.getCell(k);
-	const std::vector<Face*> cellFaces = cell->getFaceList();
-	for (auto face : cellFaces) {
-		const double faceArea = face->getArea();
+	const int nFaces = dualMesh.getNumberOfFaces();
+	const int nFluids = getNFluids();
+
+	for (int fidx = 0; fidx < nFaces; fidx++) {
+		const Face * face = dualMesh.getFace(fidx);
 		const Eigen::Vector3d faceNormal = face->getNormal();
-		const Eigen::Vector3d faceFlux = getRusanovFluxExplicit(face->getIndex(), fluidIdx);
-		const double momentumFlux = faceFlux(1);
-		double localResult = momentumFlux * faceArea * faceNormal.dot(nvec);
-		result += localResult;
+
+		// skip faces that have no adjacient fluid cell
+		if (!face->hasFluidCells()) { continue;	}
+
+		for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+			Eigen::VectorXd faceFlux3d(5);
+			Eigen::Vector3d flux = getSpeciesFaceFlux(face, fluidIdx);
+			faceFlux3d(0) = flux(0);
+			faceFlux3d.segment(1, 3) = flux(1) * faceNormal;
+			faceFlux3d(4) = flux(2);
+			faceFluxes.col(fidx).segment(5 * fluidIdx, 5) = faceFlux3d;
+		}
 	}
-	result /= cell->getVolume();
-	return result;
+}
+
+Eigen::Vector3d AppmSolver::getSpeciesFaceFlux(const Face * face, const int fluidIdx)
+{
+	assert(face != nullptr);
+	assert(fluidIdx >= 0);
+	assert(fluidIdx < getNFluids());
+
+	Eigen::Vector3d flux;
+	flux.setZero();
+
+	Face::FluidType faceFluidType = face->getFluidType();
+	const bool isElectronFluid = particleParams[fluidIdx].electricCharge < 0;
+	const bool isCathode = faceFluidType == Face::FluidType::TERMINAL && face->getCenter()(2) < 0; // TODO
+
+	if (false && isCathode && isElectronFluid) {
+		flux = getSpeciesFaceFluxAtCathode(face, fluidIdx);
+	}
+	else {
+		Eigen::Vector3d qL, qR;
+		std::pair<int,int> cellIndices = getAdjacientCellStates(face, fluidIdx, qL, qR);
+		flux = Physics::getRusanovFlux(qL, qR);
+	}
+	return flux;
+}
+
+const Eigen::Vector3d AppmSolver::getSpeciesFaceFluxAtCathode(const Face * face, const int fluidIdx)
+{
+	const double Ts = 3695; // melting point of Wolfram, Kelvin
+	const double workFunction = 4.55; // units: eV
+	const double j_em = Physics::thermionicEmissionCurrentDensity(Ts, workFunction); 
+
+	// Check if face is at cathode terminal and we have an electron fluid
+	const bool isElectronFluid = particleParams[fluidIdx].electricCharge < 0;
+	assert(isElectronFluid);
+	Face::FluidType faceFluidType = face->getFluidType();
+	assert(faceFluidType == Face::FluidType::TERMINAL);
+
+	// Set a default value for testing
+	Eigen::Vector3d flux;
+	flux(0) = 1;
+	flux(1) = 2;
+	flux(2) = 1;
+
+	flux(1) *= face->getNormal().dot(Eigen::Vector3d::UnitZ());
+	flux *= face->getNormal().dot(Eigen::Vector3d::UnitZ());
+	return flux;
+}
+
+void AppmSolver::setFluidSourceTerm()
+{
+	const int nCells = dualMesh.getNumberOfCells();
+	const int nFluids = getNFluids();
+
+	// Set source term
+	for (int cIdx = 0; cIdx < nCells; cIdx++) {
+		const Cell * cell = dualMesh.getCell(cIdx);
+
+		// Skip cell that ore not of type Fluid
+		if (cell->getFluidType() != Cell::FluidType::FLUID) {
+			continue;
+		}
+		// For all fluids ... 
+		for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+			Eigen::VectorXd srcLocal(5);
+			srcLocal.setZero();
+
+			//srcLocal = testcase_001_FluidSourceTerm(time, cell, fluidIdx);
+
+			if (isElectricLorentzForceActive) {
+				srcLocal.segment(1, 3) += LorentzForce_electric.col(cIdx).segment(3 * fluidIdx, 3);
+			}
+			if (isMagneticLorentzForceActive) {
+				srcLocal.segment(1, 3) += LorentzForce_magnetic.col(cIdx).segment(3 * fluidIdx, 3);
+			}
+
+			// TODO: reaction source terms
+
+			fluidSources.col(cIdx).segment(5 * fluidIdx, 5) = srcLocal;
+		}
+	}
+	std::cout << "fluid sources maxCoeff: " << fluidSources.cwiseAbs().maxCoeff() << std::endl;
+}
+
+/** 
+* Update to next timestep: U(m+1) = U(m) - dt / volume * sum(fluxes) + dt * source.
+*/
+void AppmSolver::updateFluidStates(const double dt)
+{
+	const int nCells = dualMesh.getNumberOfCells();
+	for (int k = 0; k < nCells; k++) {
+		const Cell * cell = dualMesh.getCell(k);
+		double cellVolume = cell->getVolume();
+
+		// get sum of face fluxes
+		Eigen::VectorXd sumOfFaceFluxes(faceFluxes.rows());
+		sumOfFaceFluxes.setZero();
+		const std::vector<Face*> cellFaces = cell->getFaceList();
+		for (auto face : cellFaces) {
+			const double faceArea = face->getArea();
+			const int orientation = getOrientation(cell, face);
+			sumOfFaceFluxes += orientation * faceFluxes.col(face->getIndex()) * faceArea;
+		}
+		// Update state values
+		fluidStates.col(k) += -dt / cellVolume * sumOfFaceFluxes + dt * fluidSources.col(k);
+	}
 }
 
 
@@ -1750,9 +1764,11 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 {
 	const int nFluids = this->getNFluids();
 	const int nCells = dualMesh.getNumberOfCells();
+	const int nFaces = dualMesh.getNumberOfFaces();
 
 	for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-		const std::string fluidTag = (std::stringstream() << "/fluid" << fluidIdx << "-").str();
+		const std::string fluidName = particleParams[fluidIdx].name;
+		const std::string fluidTag = (std::stringstream() << "/" << fluidName << "-").str();
 		const std::string pressureTag = fluidTag + "pressure";
 		const std::string velocityTag = fluidTag + "velocity";
 		const std::string densityTag = fluidTag + "density";
@@ -1805,34 +1821,31 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 			writer.writeData(qU, stateU);
 			writer.writeData(qE, stateE);
 		}
-	}
-
-	const int nFaces = dualMesh.getNumberOfFaces();
-	for (int nf = 0; nf < nFluids; nf++) {
+	
 		assert(faceFluxes.cols() == nFaces);
 		assert(faceFluxes.rows() == 5 * getNFluids());
 		{
 			Eigen::VectorXd faceFluxMass;
-			faceFluxMass = faceFluxes.row(5 * nf + 0);
+			faceFluxMass = faceFluxes.row(5 * fluidIdx + 0);
 			assert(faceFluxMass.size() == nFaces);
-			writer.writeData(faceFluxMass, (std::stringstream() << "/faceFluxMass" << nf).str());
+			writer.writeData(faceFluxMass, (std::stringstream() << fluidTag << "massFlux").str());
 		}
 		{
 			Eigen::MatrixXd faceFluxMomentum;
-			faceFluxMomentum = faceFluxes.block(5 * nf + 1, 0, 3, nFaces);
+			faceFluxMomentum = faceFluxes.block(5 * fluidIdx + 1, 0, 3, nFaces);
 			assert(faceFluxMomentum.rows() == 3);
 			assert(faceFluxMomentum.cols() == nFaces);
-			writer.writeData(faceFluxMomentum, (std::stringstream() << "/faceFluxMomentum" << nf).str());
+			writer.writeData(faceFluxMomentum, (std::stringstream() << fluidTag << "momentumFlux").str());
 		}
 		{
 			Eigen::VectorXd faceFluxEnergy;
-			faceFluxEnergy = faceFluxes.row(5 * nf + 4);
+			faceFluxEnergy = faceFluxes.row(5 * fluidIdx + 4);
 			assert(faceFluxEnergy.size() == nFaces);
-			writer.writeData(faceFluxEnergy, (std::stringstream() << "/faceFluxEnergy" << nf).str());
+			writer.writeData(faceFluxEnergy, (std::stringstream() << fluidTag << "energyFlux").str());
 		}
 		{
-			const Eigen::VectorXi faceTypeFluid = faceTypeFluids.col(nf);
-			writer.writeData(faceTypeFluid, (std::stringstream() << "/faceTypeFluid" << nf).str());
+			const Eigen::VectorXi faceTypeFluid = faceTypeFluids.col(fluidIdx);
+			writer.writeData(faceTypeFluid, (std::stringstream() << fluidTag << "faceType").str());
 		}
 	}
 
@@ -2388,9 +2401,6 @@ void AppmSolver::readParameters(const std::string & filename)
 		if (tag == "isMaxwellEnabled") {
 			std::istringstream(line.substr(pos + 1)) >> this->isMaxwellEnabled;
 		}
-		if (tag == "timestepSize") {
-			std::istringstream(line.substr(pos + 1)) >> this->timestepSize;
-		}
 		if (tag == "lambdaSquare") {
 			std::istringstream(line.substr(pos + 1)) >> this->lambdaSquare;
 		}
@@ -2604,9 +2614,9 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
-	for (int i = 0; i < getNFluids(); i++) {
-		std::string attributeName = (std::stringstream() << "Face Type Fluid " << i).str();
-		std::string dataName = (std::stringstream() << "faceTypeFluid" << i).str();
+	for (int fidx = 0; fidx < getNFluids(); fidx++) {
+		std::string attributeName = (std::stringstream() << particleParams[fidx].name <<" Face Type").str();
+		std::string dataName = (std::stringstream() << particleParams[fidx].name <<"-faceType").str();
 		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 			<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
@@ -2614,27 +2624,27 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
-		attributeName = (std::stringstream() << "Face Flux Mass " << i).str();
+		attributeName = (std::stringstream() << particleParams[fidx].name << " Face Mass Flux").str();
 		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << "appm-" << iteration << ".h5:/faceFluxMass" << i << std::endl;
+		ss << "appm-" << iteration << ".h5:/" << particleParams[fidx].name << "-massFlux" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
-		attributeName = (std::stringstream() << "Face Flux Momentum " << i).str();
+		attributeName = (std::stringstream() << particleParams[fidx].name << " Face Momentum Flux").str();
 		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << "appm-" << iteration << ".h5:/faceFluxMomentum" << i << std::endl;
+		ss << "appm-" << iteration << ".h5:/" << particleParams[fidx].name << "-momentumFlux" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
-		attributeName = (std::stringstream() << "Face Flux Energy " << i).str();
+		attributeName = (std::stringstream() << particleParams[fidx].name << " Face Energy Flux").str();
 		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << "appm-" << iteration << ".h5:/faceFluxEnergy" << i << std::endl;
+		ss << "appm-" << iteration << ".h5:/" << particleParams[fidx].name << "-energyFlux" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 	}
@@ -2647,7 +2657,7 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 	ss << "</Attribute>" << std::endl;
 	
 
-	ss << "<Attribute Name=\"J_h_aux_Vector\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+	ss << "<Attribute Name=\"J_h_aux\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
 	ss << "appm-" << iteration << ".h5:/J_h_aux_vector" << std::endl;
@@ -2705,7 +2715,7 @@ const std::string AppmSolver::xdmf_GridDualCells(const int iteration) const
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
-	ss << "<Attribute Name=\"Ecc\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+	ss << "<Attribute Name=\"Electric Field Cell Centered\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << " 3\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
 	ss << datafilename << ":/Ecc" << std::endl;
@@ -2729,72 +2739,72 @@ const std::string AppmSolver::fluidXdmfOutput(const std::string & datafilename) 
 	const int nFluids = this->getNFluids();
 	const int nCells = dualMesh.getNumberOfCells();
 	for (int k = 0; k < nFluids; k++) {
-		const std::string fluidName = (std::stringstream() << "" << k).str();
+		const std::string fluidName = (std::stringstream() << particleParams[k].name).str();
 
-		ss << "<Attribute Name=\"Density " << fluidName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+		ss << "<Attribute Name=\"" << fluidName << " density" << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << nCells << "\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << datafilename << ":/" << "fluid" << k << "-density" << std::endl;
+		ss << datafilename << ":/" << fluidName << "-density" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
-		ss << "<Attribute Name=\"Number Density " << fluidName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+		ss << "<Attribute Name=\"" << fluidName << " number density" << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << nCells << "\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << datafilename << ":/" << "fluid" << k << "-numberDensity" << std::endl;
+		ss << datafilename << ":/" << fluidName << "-numberDensity" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
-		ss << "<Attribute Name=\"Pressure " << fluidName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+		ss << "<Attribute Name=\"" << fluidName << " pressure" << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << nCells << "\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << datafilename << ":/" << "fluid" << k << "-pressure" << std::endl;
+		ss << datafilename << ":/" << fluidName << "-pressure" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
 
-		ss << "<Attribute Name=\"Velocity " << fluidName << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+		ss << "<Attribute Name=\"" << fluidName << " velocity" << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << nCells << " 3\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << datafilename << ":/" << "fluid" << k << "-velocity" << std::endl;
+		ss << datafilename << ":/" << fluidName << "-velocity" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
 		ss << "<Attribute Name=\"Electric Lorentz Force\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << " 3\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << datafilename << ":/" << "fluid" << k << "-LorentzForceEl" << std::endl;
+		ss << datafilename << ":/" << fluidName << "-LorentzForceEl" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
 		ss << "<Attribute Name=\"Magnetic Lorentz Force\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << " 3\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << datafilename << ":/" << "fluid" << k << "-LorentzForceMag" << std::endl;
+		ss << datafilename << ":/" << fluidName << "-LorentzForceMag" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
 
 		if (isStateWrittenToOutput) {
-			ss << "<Attribute Name=\"stateN " << fluidName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+			ss << "<Attribute Name=\"" << fluidName << " state N" << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 			ss << "<DataItem Dimensions=\"" << nCells << "\""
 				<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-			ss << datafilename << ":/" << "fluid" << k << "-stateN" << std::endl;
+			ss << datafilename << ":/" << fluidName << "-stateN" << std::endl;
 			ss << "</DataItem>" << std::endl;
 			ss << "</Attribute>" << std::endl;
 
 
-			ss << "<Attribute Name=\"stateU " << fluidName << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+			ss << "<Attribute Name=\"" << fluidName << " stateU\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 			ss << "<DataItem Dimensions=\"" << nCells << " 3\""
 				<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-			ss << datafilename << ":/" << "fluid" << k << "-stateU" << std::endl;
+			ss << datafilename << ":/" << fluidName << "-stateU" << std::endl;
 			ss << "</DataItem>" << std::endl;
 			ss << "</Attribute>" << std::endl;
 
-			ss << "<Attribute Name=\"stateE " << fluidName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+			ss << "<Attribute Name=\"" << fluidName << " stateE\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 			ss << "<DataItem Dimensions=\"" << nCells << "\""
 				<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-			ss << datafilename << ":/" << "fluid" << k << "-stateE" << std::endl;
+			ss << datafilename << ":/" << fluidName << "-stateE" << std::endl;
 			ss << "</DataItem>" << std::endl;
 			ss << "</Attribute>" << std::endl;
 		}
@@ -2955,24 +2965,30 @@ const Eigen::VectorXd AppmSolver::solveMaxwell_LSCG(Eigen::SparseMatrix<double>&
 	return xf;
 }
 
-Eigen::SparseMatrix<double> AppmSolver::check_Msigma_spd()
+Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, const double dt)
 {
+	const bool debug = false;
+
+	Jaux.setZero();
 	const int nEdges = primalMesh.getNumberOfEdges();
 
-	// Check if primal edges and dual face normals are oriented in same direction
-	Eigen::VectorXd orientation(nEdges);
-	orientation.setZero();
-	for (int i = 0; i < nEdges; i++) {
-		const Edge * edge = primalMesh.getEdge(i);
-		const Eigen::Vector3d Lhat = edge->getDirection().normalized();
+	if (debug) {
+		// Check if primal edges and dual face normals are oriented in same direction
+		Eigen::VectorXd orientation(nEdges);
+		orientation.setZero();
+		for (int i = 0; i < nEdges; i++) {
+			const Edge * edge = primalMesh.getEdge(i);
+			const Eigen::Vector3d Lhat = edge->getDirection().normalized();
 
-		const Face * face = dualMesh.getFace(i);
-		const Eigen::Vector3d nhat = face->getNormal();
+			const Face * face = dualMesh.getFace(i);
+			const Eigen::Vector3d nhat = face->getNormal();
 
-		orientation(i) = Lhat.dot(nhat);
+			orientation(i) = Lhat.dot(nhat); // this value should be equal to 1.000
+		}
+		orientation.array() -= 1;
+		const double tol = 4 * std::numeric_limits<double>::epsilon();
+		assert((orientation.cwiseAbs().array() <= tol).all());
 	}
-	const double tol = std::numeric_limits<double>::epsilon();
-	assert(orientation.minCoeff() >= (1 - tol) && orientation.maxCoeff() <= (1 + tol));
 
 	// Setup of matrix Meps such that: J_h = Meps * E_h + J_aux
 	const int nDualFaces = dualMesh.getNumberOfFaces();
@@ -2985,6 +3001,7 @@ Eigen::SparseMatrix<double> AppmSolver::check_Msigma_spd()
 		const double Ai = dualFace->getArea();
 
 		if (i >= nEdges) { continue; }
+
 		auto cellList = dualFace->getCellList();
 		for (auto cell : cellList) {
 			auto cellFaces = cell->getFaceList();
@@ -3016,8 +3033,11 @@ Eigen::SparseMatrix<double> AppmSolver::check_Msigma_spd()
 
 				// skip elements that form a small angle; indicate numerical artifacts.
 				if (abs(ni_dot_nj) > 1e-10) {
-					triplets_rjNi.push_back(T(i, j, ni_dot_nj));
+					if (debug) {
+						triplets_rjNi.push_back(T(i, j, ni_dot_nj));
+					}
 
+					// For all fluid species
 					for (int fidx = 0; fidx < getNFluids(); fidx++) {
 						double value = 0;
 						value = rj_dot_nhat_i * Ai / Vk * Aj / Lj * s_kj; // numerically correct value
@@ -3029,22 +3049,39 @@ Eigen::SparseMatrix<double> AppmSolver::check_Msigma_spd()
 							nk = 0;
 						}
 
-						
 						if (q != 0) {
 							value *= 0.5 * q; // factor because of Rusanov flux
 							value *= 1. / massRatio;
 							value *= nk;
 							triplets.push_back(T(i, j, value));
+
+							if (isFluidEnabled) {
+								double momentumFlux = faceFluxes.col(i).segment(5 * fidx + 1, 3).dot(nhat_i);
+								Jaux(i) -= 0.5 * q * Ai / Vk * Aj * ni_dot_nj * momentumFlux;
+							}
+
+							//if (isMagneticLorentzForceActive) {
+							//	const Eigen::Vector3d nj = face->getNormal();
+							//	//const Eigen::Vector3d nu = fluidStates.col(cell->getIndex()).segment(5*fidx + 1, 3);
+							//	//const Eigen::Vector3d B = Eigen::Vector3d::Zero();
+							//	const Eigen::Vector3d nu_x_B = LorentzForce_magnetic.col(cell->getIndex());;
+							//	Jaux(i) += q * (nu_x_B).dot(nj);
+							//}
 						}
 					}
 				} // end if (abs(ni_dot_nj))
 			}
 		}
 	}
-	Eigen::SparseMatrix<double> M_rjNi(nEdges, nEdges);
-	M_rjNi.setFromTriplets(triplets_rjNi.begin(), triplets_rjNi.end());
-	M_rjNi.makeCompressed();
-	Eigen::sparseMatrixToFile(M_rjNi, "M_rjni.dat");
+	Jaux *= dt;
+
+	// For debug purpose: geometric informations 
+	if (debug) {
+		Eigen::SparseMatrix<double> M_rjNi(nEdges, nEdges);
+		M_rjNi.setFromTriplets(triplets_rjNi.begin(), triplets_rjNi.end());
+		M_rjNi.makeCompressed();
+		Eigen::sparseMatrixToFile(M_rjNi, "M_rjni.dat");
+	}
 
 
 	Eigen::SparseMatrix<double> Msigma(nDualFaces, nEdges);
@@ -3054,15 +3091,15 @@ Eigen::SparseMatrix<double> AppmSolver::check_Msigma_spd()
 	const int nInnerEdges = primalMesh.getMeshInfo().nEdgesInner;
 
 	Eigen::SparseMatrix<double> Msigma_inner = Msigma.topLeftCorner(nInnerEdges, nInnerEdges);
-	Eigen::sparseMatrixToFile(Msigma, "Msigma.dat");
-	Eigen::sparseMatrixToFile(Msigma_inner, "Msigma_inner.dat");
+	//Eigen::sparseMatrixToFile(Msigma, "Msigma.dat");
+	//Eigen::sparseMatrixToFile(Msigma_inner, "Msigma_inner.dat");
 
-	if (Eigen::isSymmetric(Msigma_inner, true)) {
-		std::cout << "Matrix is symmetric" << std::endl;
-	}
-	if (Eigen::isPositiveDefinite(Msigma_inner, true)) {
-		std::cout << "Matrix is positive definite" << std::endl;
-	}
+	//if (Eigen::isSymmetric(Msigma_inner, true)) {
+	//	std::cout << "Matrix is symmetric" << std::endl;
+	//}
+	//if (Eigen::isPositiveDefinite(Msigma_inner, true)) {
+	//	std::cout << "Matrix is positive definite" << std::endl;
+	//}
 
 	//const double showInfo = true;
 	//assert(Eigen::isSymmetricPositiveDefinite(Meps_inner, showInfo));

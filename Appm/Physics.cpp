@@ -64,7 +64,7 @@ const double Physics::getMaxWavespeed(const Eigen::Vector3d & qL, const Eigen::V
 	return s;
 }
 
-const Eigen::VectorXd Physics::getRusanovFlux(const Eigen::VectorXd & qL, const Eigen::VectorXd & qR, const bool showOutput)
+const Eigen::Vector3d Physics::getRusanovFlux(const Eigen::Vector3d & qL, const Eigen::Vector3d & qR, const bool showOutput)
 {
 	const Eigen::Vector3d fL = Physics::getFluidFluxFromState(qL);
 	const Eigen::Vector3d fR = Physics::getFluidFluxFromState(qR);
@@ -79,4 +79,12 @@ const Eigen::VectorXd Physics::getRusanovFlux(const Eigen::VectorXd & qL, const 
 		std::cout << "flux:\t" << flux.transpose() << std::endl;
 	}
 	return flux;
+}
+
+const double Physics::thermionicEmissionCurrentDensity(const double Ts, const double W)
+{
+	const double A = 0.5 * 1.20173e6;    // universal constant (units: A m^-2 K^-2)
+	const double kB = 8.617333262145e-5; // Boltzmann constant (units: eV K^-1 )
+	const double j_em = A * pow(Ts, 2) * exp(-W / (kB * Ts));
+	return j_em;
 }

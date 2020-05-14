@@ -19,6 +19,9 @@ public:
 
 	static const Eigen::Vector3d getFluidFluxFromState(const Eigen::Vector3d & q);
 
-	static const Eigen::VectorXd getRusanovFlux(const Eigen::VectorXd & qL, const Eigen::VectorXd & qR, const bool showOutput = false);
+	static const Eigen::Vector3d getRusanovFlux(const Eigen::Vector3d & qL, const Eigen::Vector3d & qR, const bool showOutput = false);
+
+
+	static const double thermionicEmissionCurrentDensity(const double Ts, const double W);
 };
 
