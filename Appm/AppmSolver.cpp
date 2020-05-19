@@ -34,7 +34,7 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 		std::cout << "Initialize fluid states: " << "Uniform" << std::endl;
 		double p = 1.0;
 		double n = 1.0;
-		double u = 1.0;
+		double u = 0.0;
 		init_Uniformly(n, p, u);
 	}
 		break;
@@ -83,16 +83,16 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 
 	//set_Efield_uniform(Eigen::Vector3d::UnitZ());
 	//E_cc = getEfieldAtCellCenter();
-	setFluidFaceFluxes();
-	double dt = getNextFluidTimestepSize();
-	E_h.setZero();
-	Eigen::SparseMatrix<double> Msigma;
-	Msigma = get_Msigma_spd(J_h_aux, dt);
-	const int nEdges = primalMesh.getNumberOfEdges();
-	J_h = Msigma * E_h + J_h_aux;
-	J_h = J_h_aux;
-	assert(J_h.size() == nFaces);
-	assert(J_h_aux.size() == nFaces);
+	//setFluidFaceFluxes();
+	//double dt = getNextFluidTimestepSize();
+	////E_h.setZero();
+	//Eigen::SparseMatrix<double> Msigma;
+	//Msigma = get_Msigma_spd(J_h_aux, dt);
+	//const int nEdges = primalMesh.getNumberOfEdges();
+	//J_h = Msigma * E_h + J_h_aux;
+	//J_h = J_h_aux;
+	//assert(J_h.size() == nFaces);
+	//assert(J_h_aux.size() == nFaces);
 
 	//set_Bfield_azimuthal();
 	//interpolateMagneticFluxToPrimalVertices();
@@ -101,6 +101,11 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	const int iteration = 0;
 	const double time = 0;
 	writeOutput(iteration, time);
+
+	J_h_aux.setZero();
+	J_h.setZero();
+	E_h.setZero();
+	E_cc = getEfieldAtCellCenter();
 }
 
 
@@ -1203,6 +1208,7 @@ Eigen::Vector3d AppmSolver::getSpeciesFaceFlux(const Face * face, const int flui
 	assert(face != nullptr);
 	assert(fluidIdx >= 0);
 	assert(fluidIdx < getNFluids());
+	const int faceIdx = face->getIndex();
 
 	Eigen::Vector3d flux;
 	flux.setZero();
@@ -1341,6 +1347,17 @@ void AppmSolver::solveMaxwellSystem(const double time, const double dt, const do
 	M.makeCompressed();
 	//Eigen::sparseMatrixToFile(M, "M.dat");
 
+	double dt_ratio = dt / dt_previous;
+
+	// Data vector for right hand side
+	Eigen::VectorXd rhs(x.size());
+	rhs.setZero();
+	rhs = M1 * (1 + dt_ratio) * maxwellState;
+	rhs -= dt_ratio * M1 * maxwellStatePrevious;
+	//rhs += dt * Q.transpose() * Msigma_inner * Q * maxwellState;
+	rhs -= dt * Q.transpose() * (J_h_aux - J_h).topRows(nEdges);
+
+
 	// The system of equations has fixed and free values; 
 	// - fixed values: electric potential at terminals (Dirichlet boundary condition)
 	// - free  values: electric potential at non-terminal vertices, and electric voltages at non-boundary edges
@@ -1358,15 +1375,6 @@ void AppmSolver::solveMaxwellSystem(const double time, const double dt, const do
 	// Data vector for degrees of freedom
 	Eigen::VectorXd xf(nFree); // Vector of free coefficients
 	Eigen::VectorXd xd = setVoltageBoundaryConditions(nDirichlet, time);
-
-	double dt_ratio = dt / dt_previous;
-
-	// Data vector for right hand side
-	Eigen::VectorXd rhs(x.size());
-	rhs.setZero();
-	rhs = M1 * (1 + dt_ratio) * maxwellState
-		+ dt * Q.transpose() * Msigma_inner * Q * maxwellState
-		- dt_ratio * M1 * maxwellStatePrevious;
 
 	// Subtract Dirichlet values from left side
 	rhs -= Md * xd;
@@ -2762,6 +2770,10 @@ const Eigen::VectorXd AppmSolver::solveMaxwell_PardisoLU(Eigen::SparseMatrix<dou
 	auto delta_solve = std::chrono::duration<double>(timer_endSolve - timer_startSolve);
 	std::cout << "Solver time for solve step: " << delta_solve.count() << std::endl;
 
+	Eigen::VectorXd residual = rhs - Mf * xf;
+	double rms = std::sqrt(residual.cwiseAbs2().sum() / residual.size());
+	std::cout << "maxRes: \t" << residual.cwiseAbs().maxCoeff() << std::endl;
+	std::cout << "rms:    \t" << rms << std::endl;
 	if (maxwellSolver.info() != Eigen::Success) {
 		std::cout << "Maxwell solver solving failed" << std::endl;
 	}
@@ -3118,7 +3130,7 @@ const Eigen::VectorXd AppmSolver::setVoltageBoundaryConditions(const int nDirich
 	assert(nDirichlet % 2 == 0);
 
 	// Set voltage values at terminal A (stressed electrode)
-	xd.topRows(nDirichlet / 2).array() = 1;
+	xd.topRows(nDirichlet / 2).array() = 0; // *0.5 * (1 + tanh((time - 1) / 0.1));
 
 	// Set voltage condition to zero at terminal B (grounded electrode)
 	xd.bottomRows(nDirichlet / 2).array() = 0;
