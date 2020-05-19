@@ -178,7 +178,7 @@ void Mesh::writeToFile()
 	Eigen::VectorXi cellType(nCells);
 	for (int i = 0; i < nCells; i++) {
 		cellCenters.col(i) = getCell(i)->getCenter();
-		cellType(i) = static_cast<int>(getCell(i)->getFluidType());
+		cellType(i) = static_cast<int>(getCell(i)->getType());
 	}
 	h5writer.writeData(cellCenters, "/cellCenter");
 	h5writer.writeData(cellType, "/cellFluidType");

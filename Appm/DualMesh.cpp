@@ -402,10 +402,10 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal, const double terminalRad
 		const Vertex * vertex = primal.getVertex(i);
 		Cell * cell = getCell(i);
 		if (vertex->getType() == Vertex::Type::Terminal) {
-			cell->setFluidType(Cell::FluidType::ELECTRODE);
+			cell->setType(Cell::Type::ELECTRODE);
 		}
-		if (vertex->isBoundary() && cell->getFluidType() == Cell::FluidType::FLUID) {
-			cell->setFluidType(Cell::FluidType::GHOST);
+		if (vertex->isBoundary() && cell->getType() == Cell::Type::FLUID) {
+			cell->setType(Cell::Type::GHOST);
 		}
 	}
 
@@ -414,10 +414,10 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal, const double terminalRad
 	Eigen::VectorXi cellTypes(nCells);
 	cellTypes.setZero();
 	for (int i = 0; i < nCells; i++) {
-		cellTypes(i) = static_cast<int>(getCell(i)->getFluidType());
+		cellTypes(i) = static_cast<int>(getCell(i)->getType());
 	}
-	const int nSolidCells = (cellTypes.array() == static_cast<int>(Cell::FluidType::SOLID)).count();
-	const int nFluidCells = (cellTypes.array() == static_cast<int>(Cell::FluidType::FLUID)).count();
+	const int nSolidCells = (cellTypes.array() == static_cast<int>(Cell::Type::SOLID)).count();
+	const int nFluidCells = (cellTypes.array() == static_cast<int>(Cell::Type::FLUID)).count();
 	std::cout << "Number of cell types: " << std::endl;
 	std::cout << "  Solid: " << nSolidCells << std::endl;
 	std::cout << "  Fluid: " << nFluidCells << std::endl;
@@ -574,18 +574,18 @@ void DualMesh::init_cellFluidType()
 {
 	const int nCells = this->getNumberOfCells();
 	for (int i = 0; i < nCells; i++) {
-		Cell::FluidType fluidType;
+		Cell::Type fluidType;
 		Cell * cell = getCell(i);
 		const Eigen::Vector3d cellCenter = cell->getCenter();
 		const Eigen::Vector2d cellCenter2d = cellCenter.segment(0, 2);
 
 		if (cellCenter2d.norm() < 1) {
-			fluidType = Cell::FluidType::FLUID;
+			fluidType = Cell::Type::FLUID;
 		}
 		else {
-			fluidType = Cell::FluidType::SOLID;
+			fluidType = Cell::Type::SOLID;
 		}
-		cell->setFluidType(fluidType);
+		cell->setType(fluidType);
 	}
 }
 
@@ -605,16 +605,16 @@ void DualMesh::init_faceFluidType(const double terminalRadius)
 		int nGhostCells = 0;
 		int nElectrodeCells = 0;
 		for (auto cell : faceCells) {
-			if (cell->getFluidType() == Cell::FluidType::FLUID) {
+			if (cell->getType() == Cell::Type::FLUID) {
 				nFluidCells++;
 			}
-			if (cell->getFluidType() == Cell::FluidType::SOLID) {
+			if (cell->getType() == Cell::Type::SOLID) {
 				nSolidCells++;
 			}
-			if (cell->getFluidType() == Cell::FluidType::GHOST) {
+			if (cell->getType() == Cell::Type::GHOST) {
 				nGhostCells++;
 			}
-			if (cell->getFluidType() == Cell::FluidType::ELECTRODE) {
+			if (cell->getType() == Cell::Type::ELECTRODE) {
 				nElectrodeCells++;
 			}
 		}

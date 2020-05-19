@@ -127,7 +127,7 @@ void FluidSolver::updateFaceFluxOpening(const int faceIdx)
 	const int nFaceCells = faceCells.size();
 	assert(nFaceCells == 1);
 	Cell * cell = faceCells[0];
-	assert(cell->getFluidType() == Cell::FluidType::FLUID);
+	assert(cell->getType() == Cell::Type::FLUID);
 
 	int idxC = cell->getIndex();
 	const int orientation = (face->getCenter() - cell->getCenter()).dot(faceNormal) > 0 ? 1 : -1;
@@ -172,12 +172,12 @@ void FluidSolver::updateFaceFluxWall(const int faceIdx)
 		cell = faceCells[0];
 		break;
 	case 2:
-		cell = (faceCells[0]->getFluidType() == Cell::FluidType::FLUID) ? faceCells[0] : faceCells[1];
+		cell = (faceCells[0]->getType() == Cell::Type::FLUID) ? faceCells[0] : faceCells[1];
 		break;
 	default:
 		assert(nFaceCells >= 1 && nFaceCells <= 2);
 	}
-	assert(cell->getFluidType() == Cell::FluidType::FLUID);
+	assert(cell->getType() == Cell::Type::FLUID);
 	int idxC = cell->getIndex();
 
 	const int orientation = (face->getCenter() - cell->getCenter()).dot(faceNormal) > 0 ? 1 : -1;

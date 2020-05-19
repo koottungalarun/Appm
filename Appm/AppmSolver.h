@@ -63,14 +63,10 @@ private:
 		bool isFluidEnabled = false;
 		bool isMaxwellEnabled = false;
 		bool isEulerMaxwellCouplingEnabled = false;
+		bool isLorentzForceMagneticEnabled = false;
+		bool isMassFluxSchemeImplicit = false;
+
 	} appmParams;
-
-
-	enum class MassFluxScheme {
-		EXPLICIT, IMPLICIT_EXPLICIT
-
-	};
-	friend std::ostream & operator<<(std::ostream & os, const MassFluxScheme & obj);
 
 
 	/** Get number of fluids. */
@@ -82,7 +78,6 @@ private:
 	int maxIterations = 0;
 	double maxTime = 0;
 	double lambdaSquare = 1.0;
-	MassFluxScheme massFluxScheme = MassFluxScheme::EXPLICIT;
 	int initType = 1;
 	bool isElectricLorentzForceActive = false;
 	bool isMagneticLorentzForceActive = false;
@@ -187,7 +182,7 @@ private:
 	void setFluidSourceTerm();
 	void updateFluidStates(const double dt);
 
-	void solveMaxwellSystem(const double time, const double dt, const double dt_previous);
+	void solveMaxwellSystem(const double time, const double dt, const double dt_previous, const Eigen::SparseMatrix<double> & Msigma);
 	
 
 	void interpolateMagneticFluxToPrimalVertices();

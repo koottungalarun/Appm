@@ -10,7 +10,7 @@ class Cell :
 {
 public:
 
-	enum class FluidType {
+	enum class Type {
 		DEFAULT, FLUID, SOLID, GHOST, ELECTRODE
 	};
 
@@ -26,14 +26,14 @@ public:
 	const Eigen::Vector3d & getCenter() const;
 	const Eigen::Matrix3Xd getVertexCoordinates() const;
 
-	void setFluidType(const FluidType & type);
-	const FluidType getFluidType() const;
+	void setType(const Type & type);
+	const Type getType() const;
 
 private:
 	double volume = 0;
 	Eigen::Vector3d center;
 	std::vector<Face*> faceList;
 
-	FluidType fluidType = FluidType::DEFAULT;
+	Type fluidType = Type::DEFAULT;
 };
 

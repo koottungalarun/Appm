@@ -102,7 +102,7 @@ bool Face::hasFaceEdges(const std::vector<Edge*> faceEdges) const
 bool Face::hasFluidCells() const
 {
 	for (auto cell : cellList) {
-		if (cell->getFluidType() == Cell::FluidType::FLUID) {
+		if (cell->getType() == Cell::Type::FLUID) {
 			return true;
 		}
 	}
@@ -113,7 +113,7 @@ bool Face::isFluidBoundary() const
 {
 	int nFluidCells = 0;
 	for (auto cell : cellList) {
-		if (cell->getFluidType() == Cell::FluidType::FLUID) {
+		if (cell->getType() == Cell::Type::FLUID) {
 			nFluidCells++;
 		}
 	}
