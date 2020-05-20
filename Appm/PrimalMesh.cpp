@@ -447,9 +447,16 @@ void PrimalMesh::extrudeMesh(const int nLayers, const double zmax)
 	cellList.reserve(nFaces_2d * nLayers);
 
 	// Create vertices
+	const double zmin = -0.5 * zmax;
+	const double dz = zmax / nLayers;
 	for (int layer = 1; layer <= nLayers; layer++) {
+		const double z = zmin + layer * dz;
+		std::cout << std::scientific << std::setprecision(16);
+		std::cout << "z = " << z << std::endl;
 		for (int i = 0; i < nVertices_2d; i++) {
-			Eigen::Vector3d pos = getVertex(i)->getPosition() + layer * ((zmax/nLayers) * z_unit);
+			Eigen::Vector3d pos = getVertex(i)->getPosition() + layer * ((zmax / nLayers) * z_unit);
+			//Eigen::Vector3d pos = getVertex(i)->getPosition();
+			pos(2) = z;
 			addVertex(pos);
 		}
 	}
