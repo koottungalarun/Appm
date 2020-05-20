@@ -184,7 +184,8 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal, const double terminalRad
 		Eigen::Vector3d fn = dualFace->getNormal();
 		const Eigen::Vector3d primalEdgeDir = primalEdge->getDirection();
 		if (fn.dot(primalEdgeDir) < 0) {
-			dualFace->setNormal(-1 * fn);
+			//dualFace->setNormal(-1 * fn);
+			dualFace->flipNormal();
 		}
 
 	}
