@@ -19,6 +19,11 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 		return;
 	}
 
+	if (dualMesh.getNumberOfCells() != primalMesh.getNumberOfVertices()) {
+		std::cout << "Number of dual cells is not equal to primal vertices" << std::endl;
+	}
+	return;
+
 	init_multiFluid("particleParameters.txt");
 	
 	switch (initType) {
@@ -125,6 +130,9 @@ void AppmSolver::run()
 		std::cout << "Dual mesh has no cells" << std::endl;
 		return;
 	}
+	if (dualMesh.getNumberOfCells() != primalMesh.getNumberOfVertices()) {
+		return;
+	}
 
 	double dt = 1.0;
 	double dt_previous = 1.0;
@@ -151,7 +159,7 @@ void AppmSolver::run()
 	const int nFaces = dualMesh.getNumberOfFaces();
 	const int nCells = dualMesh.getNumberOfCells();
 
-	debug_checkCellStatus();
+	//debug_checkCellStatus();
 	
 
 	auto timer_startAppmSolver = std::chrono::high_resolution_clock::now();
@@ -244,7 +252,7 @@ void AppmSolver::run()
 			setFluidFaceFluxes();
 			updateFluidStates(dt);
 
-			debug_checkCellStatus();
+			//debug_checkCellStatus();
 		}
 		std::cout << "dt = " << dt << std::endl;
 		iteration++;
@@ -1597,7 +1605,7 @@ void AppmSolver::init_meshes(const PrimalMesh::PrimalMeshParams & primalParams)
 		std::cout << "Primal mesh has no cells" << std::endl;
 		return;
 	}
-	return;
+
 	std::cout << std::endl;
 	std::cout << "Init dual mesh" << std::endl;
 	dualMesh = DualMesh();
