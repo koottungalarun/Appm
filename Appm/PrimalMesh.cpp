@@ -48,6 +48,8 @@ void PrimalMesh::init()
 	}
 	extrudeMesh(axialLayers, zmax);
 
+	assert(Mesh::validate());
+
 	sortVertices(params.getElectrodeRadius());
 	sortEdges();
 	sortFaces();

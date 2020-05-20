@@ -7,6 +7,7 @@
 #include "H5Reader.h"
 
 #include <iostream>
+#include <iomanip>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -116,6 +117,7 @@ protected:
 	virtual XdmfGrid getXdmfSurfaceGrid() const;
 	virtual XdmfGrid getXdmfVolumeGrid() const;
 
+	bool validate() const;
 
 
 private:

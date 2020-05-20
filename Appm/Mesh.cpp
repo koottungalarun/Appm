@@ -978,6 +978,56 @@ XdmfGrid Mesh::getXdmfVolumeGrid() const
 	return volumeGrid;
 }
 
+bool Mesh::validate() const
+{
+	bool isValid = getNumberOfCells() > 0;
+
+	// Check if all edges are either parallel or perpendicular to z-axis
+	for (auto edge : edgeList) {
+		const Eigen::Vector3d edgeDir = edge->getDirection();
+		const double x = edgeDir(0);
+		const double y = edgeDir(1);
+		const double z = edgeDir(2);
+		bool isParallel = ((x == 0) && (y == 0)) && (z != 0);
+		bool isPerpendicular = ((x != 0) || (y != 0)) && (z == 0);
+		isValid &= isParallel ^ isPerpendicular;// boolean xor operator (^)
+		if (!isValid) {
+			std::cout << "edge idx: " << edge->getIndex() << std::endl;
+			std::cout << std::scientific << edgeDir.transpose() << std::endl;
+		}
+		assert(isValid); 
+	}
+
+	// Check if all face normals are either parallel or perpendicular to z-axis
+	for (auto face : faceList) {
+		const Eigen::Vector3d fn = face->getNormal();
+		const double x = fn(0);
+		const double y = fn(1);
+		const double z = fn(2);
+		bool isParallel = (x == 0) && (y == 0) && (z != 0);
+		bool isPerpendicular = ((x != 0) || (y != 0)) && (z == 0);
+		isValid &= isParallel ^ isPerpendicular; // boolean xor operator (^)
+		if (!isValid) {
+			std::cout << "face idx: " << face->getIndex() << std::endl;
+			std::cout << "face normal: " << fn.transpose() << std::endl;
+		}
+		assert(isValid); 
+	}
+
+	// Check if local position vector from cell center to face center 
+	// is either parallel or perpendicular to z-axis
+	for (auto cell : cellList) {
+		isValid = cell->validateCellGeometry();
+		if (!isValid) {
+			std::cout << "cell idx: " << cell->getIndex() << std::endl;
+			std::cout << "cell position: " << cell->getCenter() << std::endl;
+		}
+		assert(isValid);
+	}
+
+	return isValid;
+}
+
 const std::string Mesh::getMeshDataFilename() const
 {
 	return this->meshPrefix + "-mesh.h5";
