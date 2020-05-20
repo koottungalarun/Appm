@@ -118,6 +118,9 @@ protected:
 	virtual XdmfGrid getXdmfVolumeGrid() const;
 
 	bool validate() const;
+	bool validateEdges() const;
+	bool validateFaces() const;
+	bool validateCells() const;
 
 
 private:

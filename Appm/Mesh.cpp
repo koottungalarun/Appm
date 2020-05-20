@@ -52,165 +52,154 @@ void Mesh::writeToFile()
 	std::cout << "Faces:    " << faceList.size() << std::endl;
 	std::cout << "Cells:    " << cellList.size() << std::endl;
 
-	std::ofstream file;
-
-	const int nVertices = getNumberOfVertices();
-	const int nEdges = getNumberOfEdges();
-
-	// Write vertices to file
-	Eigen::Matrix3Xd positions(3, nVertices);
-	for (int i = 0; i < nVertices; i++) {
-		positions.col(i) = vertexList[i]->getPosition();
-	}
-	//file = std::ofstream(this->meshPrefix + "-vertices.dat");
-	//file << positions.transpose() << std::endl;
-
-	const std::string h5filename = this->meshPrefix + "-mesh.h5";
-	H5Writer h5writer(h5filename);
-	h5writer.writeData(positions, "/vertexPos");
-	Eigen::VectorXi vertexIdx(nVertices);
-	for (int i = 0; i < nVertices; i++) {
-		vertexIdx(i) = getVertex(i)->getIndex();
-	}
-	h5writer.writeData(vertexIdx, "/vertexIdx");
-
-	Eigen::VectorXi isBoundaryVertex(nVertices);
-	for (int i = 0; i < nVertices; i++) {
-		isBoundaryVertex(i) = getVertex(i)->isBoundary();
-	}
-	h5writer.writeData(isBoundaryVertex, "/isBoundaryVertex");
-
-	//Eigen::VectorXi vertexType(nVertices);
-	//for (int i = 0; i < nVertices; i++) {
-	//	vertexType(i) = static_cast<int>(getVertex(i)->getType());
-	//}
-	Eigen::VectorXi vertexType = getVertexTypes();
-	h5writer.writeData(vertexType, "/vertexType");
-
-	//file = std::ofstream(this->meshPrefix + "-coords.dat");
-	//file << vertexCoordinates.transpose() << std::endl;
-
 	// Create incidence maps and write them to file
 	createIncidenceMaps();
 	Eigen::sparseMatrixToFile(edge2vertexMap, this->meshPrefix + "-e2v.dat");
 	Eigen::sparseMatrixToFile(face2edgeMap, this->meshPrefix + "-f2e.dat");
 	Eigen::sparseMatrixToFile(cell2faceMap, this->meshPrefix + "-c2f.dat");
 
-	Eigen::VectorXd edgeLength(nEdges);
-	for (int i = 0; i < nEdges; i++) {
-		edgeLength(i) = getEdge(i)->getLength();
-	}
-	h5writer.writeData(edgeLength, "/edgeLength");
 
-	Eigen::Matrix2Xi edge2Vertex(2, nEdges);
-	for (int i = 0; i < nEdges; i++) {
-		edge2Vertex(0, i) = getEdge(i)->getVertexA()->getIndex();
-		edge2Vertex(1, i) = getEdge(i)->getVertexB()->getIndex();
-	}
-	h5writer.writeData(edge2Vertex, "/edge2vertex");
+	const std::string h5filename = this->meshPrefix + "-mesh.h5";
+	H5Writer h5writer(h5filename);
 
-	Eigen::VectorXi edgeIdx(nEdges);
-	for (int i = 0; i < nEdges; i++) {
-		edgeIdx(i) = getEdge(i)->getIndex();
-	}
-	h5writer.writeData(edgeIdx, "/edgeIdx");
+	const int nVertices = getNumberOfVertices();
+	if (nVertices > 0) {
+		// Write vertices to file
+		Eigen::Matrix3Xd positions(3, nVertices);
+		for (int i = 0; i < nVertices; i++) {
+			positions.col(i) = vertexList[i]->getPosition();
+		}
+		//file = std::ofstream(this->meshPrefix + "-vertices.dat");
+		//file << positions.transpose() << std::endl;
 
-	Eigen::VectorXi edgeType(nEdges);
-	for (int i = 0; i < nEdges; i++) {
-		const Edge * edge = getEdge(i);
-		bool isBoundaryA = edge->getVertexA()->isBoundary();
-		bool isBoundaryB = edge->getVertexB()->isBoundary();
-		const int nBoundaryVertices = isBoundaryA + isBoundaryB;
-		edgeType(i) = nBoundaryVertices;
-	}
-	h5writer.writeData(edgeType, "/edgeType");
+		h5writer.writeData(positions, "/vertexPos");
+		Eigen::VectorXi vertexIdx(nVertices);
+		for (int i = 0; i < nVertices; i++) {
+			vertexIdx(i) = getVertex(i)->getIndex();
+		}
+		h5writer.writeData(vertexIdx, "/vertexIdx");
 
+		Eigen::VectorXi isBoundaryVertex(nVertices);
+		for (int i = 0; i < nVertices; i++) {
+			isBoundaryVertex(i) = getVertex(i)->isBoundary();
+		}
+		h5writer.writeData(isBoundaryVertex, "/isBoundaryVertex");
+
+		//Eigen::VectorXi vertexType(nVertices);
+		//for (int i = 0; i < nVertices; i++) {
+		//	vertexType(i) = static_cast<int>(getVertex(i)->getType());
+		//}
+		Eigen::VectorXi vertexType = getVertexTypes();
+		h5writer.writeData(vertexType, "/vertexType");
+	}
+
+	const int nEdges = getNumberOfEdges();
+	if (nEdges > 0) {
+		Eigen::VectorXd edgeLength(nEdges);
+		for (int i = 0; i < nEdges; i++) {
+			edgeLength(i) = getEdge(i)->getLength();
+		}
+		h5writer.writeData(edgeLength, "/edgeLength");
+
+		Eigen::Matrix2Xi edge2Vertex(2, nEdges);
+		for (int i = 0; i < nEdges; i++) {
+			edge2Vertex(0, i) = getEdge(i)->getVertexA()->getIndex();
+			edge2Vertex(1, i) = getEdge(i)->getVertexB()->getIndex();
+		}
+		h5writer.writeData(edge2Vertex, "/edge2vertex");
+
+		Eigen::VectorXi edgeIdx(nEdges);
+		for (int i = 0; i < nEdges; i++) {
+			edgeIdx(i) = getEdge(i)->getIndex();
+		}
+		h5writer.writeData(edgeIdx, "/edgeIdx");
+
+		Eigen::VectorXi edgeType(nEdges);
+		for (int i = 0; i < nEdges; i++) {
+			const Edge * edge = getEdge(i);
+			bool isBoundaryA = edge->getVertexA()->isBoundary();
+			bool isBoundaryB = edge->getVertexB()->isBoundary();
+			const int nBoundaryVertices = isBoundaryA + isBoundaryB;
+			edgeType(i) = nBoundaryVertices;
+		}
+		h5writer.writeData(edgeType, "/edgeType");
+	}
 
 	const int nFaces = getNumberOfFaces();
-	Eigen::MatrixXi f2v(3, nFaces);
-	for (int j = 0; j < nFaces; j++) {
-		const Face * face = faceList[j];
-		std::vector<Vertex*> faceVertices = face->getVertexList();
-		const int nFaceVertices = faceVertices.size();
-		if (nFaceVertices > f2v.rows()) {
-			const int nRowsOld = f2v.rows();
-			f2v.conservativeResize(nFaceVertices, f2v.cols());
-			f2v.bottomRows(nFaceVertices - nRowsOld).array() = -1;
+	if (nFaces > 0) {
+		Eigen::MatrixXi f2v(3, nFaces);
+		for (int j = 0; j < nFaces; j++) {
+			const Face * face = faceList[j];
+			std::vector<Vertex*> faceVertices = face->getVertexList();
+			const int nFaceVertices = faceVertices.size();
+			if (nFaceVertices > f2v.rows()) {
+				const int nRowsOld = f2v.rows();
+				f2v.conservativeResize(nFaceVertices, f2v.cols());
+				f2v.bottomRows(nFaceVertices - nRowsOld).array() = -1;
+			}
+			for (int k = 0; k < nFaceVertices; k++) {
+				f2v(k, j) = faceVertices[k]->getIndex();
+			}
 		}
-		for (int k = 0; k < nFaceVertices; k++) {
-			f2v(k, j) = faceVertices[k]->getIndex();
+		const int f2v_maxCoeff = f2v.array().abs().maxCoeff();
+
+		std::ofstream file;
+		file = std::ofstream(this->meshPrefix + "-f2v.dat");
+		file << f2v.transpose() << std::endl;
+
+		Eigen::Matrix3Xd fc(3, nFaces);
+		Eigen::Matrix3Xd fn(3, nFaces);
+		Eigen::VectorXi faceIdx(nFaces);
+		Eigen::VectorXi faceBoundary(nFaces);
+		Eigen::VectorXd faceArea(nFaces);
+		Eigen::VectorXi faceType(nFaces);
+
+		for (int i = 0; i < nFaces; i++) {
+			fc.col(i) = getFace(i)->getCenter();
+			fn.col(i) = getFace(i)->getNormal();
+			faceIdx(i) = getFace(i)->getIndex();
+			faceBoundary(i) = getFace(i)->isBoundary();
+			faceArea(i) = getFace(i)->getArea();
+			faceType(i) = static_cast<int>(getFace(i)->getType());
 		}
+		h5writer.writeData(fc, "/faceCenter");
+		h5writer.writeData(faceIdx, "/faceIndex");
+		h5writer.writeData(faceBoundary, "/isFaceBoundary");
+		h5writer.writeData(fn, "/faceNormal");
+		assert((faceArea.array() > 0).all());
+		h5writer.writeData(faceArea, "/faceArea");
+		h5writer.writeData(faceType, "/faceFluidType");
+
+		const std::vector<int> face2vertexIdx = getXdmfTopology_face2vertexIndices();
+		h5writer.writeData(face2vertexIdx, "/face2vertex");
 	}
-	const int f2v_maxCoeff = f2v.array().abs().maxCoeff();
-	//std::cout << "f2v max: " << f2v_maxCoeff << std::endl;
-	//assert(f2v_maxCoeff == getNumberOfVertices() - 1);
-	file = std::ofstream(this->meshPrefix + "-f2v.dat");
-	file << f2v.transpose() << std::endl;
-
-	Eigen::Matrix3Xd fc(3, nFaces);
-	Eigen::Matrix3Xd fn(3, nFaces);
-	Eigen::VectorXi faceIdx(nFaces);
-	Eigen::VectorXi faceBoundary(nFaces);
-	Eigen::VectorXd faceArea(nFaces);
-	Eigen::VectorXi faceType(nFaces);
-
-	for (int i = 0; i < nFaces; i++) {
-		fc.col(i) = getFace(i)->getCenter();
-		fn.col(i) = getFace(i)->getNormal();
-		faceIdx(i) = getFace(i)->getIndex();
-		faceBoundary(i) = getFace(i)->isBoundary();
-		faceArea(i) = getFace(i)->getArea();
-		faceType(i) = static_cast<int>(getFace(i)->getType());
-	}
-	h5writer.writeData(fc, "/faceCenter");
-	h5writer.writeData(faceIdx, "/faceIndex");
-	h5writer.writeData(faceBoundary, "/isFaceBoundary");
-	h5writer.writeData(fn, "/faceNormal");
-	assert((faceArea.array() > 0).all());
-	h5writer.writeData(faceArea, "/faceArea");
-	h5writer.writeData(faceType, "/faceFluidType");
-
-	const std::vector<int> face2vertexIdx = getXdmfTopology_face2vertexIndices();
-	h5writer.writeData(face2vertexIdx, "/face2vertex");
 
 	const int nCells = getNumberOfCells();
-	Eigen::Matrix3Xd cellCenters(3, nCells);
-	Eigen::VectorXi cellType(nCells);
-	for (int i = 0; i < nCells; i++) {
-		cellCenters.col(i) = getCell(i)->getCenter();
-		cellType(i) = static_cast<int>(getCell(i)->getType());
+	if (nCells > 0) {
+		Eigen::Matrix3Xd cellCenters(3, nCells);
+		Eigen::VectorXi cellType(nCells);
+		for (int i = 0; i < nCells; i++) {
+			cellCenters.col(i) = getCell(i)->getCenter();
+			cellType(i) = static_cast<int>(getCell(i)->getType());
+		}
+		h5writer.writeData(cellCenters, "/cellCenter");
+		h5writer.writeData(cellType, "/cellFluidType");
+
+		Eigen::VectorXi cellIdx(nCells);
+		for (int i = 0; i < nCells; i++) {
+			cellIdx(i) = getCell(i)->getIndex();
+		}
+		h5writer.writeData(cellIdx, "/cellIndex");
+
+		const std::vector<int> c2vIdx = getXdmfTopology_cell2vertexIndices();
+		h5writer.writeData(c2vIdx, "/cell2vertex");
+
+		Eigen::VectorXd cellVolume(nCells);
+		for (int i = 0; i < nCells; i++) {
+			cellVolume(i) = getCell(i)->getVolume();
+		}
+		h5writer.writeData(cellVolume, "/cellVolume");
 	}
-	h5writer.writeData(cellCenters, "/cellCenter");
-	h5writer.writeData(cellType, "/cellFluidType");
-
-	Eigen::VectorXi cellIdx(nCells);
-	for (int i = 0; i < nCells; i++) {
-		cellIdx(i) = getCell(i)->getIndex();
-	}
-	h5writer.writeData(cellIdx, "/cellIndex");
-
-	const std::vector<int> c2vIdx = getXdmfTopology_cell2vertexIndices();
-	h5writer.writeData(c2vIdx, "/cell2vertex");
-
-	Eigen::VectorXd cellVolume(nCells);
-	for (int i = 0; i < nCells; i++) {
-		cellVolume(i) = getCell(i)->getVolume();
-	}
-	h5writer.writeData(cellVolume, "/cellVolume");
-
-
-	//file = std::ofstream(this->meshPrefix + "-cellCenter.dat");
-	//file << cellCenters.transpose() << std::endl;
-
-	//for (auto v : vertexList) {
-	//	std::cout << v->getIndex() << ": " << v->getPosition().transpose() << std::endl;
-	//}
-	//for (auto e : edgeList) {
-	//	std::cout << *e << std::endl;
-	//}
-	//for (auto f : faceList) {
-	//	std::cout << *f << std::endl;
-	//}
 }
 
 void Mesh::writeXdmf()
@@ -220,14 +209,20 @@ void Mesh::writeXdmf()
 
 	XdmfGrid treeGrid(XdmfGrid::Tags("Grid of Grids", XdmfGrid::GridType::Tree));
 
-	XdmfGrid vertexGrid = getXdmfVertexGrid();
-	treeGrid.addChild(vertexGrid);
+	if (getNumberOfVertices() > 0) {
+		XdmfGrid vertexGrid = getXdmfVertexGrid();
+		treeGrid.addChild(vertexGrid);
+	}
 
-	XdmfGrid edgeGrid = getXdmfEdgeGrid();
-	treeGrid.addChild(edgeGrid);
+	if (getNumberOfEdges() > 0) {
+		XdmfGrid edgeGrid = getXdmfEdgeGrid();
+		treeGrid.addChild(edgeGrid);
+	}
 
-	XdmfGrid surfaceGrid = getXdmfSurfaceGrid();
-	treeGrid.addChild(surfaceGrid);
+	if (getNumberOfFaces() > 0) {
+		XdmfGrid surfaceGrid = getXdmfSurfaceGrid();
+		treeGrid.addChild(surfaceGrid);
+	}
 
 	domain.addChild(treeGrid);
 	root.addChild(domain);
@@ -236,7 +231,9 @@ void Mesh::writeXdmf()
 	std::ofstream file(filename);
 	file << root << std::endl;
 
-	writeXdmfVolumeMesh();
+	if (getNumberOfCells() > 0) {
+		writeXdmfVolumeMesh();
+	}
 }
 
 Vertex * Mesh::addVertex(const Eigen::Vector3d & position)
@@ -980,7 +977,27 @@ XdmfGrid Mesh::getXdmfVolumeGrid() const
 
 bool Mesh::validate() const
 {
-	bool isValid = getNumberOfCells() > 0;
+	bool isAllValid = true;
+
+	bool isEdgesValid = validateEdges();
+	assert(isEdgesValid);
+	isAllValid &= isEdgesValid;
+
+	bool isFacesValid = validateFaces();
+	assert(isFacesValid);
+	isAllValid &= isFacesValid;
+
+	if (getNumberOfCells() > 0) {
+		bool isCellsValid = validateCells();
+		assert(isCellsValid);
+		isAllValid &= isCellsValid;
+	}
+	return isAllValid;
+}
+
+bool Mesh::validateEdges() const
+{
+	bool isValid = true;
 
 	// Check if all edges are either parallel or perpendicular to z-axis
 	for (auto edge : edgeList) {
@@ -995,8 +1012,14 @@ bool Mesh::validate() const
 			std::cout << "edge idx: " << edge->getIndex() << std::endl;
 			std::cout << std::scientific << edgeDir.transpose() << std::endl;
 		}
-		assert(isValid); 
+		assert(isValid);
 	}
+	return isValid;
+}
+
+bool Mesh::validateFaces() const
+{
+	bool isValid = true;
 
 	// Check if all face normals are either parallel or perpendicular to z-axis
 	for (auto face : faceList) {
@@ -1011,20 +1034,25 @@ bool Mesh::validate() const
 			std::cout << "face idx: " << face->getIndex() << std::endl;
 			std::cout << "face normal: " << fn.transpose() << std::endl;
 		}
-		assert(isValid); 
+		assert(isValid);
 	}
 
+	return isValid;
+}
+
+bool Mesh::validateCells() const
+{
+	bool isValid = true;
 	// Check if local position vector from cell center to face center 
 	// is either parallel or perpendicular to z-axis
 	for (auto cell : cellList) {
-		isValid = cell->validateCellGeometry();
+		isValid &= cell->validateCellGeometry();
 		if (!isValid) {
 			std::cout << "cell idx: " << cell->getIndex() << std::endl;
 			std::cout << "cell position: " << cell->getCenter() << std::endl;
 		}
 		assert(isValid);
 	}
-
 	return isValid;
 }
 
