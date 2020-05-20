@@ -22,10 +22,20 @@ protected:
 
 
 private:
+	Eigen::SparseVector<int> primalFaceToDualVertex;
+	Eigen::SparseVector<int> primalEdgeToDualVertex;
+	Eigen::SparseVector<int> primalVertexToDualVertex;
+
+
 	Eigen::VectorXi dualFaceToPrimalEdgeList;
 	Eigen::VectorXi associateDualFacesWithPrimalEdges(const PrimalMesh & primal);
 
 	void init_cellFluidType();
 	void init_faceFluidType(const double terminalRadius);
+
+	void init_dualVertices(const PrimalMesh & primal);
+	void init_dualEdges(const PrimalMesh & primal);
+	void init_dualFaces(const PrimalMesh & primal);
+	void init_dualCells(const PrimalMesh & primal);
 };
 
