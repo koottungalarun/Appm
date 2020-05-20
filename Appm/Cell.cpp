@@ -139,15 +139,17 @@ bool Cell::validateCellGeometry() const
 	for (auto face : cellFaces) {
 		auto fc = face->getCenter();
 		auto posVec = fc - cc;
-		const double x = posVec(0);
-		const double y = posVec(1);
-		const double z = posVec(2);
-		bool isParallel = (x == 0) && (y == 0) && (z != 0);
-		bool isPerpendicular = ((x != 0) || (y != 0)) && (z == 0);
+		//const double x = posVec(0);
+		//const double y = posVec(1);
+		//const double z = posVec(2);
+		const double tol = 2*std::numeric_limits<double>::epsilon();
+		bool isParallel = posVec.segment(0, 2).norm() <= tol && (abs(posVec(2)) > tol);
+		bool isPerpendicular = posVec.segment(0, 2).norm() > tol && (abs(posVec(2)) <= tol);
 		isValid &= isParallel ^ isPerpendicular;// boolean xor operator (^)
 	}
 	if (!isValid) {
-		std::cout << "Validate cel geometry" << std::endl;
+		std::cout << std::scientific << std::setprecision(16);
+		std::cout << "Validate cell geometry" << std::endl;
 		std::cout << "Cell idx: " << this->getIndex() << std::endl;
 		std::cout << "cell center: " << cc.transpose() << std::endl;
 
@@ -228,16 +230,22 @@ Eigen::Vector3d Cell::computeCellCenter() const
 	assert(perpendicularFaces.size() == 2);
 
 	// Check that perpendicular faces have same x-y coordinates in face centers
-	Eigen::Vector3d posVec1, posVec2;
-	posVec1 = perpendicularFaces[0]->getCenter();
-	posVec2 = perpendicularFaces[1]->getCenter();
-	Eigen::Vector3d posVecDelta = posVec2 - posVec1;
+	Eigen::Vector3d posVec0, posVec1;
+	posVec0 = perpendicularFaces[0]->getCenter();
+	posVec1 = perpendicularFaces[1]->getCenter();
+	Eigen::Vector3d posVecDelta = posVec1 - posVec0;
 	Eigen::Vector2d posVec2d = posVecDelta.segment(0, 2);
-	if (posVec2d.norm() != 0) { // this should not be true
+	const double tol0 = 2 * std::numeric_limits<double>::epsilon();
+	if (posVec2d.norm() > tol0) { // this should not be true
+		std::cout << std::scientific << std::setprecision;
 		std::cout << "posVec2d: " << posVec2d.transpose() << std::endl;
+		std::cout << "pos face0: " << posVec0.transpose() << std::endl;
+		std::cout << "pos face1: " << posVec1.transpose() << std::endl;
+
 		isValid &= false;
+		assert(isValid);
 	}
-	cc = 0.5 * (posVec1 + posVec2);
+	cc = 0.5 * (posVec0 + posVec1);
 
 	// Check that parallel faces have same z-value in face centers
 	Eigen::VectorXd zValuesParallel(parallelFaces.size());
@@ -246,41 +254,92 @@ Eigen::Vector3d Cell::computeCellCenter() const
 		zValuesParallel(i) = face->getCenter()(2);
 	}
 	isValid &= zValuesParallel.array().isApproxToConstant(zValuesParallel(0));
-	isValid &= (zValuesParallel.array() == zValuesParallel(0)).all();
+	//isValid &= (zValuesParallel.array() == zValuesParallel(0)).all();
+	if (!isValid) {
+		std::cout << std::scientific << std::setprecision(16);
+		std::cout << "zValuesParallel: " << std::endl;
+		std::cout << zValuesParallel << std::endl;
+	}
+	if (!isValid) {
+		std::cout << "Face list: " << std::endl;
+		for (auto face : faceList) {
+			std::cout << face->getIndex() << ", " << face->getCenter().transpose() << std::endl;
+		}
+	}
+	
+	if (!isValid) {
+		std::cout << std::endl;
+		std::cout << "*********************************" << std::endl;
+		for (auto face : faceList) {
+			std::cout << "face: " << face->getIndex() << std::endl;
+			std::cout << "  fc: " << face->getCenter().transpose() << std::endl;
+			std::vector<Vertex*> vertexList = face->getVertexList();
+			std::cout << "vertices: " << std::endl;
+			for (auto vertex : vertexList) {
+				std::cout << vertex->getPosition().transpose() << std::endl;
+			}
+		}
+		std::cout << "*********************************" << std::endl;
+
+	}
+	assert(isValid);
 	//cc = posVec1;
 	cc(2) = zValuesParallel(0);
 
 	// Show data
 	if (!isValid) {
+		std::cout << std::scientific;
 		std::cout << "is not valid" << std::endl;
+		std::cout << "cell center coords: " << std::endl;
+		std::cout << cc.transpose() << std::endl;
 		std::cout << "face center coords:" << std::endl;
 		for (auto face : faceList) {
-			std::cout << std::scientific << face->getCenter().transpose() << std::endl;
+			std::cout << face->getCenter().transpose() << std::endl;
 		}
+		std::cout << "zvalues parallel: " << std::endl;
+		std::cout << zValuesParallel.transpose() << std::endl;
 	}
 	assert(isValid);
 
 	// Check if local position vector from cell center to face center
 	// is either parallel or perpendicular to z-axis
+	bool showOutput = false;
 	isValid = true;
-	for (auto face : faceList) {
-		const Eigen::Vector3d fc = face->getCenter();
-		const Eigen::Vector3d posVec = fc - cc;
+	const double tol = 2 * std::numeric_limits<double>::epsilon();
 
-		if (posVec(2) != 0) {
-			isValid = posVec.segment(0, 2).norm() == 0;
+	while (isValid) {
+		if (showOutput) {
+			std::cout << std::scientific << std::setprecision(16);
+			std::cout << "Cell center:" << std::endl;
+			std::cout << cc.transpose() << std::endl;
+			std::cout << "List of face centers:" << std::endl;
+
+			for (auto face : faceList) {
+				std::cout << face->getCenter().transpose() << std::endl;
+			}
+			std::cout << "pos: " << std::endl;
+		}
+		for (auto face : faceList) {
+			const Eigen::Vector3d fc = face->getCenter();
+			const Eigen::Vector3d posVec = fc - cc;
+			if (showOutput) {
+				std::cout << posVec.transpose() << std::endl;
+			}
+
+			if (abs(posVec(2)) <= tol) {
+				isValid &= posVec.segment(0, 2).norm() > tol;
+			}
+			else {
+				isValid &= posVec.segment(0, 2).norm() <= tol;
+			}
+		}
+		if (showOutput) { break; }
+		if (!isValid) { 
+			showOutput = true; 
+			isValid = true;
 		}
 		else {
-			isValid = posVec.segment(0, 2).norm() != 0;
-		}
-	}
-
-	if (!isValid) {
-		std::cout << "Cell center:" << std::endl;
-		std::cout << cc.transpose() << std::endl;
-		std::cout << "List of face centers:" << std::endl;
-		for (auto face : faceList) {
-			std::cout << face->getCenter().transpose() << std::endl;
+			break;
 		}
 	}
 	assert(isValid);

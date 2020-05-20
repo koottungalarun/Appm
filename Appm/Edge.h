@@ -59,5 +59,7 @@ private:
 	Eigen::Vector3d edgeCenter;
 	std::vector<Face*> faceList;
 	Type type;
+
+	bool validate() const;
 };
 

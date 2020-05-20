@@ -19,6 +19,8 @@ Edge::Edge(Vertex * A, Vertex * B)
 	this->B = B;
 	A->setAdjacient(this);
 	B->setAdjacient(this);
+
+	validate();
 }
 
 
@@ -188,6 +190,32 @@ void Edge::setType(const Edge::Type & type)
 const Edge::Type Edge::getType() const
 {
 	return type;
+}
+
+bool Edge::validate() const
+{
+	bool isValid = true;
+	// Check if edge is either parallel or perpendicular to z-axis
+	Eigen::Vector3d edgeDir = getDirection().normalized();
+
+	if (edgeDir(2) != 0) {
+		const double tol = std::numeric_limits<double>::epsilon();
+		isValid = (edgeDir.segment(0,2).norm() == 0) && (abs(abs(edgeDir(2)) - 1) <= tol);
+		if (!isValid) {
+			std::cout << "zvalue: " << std::scientific << abs(edgeDir(2)) - 1 << std::endl;
+		}
+	}
+	else {
+		isValid = edgeDir.segment(0, 2).norm() > 0;
+	}
+
+	if (!isValid) {
+		std::cout << "direction: " << std::scientific << std::setprecision(16) <<  edgeDir.transpose() << std::endl;
+		std::cout << "Vertex A: " << A->getPosition().transpose() << ", idx = " << A->getIndex() << std::endl;
+		std::cout << "Vertex B: " << B->getPosition().transpose() << ", idx = " << B->getIndex() << std::endl;
+	}
+
+	return isValid;
 }
 
 std::ostream & operator<<(std::ostream & os, const Edge & obj)
