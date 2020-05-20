@@ -349,6 +349,71 @@ void Face::init()
 			center += v->getPosition();
 		}
 		center /= vertexList.size();
+
+		if (vertexList.size() > 4) {
+			// check z-position of all vertices
+			Eigen::VectorXd zvalues(vertexList.size());
+			for (int i = 0; i < vertexList.size(); i++) {
+				zvalues(i) = vertexList[i]->getPosition()(2);
+			}
+			const double zmax = zvalues.maxCoeff();
+			const double zmin = zvalues.minCoeff();
+			assert(zmin <= zmax);
+
+			// The grid has faces with more than 3 vertices 
+			// either in x-y plane, or on the cylinder outer boundary.
+			// 
+			// On the cylinder boundary, it may be that it has a degenerate corner.
+			//
+			// Therefore, consider only vertices that are at zmax or zmin.
+
+			int counter = 0;
+			center.setZero();
+			for (auto vertex : vertexList) {
+				auto pos = vertex->getPosition();
+				if (pos(2) == zmax || pos(2) == zmin) {
+					center += pos;
+					counter++;
+				}
+			}
+			assert(counter > 0);
+			center /= counter;
+
+			if (zmin == zmax) {
+				center(2) = zmin;
+			}
+			else {
+				center(2) = (0.5 * zmin + 0.5 * zmax);
+			}
+
+			bool isValid = center(2) >= zmin && center(2) <= zmax;
+			if (!isValid) {
+				std::cout << std::scientific;
+				std::cout << "Face center is not valid" << std::endl;
+				std::cout << "face center: " << center.transpose() << std::endl;
+				std::cout << "Vertices: " << std::endl;
+				for (auto vertex : vertexList) {
+					std::cout << vertex->getPosition().transpose() << std::endl;
+				}
+				std::cout << "zvalues: " << zvalues.transpose() << std::endl;
+				std::cout << "zmin, zmax: " << zmin << ", " << zmax << std::endl;
+				std::cout << "counter: " << counter << std::endl;
+				std::cout << std::endl;
+			}
+			assert(isValid);
+
+			//bool isValid = zvalues.isApproxToConstant(zvalues(0));
+			//if (!isValid) {
+			//	std::cout << "Face z-values not uniform: " << std::endl;
+			//	std::cout << std::scientific << std::setprecision(16);
+			//	std::cout << zvalues << std::endl;
+			//	std::cout << "Vertices: " << std::endl;
+			//	for (auto vertex : vertexList) {
+			//		std::cout << "idx: " << vertex->getIndex() << "; " << vertex->getPosition().transpose() << std::endl;
+			//	}
+			//}
+			//assert(isValid);
+		}
 	}
 
 	const int faceNormalVersion = 2;
