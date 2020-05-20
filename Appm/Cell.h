@@ -29,11 +29,16 @@ public:
 	void setType(const Type & type);
 	const Type getType() const;
 
+	bool validateCellGeometry() const;
+
 private:
 	double volume = 0;
 	Eigen::Vector3d center;
 	std::vector<Face*> faceList;
 
 	Type fluidType = Type::DEFAULT;
+
+	Eigen::Vector3d computeCellCenter() const;
+
 };
 

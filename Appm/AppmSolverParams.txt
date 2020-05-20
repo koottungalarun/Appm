@@ -1,5 +1,5 @@
-maxIterations: 500
-maxTime: 2000
+maxIterations: 1
+maxTime: 1
 isFluidEnabled: 1
 isMaxwellEnabled: 0
 isEulerMaxwellCouplingEnabled: 1

@@ -251,11 +251,16 @@ const Eigen::Vector3d Face::getNormal() const
 	return faceNormal;
 }
 
-void Face::setNormal(const Eigen::Vector3d & fn)
+void Face::flipNormal()
 {
-	assert(fn.norm() > 0);
-	this->faceNormal = fn;
+	this->faceNormal *= -1;
 }
+
+//void Face::setNormal(const Eigen::Vector3d & fn)
+//{
+//	assert(fn.norm() > 0);
+//	this->faceNormal = fn;
+//}
 
 void Face::init()
 {
@@ -346,13 +351,11 @@ void Face::init()
 		center /= vertexList.size();
 	}
 
-	// Determine face normal from face center and vector of first edge
-	const Eigen::Vector3d posA = edgeList[0]->getVertexA()->getPosition();
-	const Eigen::Vector3d posB = edgeList[0]->getVertexB()->getPosition();
-	const Eigen::Vector3d a = (posA - center).normalized();
-	const Eigen::Vector3d b = (posB - center).normalized();
-	faceNormal = (a.cross(b)).normalized();
+	const int faceNormalVersion = 2;
+	faceNormal = computeFaceNormal(faceNormalVersion);
 	assert(faceNormal.norm() > 0);
+	const double tol = 2 * std::numeric_limits<double>::epsilon();
+	assert(abs(faceNormal.norm() - 1) < tol);
 
 	this->area = computeArea();
 }
@@ -437,6 +440,70 @@ const double Face::computeArea() const
 		area += temp;
 	}
 	return area;
+}
+
+const Eigen::Vector3d Face::computeFaceNormal_version1() const
+{
+	Eigen::Vector3d fn;
+
+	// Determine face normal from face center and vector of first edge
+	const Eigen::Vector3d posA = edgeList[0]->getVertexA()->getPosition();
+	const Eigen::Vector3d posB = edgeList[0]->getVertexB()->getPosition();
+	const Eigen::Vector3d a = (posA - center).normalized();
+	const Eigen::Vector3d b = (posB - center).normalized();
+	fn = (a.cross(b)).normalized();
+	return fn;
+}
+
+const Eigen::Vector3d Face::computeFaceNormal_version2() const
+{
+	Eigen::Vector3d fn;
+	const Edge * edge1 = edgeList.back();
+	const Edge * edge2 = edgeList.front();
+	assert(edge1->hasCoincidentVertex(edge2));
+	const Vertex * v = edge1->getCoincidentVertex(edge2);
+	fn = edge1->getDirection().cross(edge2->getDirection()).normalized();
+	return fn;
+}
+
+const Eigen::Vector3d Face::computeFaceNormal(const int version) const
+{
+	Eigen::Vector3d fn;
+	switch (version) {
+	case 1: 
+		fn = computeFaceNormal_version1();
+		break;
+
+	case 2: 
+		fn = computeFaceNormal_version2();
+		break;
+
+	default: 
+		std::cout << "Compute face normal version not implemented: version = " << version << std::endl;
+		assert(false);
+	}
+
+	// Check if face normal is either parallel or perpendicular to z-unit vector
+	bool isParallel = abs(fn(2)) == 1; // z-value is +/- 1
+	bool isPerpendicular = fn(2) == 0; // z-value is 0
+
+
+	if (!(isParallel ^ isPerpendicular)) {// xor boolean operator (^)
+		std::cout << "face idx:" << getIndex() << std::endl;
+		std::cout << "face normal: " << std::scientific << fn.transpose() << std::endl;
+		std::cout << "edge directions: " << std::endl;
+		for (auto edge : edgeList) {
+			std::cout << edge->getDirection().transpose() << std::endl;
+		}
+		assert(isParallel ^ isPerpendicular);
+	}
+	//if (fn.norm() != 1) {
+	//	std::cout << "fn.norm: " << std::scientific << fn.norm() << std::endl;
+	//	std::cout << "fn.norm - 1: " << fn.norm() - 1 << std::endl;
+	//}
+	const double tol = 2 * std::numeric_limits<double>::epsilon();
+	assert(abs(fn.norm() - 1) < tol);
+	return fn;
 }
 
 void Face::setType(const Face::Type & fluidType)

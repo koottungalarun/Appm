@@ -15,8 +15,9 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	if (primalMesh.getNumberOfCells() == 0) {
 		return;
 	}
-	std::cout << "Dual mesh has " << dualMesh.getNumberOfVertices() << " vertices" << std::endl;
-
+	if (dualMesh.getNumberOfCells() == 0) {
+		return;
+	}
 
 	init_multiFluid("particleParameters.txt");
 	
@@ -81,6 +82,7 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 		isWriteEfield = true;
 	}
 
+	
 	//set_Efield_uniform(Eigen::Vector3d::UnitZ());
 	//E_cc = getEfieldAtCellCenter();
 	//setFluidFaceFluxes();
@@ -116,6 +118,11 @@ AppmSolver::~AppmSolver()
 void AppmSolver::run()
 {
 	if (primalMesh.getNumberOfCells() == 0) {
+		std::cout << "Primal mesh has no cells" << std::endl;
+		return;
+	}
+	if (dualMesh.getNumberOfCells() == 0) {
+		std::cout << "Dual mesh has no cells" << std::endl;
 		return;
 	}
 
@@ -143,6 +150,8 @@ void AppmSolver::run()
 	const int nFluids = this->getNFluids();
 	const int nFaces = dualMesh.getNumberOfFaces();
 	const int nCells = dualMesh.getNumberOfCells();
+
+	debug_checkCellStatus();
 	
 
 	auto timer_startAppmSolver = std::chrono::high_resolution_clock::now();
@@ -234,6 +243,8 @@ void AppmSolver::run()
 			setFluidSourceTerm();
 			setFluidFaceFluxes();
 			updateFluidStates(dt);
+
+			debug_checkCellStatus();
 		}
 		std::cout << "dt = " << dt << std::endl;
 		iteration++;
@@ -264,6 +275,39 @@ void AppmSolver::run()
 	writeXdmf("appm.xdmf");
 	writeXdmfDualVolume("appm-volume.xdmf");
 	//writeXdmfDualFaceFluxes();
+}
+
+void AppmSolver::debug_checkCellStatus() const
+{
+	std::cout << "Check cell status" << std::endl;
+	const int cellIdx = 52;
+	const Cell * cell = dualMesh.getCell(cellIdx);
+	auto cellFaces = cell->getFaceList();
+	std::cout << "cell state: (id = " << cell->getIndex() << ")" << std::endl;
+	Eigen::VectorXd state = fluidStates.col(cell->getIndex());
+	for (int fluidIdx = 0; fluidIdx < getNFluids(); fluidIdx++) {
+		std::cout << std::scientific << state.segment(5 * fluidIdx, 5).transpose() << std::endl;
+	}
+	
+	Eigen::VectorXd sumFluxes(faceFluxes.rows());
+	sumFluxes.setZero();
+	for (auto face : cellFaces) {
+		const int s_ki = cell->getOrientation(face);
+		const double fA = face->getArea();
+		Eigen::VectorXd flux = faceFluxes.col(face->getIndex());
+		sumFluxes += s_ki * flux * fA;
+		std::cout << "face " << face->getIndex() << ", orientation = " << s_ki << std::endl;
+		std::cout << "area = " << fA << ", normal = " << face->getNormal().transpose() << std::endl;
+		for (int fluidIdx = 0; fluidIdx < getNFluids(); fluidIdx++) {
+			std::cout << std::scientific << flux.segment(5 * fluidIdx, 5).transpose() << std::endl;
+		}
+	}
+	std::cout << "sum of fluxes: \t" << std::endl;
+	for (int fluidIdx = 0; fluidIdx < getNFluids(); fluidIdx++) {
+		std::cout << sumFluxes.segment(5 * fluidIdx, 5).transpose() << std::endl;
+	}
+	std::cout << std::endl;
+
 }
 
 const int AppmSolver::getNFluids() const
@@ -1553,7 +1597,8 @@ void AppmSolver::init_meshes(const PrimalMesh::PrimalMeshParams & primalParams)
 		std::cout << "Primal mesh has no cells" << std::endl;
 		return;
 	}
-
+	return;
+	std::cout << std::endl;
 	std::cout << "Init dual mesh" << std::endl;
 	dualMesh = DualMesh();
 	dualMesh.init_dualMesh(primalMesh, primalParams.getElectrodeRadius());

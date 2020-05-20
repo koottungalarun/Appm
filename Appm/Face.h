@@ -51,7 +51,8 @@ public:
 	void setAdjacient(Cell * cell);
 
 	const Eigen::Vector3d getNormal() const;
-	void setNormal(const Eigen::Vector3d & fn);
+	//void setNormal(const Eigen::Vector3d & fn);
+	void flipNormal();
 
 	void setType(const Type & fluidType);
 	const Type getType() const;
@@ -74,6 +75,11 @@ private:
 
 	const Eigen::Vector3d getCircumCenter() const;
 	const double computeArea() const;
+
+	const Eigen::Vector3d computeFaceNormal(const int version) const;
+	const Eigen::Vector3d computeFaceNormal_version1() const;
+	const Eigen::Vector3d computeFaceNormal_version2() const;
+
 
 };
 

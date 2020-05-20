@@ -68,6 +68,7 @@ private:
 
 	} appmParams;
 
+	void debug_checkCellStatus() const;
 
 	/** Get number of fluids. */
 	const int getNFluids() const;
