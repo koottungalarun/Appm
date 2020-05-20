@@ -28,8 +28,10 @@ namespace Eigen {
 				file << it.row() << "," << it.col() << "," << std::scientific << std::setprecision(20) << it.value() << std::endl;
 			}
 		}
-		if (M.coeff(M.rows() - 1, M.cols() - 1) != 0) {
-			file << M.rows() - 1 << "," << M.cols() - 1 << "," << 0 << std::endl;
+		if (M.rows() > 0 && M.cols() > 0) {
+			if (M.coeff(M.rows() - 1, M.cols() - 1) != 0) {
+				file << M.rows() - 1 << "," << M.cols() - 1 << "," << 0 << std::endl;
+			}
 		}
 	}
 
