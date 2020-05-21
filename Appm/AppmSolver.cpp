@@ -22,7 +22,6 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	if (dualMesh.getNumberOfCells() != primalMesh.getNumberOfVertices()) {
 		std::cout << "Number of dual cells is not equal to primal vertices" << std::endl;
 	}
-	return;
 
 	init_multiFluid("particleParameters.txt");
 	
@@ -90,7 +89,7 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	
 	//set_Efield_uniform(Eigen::Vector3d::UnitZ());
 	//E_cc = getEfieldAtCellCenter();
-	//setFluidFaceFluxes();
+	setFluidFaceFluxes();
 	//double dt = getNextFluidTimestepSize();
 	////E_h.setZero();
 	//Eigen::SparseMatrix<double> Msigma;
@@ -554,7 +553,8 @@ void AppmSolver::init_multiFluid(const std::string & filename)
 	const int fluidStateLength = getFluidStateLength();
 	fluidStates = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
 	fluidSources = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
-	//fluidFluxes = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
+	sumOfFaceFluxes = Eigen::MatrixXd::Zero(fluidStates.rows(), nCells);
+
 
 	const int nFaces = dualMesh.getNumberOfFaces();
 	faceTypeFluids = Eigen::MatrixXi::Zero(nFaces, nFluids);
@@ -1344,21 +1344,21 @@ void AppmSolver::setFluidSourceTerm()
 void AppmSolver::updateFluidStates(const double dt)
 {
 	const int nCells = dualMesh.getNumberOfCells();
+	sumOfFaceFluxes.setZero();
+
 	for (int k = 0; k < nCells; k++) {
 		const Cell * cell = dualMesh.getCell(k);
 		double cellVolume = cell->getVolume();
 
 		// get sum of face fluxes
-		Eigen::VectorXd sumOfFaceFluxes(faceFluxes.rows());
-		sumOfFaceFluxes.setZero();
 		const std::vector<Face*> cellFaces = cell->getFaceList();
 		for (auto face : cellFaces) {
 			const double faceArea = face->getArea();
 			const int orientation = getOrientation(cell, face);
-			sumOfFaceFluxes += orientation * faceFluxes.col(face->getIndex()) * faceArea;
+			sumOfFaceFluxes.col(k) += orientation * faceFluxes.col(face->getIndex()) * faceArea / cellVolume;
 		}
 		// Update state values
-		fluidStates.col(k) += -dt / cellVolume * sumOfFaceFluxes + dt * fluidSources.col(k);
+		fluidStates.col(k) += -dt * sumOfFaceFluxes.col(k) + dt * fluidSources.col(k);
 	}
 }
 
@@ -1735,6 +1735,9 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 		Eigen::VectorXd density(nCells);
 		Eigen::MatrixXd velocity(3, nCells);
 		Eigen::VectorXd pressure(nCells);
+		Eigen::VectorXd sumMassFluxes = sumOfFaceFluxes.row(5 * fluidIdx);
+		Eigen::MatrixXd sumMomentumFluxes = sumOfFaceFluxes.block(5 * fluidIdx + 1, 0, 3, nCells);
+		Eigen::VectorXd sumEnergyFluxes = sumOfFaceFluxes.row(5*fluidIdx + 4);
 
 		const std::string stateN = fluidTag + "stateN";
 		const std::string stateU = fluidTag + "stateU";
@@ -1767,6 +1770,10 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 		writer.writeData(numberDensity, numberDensityTag);
 		writer.writeData(pressure, pressureTag);
 		writer.writeData(velocity, velocityTag);
+		writer.writeData(sumMassFluxes, (std::stringstream() << fluidTag << "sumMassFlux").str());
+		writer.writeData(sumMomentumFluxes, (std::stringstream() << fluidTag << "sumMomentumFlux").str());
+		writer.writeData(sumEnergyFluxes, (std::stringstream() << fluidTag << "sumEnergyFlux").str());
+
 
 		Eigen::Matrix3Xd el_source = LorentzForce_electric.block(3 * fluidIdx, 0, 3, nCells);
 		writer.writeData(el_source, fluidTag + "LorentzForceEl");
@@ -2697,8 +2704,6 @@ const std::string AppmSolver::xdmf_GridDualCells(const int iteration) const
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
-
-	//ss << fluidSolver->getXdmfOutput(iteration);
 	ss << fluidXdmfOutput(datafilename) << std::endl;
 	ss << "</Grid>";
 	return ss.str();
@@ -2756,6 +2761,27 @@ const std::string AppmSolver::fluidXdmfOutput(const std::string & datafilename) 
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << " 3\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
 		ss << datafilename << ":/" << fluidName << "-LorentzForceMag" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+
+		ss << "<Attribute Name=\"" << fluidName << " SumMassFlux" << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << nCells << "\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << datafilename << ":/" << fluidName << "-sumMassFlux" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+
+		ss << "<Attribute Name=\"" << fluidName << " SumMomentumFlux" << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << " 3\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << datafilename << ":/" << fluidName << "-SumMomentumFlux" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+
+		ss << "<Attribute Name=\"" << fluidName << " SumEnergyFlux" << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << nCells << "\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << datafilename << ":/" << fluidName << "-sumEnergyFlux" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 

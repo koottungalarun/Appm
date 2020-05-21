@@ -10,14 +10,6 @@
 #include "PrimalMesh.h"
 #include "DualMesh.h"
 #include "Numerics.h"
-#include "FluidSolver.h"
-#include "SingleFluidSolver.h"
-#include "TwoFluidSolver.h"
-#include "MultiFluidSolver.h"
-
-#include "MaxwellSolver.h"
-#include "MaxwellSolverCrankNicholson.h"
-#include "MaxwellSolverImplicitEuler.h"
 
 #include "Physics.h"
 
@@ -84,14 +76,6 @@ private:
 	bool isMagneticLorentzForceActive = false;
 	bool isMomentumFluxActive = false;
 
-
-	//enum class MaxwellSolverBCType {
-	//	VOLTAGE_BC, CURRENT_BC
-	//};
-	//friend std::ostream & operator<<(std::ostream & os, const MaxwellSolverBCType & obj);
-
-	//MaxwellSolverBCType maxwellSolverBCType = MaxwellSolverBCType::CURRENT_BC;
-
 	bool isWriteEfield = false;
 	bool isWriteBfield = false;
 	bool isWriteHfield = false;
@@ -104,30 +88,28 @@ private:
 	Eigen::SparseMatrix<double> Mnu;
 	Eigen::SparseMatrix<double> C;
 
+	Eigen::VectorXd E_h;
+	Eigen::VectorXd B_h;
+	Eigen::VectorXd J_h;
+	Eigen::VectorXd J_h_previous;
+	Eigen::VectorXd J_h_aux;
+	Eigen::VectorXd J_h_aux_mm1;
+	Eigen::Matrix3Xd E_cc; // Electric field at cell center
+
 	// M1 = lambda^2 * Q' * Meps * Q in the reformulated Ampere equation. 
 	Eigen::SparseMatrix<double> M1;
 
 	// M2 = Cdual * Mnu * C in the reformulated Ampere equation, restricted to inner edges. 
 	Eigen::SparseMatrix<double> M2;
 
-	Eigen::VectorXd E_h;
-	Eigen::VectorXd B_h;
-	Eigen::VectorXd J_h;
-	Eigen::VectorXd J_h_previous;
 
-	Eigen::VectorXd J_h_aux;
-	Eigen::VectorXd J_h_aux_mm1;
-
-
-	Eigen::Matrix3Xd E_cc; // Electric field at cell center
-
-
-
+	// Fluid data vectors
 	Eigen::MatrixXd fluidStates;
+	Eigen::MatrixXd faceFluxes;
+	Eigen::MatrixXd sumOfFaceFluxes;
 	Eigen::MatrixXd fluidSources;
 	Eigen::MatrixXd LorentzForce_magnetic;
 	Eigen::MatrixXd LorentzForce_electric;
-	Eigen::MatrixXd faceFluxes;
 
 	Eigen::MatrixXd faceFluxesImExRusanov;
 

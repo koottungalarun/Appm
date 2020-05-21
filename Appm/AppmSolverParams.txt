@@ -2,10 +2,10 @@ maxIterations: 0
 maxTime: 1
 isFluidEnabled: 1
 isMaxwellEnabled: 0
-isEulerMaxwellCouplingEnabled: 1
+isEulerMaxwellCouplingEnabled: 0
 lambdaSquare: 1e-4
-isMassFluxSchemeImplicit: 1 
+isMassFluxSchemeImplicit: 0 
 initType: 2
-isElectricLorentzForceActive: 1
+isElectricLorentzForceActive: 0
 isMagneticLorentzForceActive: 0
 isShowDataWriterOutput: 0
