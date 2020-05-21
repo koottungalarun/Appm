@@ -57,6 +57,7 @@ private:
 		bool isEulerMaxwellCouplingEnabled = false;
 		bool isLorentzForceMagneticEnabled = false;
 		bool isMassFluxSchemeImplicit = false;
+		double timestepSize = 1;
 
 	} appmParams;
 

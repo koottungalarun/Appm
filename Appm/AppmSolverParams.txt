@@ -1,7 +1,8 @@
-maxIterations: 0
-maxTime: 1
-isFluidEnabled: 1
-isMaxwellEnabled: 0
+maxIterations: 50
+maxTime: 5
+timestepSize: 0.1
+isFluidEnabled: 0
+isMaxwellEnabled: 1
 isEulerMaxwellCouplingEnabled: 0
 lambdaSquare: 1e-4
 isMassFluxSchemeImplicit: 0 

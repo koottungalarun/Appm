@@ -133,8 +133,8 @@ void AppmSolver::run()
 		return;
 	}
 
-	double dt = 1.0;
-	double dt_previous = 1.0;
+	double dt = appmParams.timestepSize;
+	double dt_previous = dt;
 	double time = 0;
 	int iteration = 0;
 
@@ -329,6 +329,7 @@ std::string AppmSolver::printSolverParameters() const
 	ss << "=======================" << std::endl;
 	ss << "maxIterations:  " << maxIterations << std::endl;
 	ss << "maxTime:        " << maxTime << std::endl;
+	ss << "timestepSize:   " << appmParams.timestepSize << std::endl;
 	ss << "isFluidEnabled: " << appmParams.isFluidEnabled << std::endl;
 	ss << "isMaxwellEnabled: " << appmParams.isMaxwellEnabled << std::endl;
 	ss << "lambdaSquare: " << lambdaSquare << std::endl;
@@ -1253,6 +1254,24 @@ void AppmSolver::setFluidFaceFluxes()
 			faceFluxes.col(fidx).segment(5 * fluidIdx, 5) = faceFlux3d;
 		}
 	}
+
+	const int nCells = dualMesh.getNumberOfCells();
+	sumOfFaceFluxes.setZero();
+	for (int k = 0; k < nCells; k++) {
+		const Cell * cell = dualMesh.getCell(k);
+		// Skip non-fluid cells
+		if (cell->getType() != Cell::Type::FLUID) { continue; }
+
+		double cellVolume = cell->getVolume();
+
+		// get sum of face fluxes
+		const std::vector<Face*> cellFaces = cell->getFaceList();
+		for (auto face : cellFaces) {
+			const double faceArea = face->getArea();
+			const int orientation = getOrientation(cell, face);
+			sumOfFaceFluxes.col(k) += orientation * faceFluxes.col(face->getIndex()) * faceArea / cellVolume;
+		}
+	}
 }
 
 Eigen::Vector3d AppmSolver::getSpeciesFaceFlux(const Face * face, const int fluidIdx)
@@ -1344,20 +1363,7 @@ void AppmSolver::setFluidSourceTerm()
 void AppmSolver::updateFluidStates(const double dt)
 {
 	const int nCells = dualMesh.getNumberOfCells();
-	sumOfFaceFluxes.setZero();
-
 	for (int k = 0; k < nCells; k++) {
-		const Cell * cell = dualMesh.getCell(k);
-		double cellVolume = cell->getVolume();
-
-		// get sum of face fluxes
-		const std::vector<Face*> cellFaces = cell->getFaceList();
-		for (auto face : cellFaces) {
-			const double faceArea = face->getArea();
-			const int orientation = getOrientation(cell, face);
-			sumOfFaceFluxes.col(k) += orientation * faceFluxes.col(face->getIndex()) * faceArea / cellVolume;
-		}
-		// Update state values
 		fluidStates.col(k) += -dt * sumOfFaceFluxes.col(k) + dt * fluidSources.col(k);
 	}
 }
@@ -2363,6 +2369,9 @@ void AppmSolver::readParameters(const std::string & filename)
 		if (tag == "maxTime") {
 			std::istringstream(line.substr(pos + 1)) >> this->maxTime;
 		}
+		if (tag == "timestepSize") {
+			std::istringstream(line.substr(pos + 1)) >> appmParams.timestepSize;
+		}
 		if (tag == "isFluidEnabled") {
 			std::istringstream(line.substr(pos + 1)) >> appmParams.isFluidEnabled;
 		}
@@ -2774,7 +2783,7 @@ const std::string AppmSolver::fluidXdmfOutput(const std::string & datafilename) 
 		ss << "<Attribute Name=\"" << fluidName << " SumMomentumFlux" << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << " 3\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << datafilename << ":/" << fluidName << "-SumMomentumFlux" << std::endl;
+		ss << datafilename << ":/" << fluidName << "-sumMomentumFlux" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
@@ -3209,7 +3218,7 @@ const Eigen::VectorXd AppmSolver::setVoltageBoundaryConditions(const int nDirich
 	assert(nDirichlet % 2 == 0);
 
 	// Set voltage values at terminal A (stressed electrode)
-	xd.topRows(nDirichlet / 2).array() = 0; // *0.5 * (1 + tanh((time - 1) / 0.1));
+	xd.topRows(nDirichlet / 2).array() = 0.5 * (1 + tanh((time - 1) / 0.1));
 
 	// Set voltage condition to zero at terminal B (grounded electrode)
 	xd.bottomRows(nDirichlet / 2).array() = 0;
