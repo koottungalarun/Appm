@@ -8,6 +8,22 @@
 #include <fstream>
 
 namespace Eigen {
+	/**
+	* @return Eigen Library Version as given by the macro file at compile time.
+	*/
+	inline
+	std::string showVersion() {
+		std::stringstream ss;
+		ss << "Eigen Library Version ";
+		ss << EIGEN_WORLD_VERSION << ".";
+		ss << EIGEN_MAJOR_VERSION << ".";
+		ss << EIGEN_MINOR_VERSION;
+		return ss.str();
+	}
+
+	/**
+	* @return triplets of non-zero entries of a sparse matrix.
+	*/
 	template <typename T>
 	std::vector<Eigen::Triplet<T>> sparseMatrixToTriplets(const SparseMatrix<T> & M) {
 		std::vector<Eigen::Triplet<T>> triplets;
@@ -19,6 +35,9 @@ namespace Eigen {
 		return triplets;
 	}
 
+	/**
+	* Write sparse matrix to file with specified filename.
+	*/
 	template <typename T>
 	void sparseMatrixToFile(const SparseMatrix<T> & M, const std::string & filename) {
 		std::cout << "Write matrix to file: " << filename << std::endl;
@@ -98,7 +117,7 @@ namespace Eigen {
 
 
 	/** 
-	* Concatenate two sparse matrices vertically.
+	* @return Concatenate two sparse matrices vertically.
 	*/
 	template <typename T>
 	Eigen::SparseMatrix<T> vertcat(const Eigen::SparseMatrix<T> & U, const Eigen::SparseMatrix<T> & L) {
