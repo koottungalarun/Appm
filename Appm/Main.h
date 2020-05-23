@@ -10,5 +10,8 @@ public:
 	~Main();
 
 	void run();
+
+private:
+	std::string showVersionInfo();
 };
 
