@@ -58,8 +58,10 @@ private:
 		bool isLorentzForceMagneticEnabled = false;
 		bool isMassFluxSchemeImplicit = false;
 		double timestepSize = 1;
-
+		bool isMaxwellCurrentDefined = false;
 	} appmParams;
+
+	std::ofstream timeFile;
 
 	void debug_checkCellStatus() const;
 
@@ -219,9 +221,9 @@ private:
 	const Eigen::VectorXd solveMaxwell_CG(Eigen::SparseMatrix<double> & Mf, Eigen::VectorXd & rhs);
 
 
-	Eigen::SparseMatrix<double> get_Msigma_spd(Eigen::VectorXd & Jaux, const double dt);
+	Eigen::SparseMatrix<double> get_Msigma_spd(Eigen::VectorXd & Jaux, const double dt, const double time);
 
 	const Eigen::VectorXd testcase_001_FluidSourceTerm(const double time, const Cell * cell, const int fluidIdx) const;
-	const Eigen::VectorXd setVoltageBoundaryConditions(const int nDirichlet, const double time) const;
+	const Eigen::VectorXd setVoltageBoundaryConditions(const double time) const;
 };
 
