@@ -97,6 +97,7 @@ private:
 	Eigen::VectorXd J_h_previous;
 	Eigen::VectorXd J_h_aux;
 	Eigen::VectorXd J_h_aux_mm1;
+	Eigen::Matrix3Xd Jcc;
 	Eigen::Matrix3Xd E_cc; // Electric field at cell center
 
 	// M1 = lambda^2 * Q' * Meps * Q in the reformulated Ampere equation. 
@@ -138,6 +139,7 @@ private:
 	Eigen::SparseMatrix<double> M_perot;
 	Eigen::SparseMatrix<double> initPerotInterpolationMatrix();
 	const Eigen::Matrix3Xd getEfieldAtCellCenter();
+	const Eigen::Matrix3Xd getCurrentDensityAtCellCenter();
 
 	void get_Msigma_consistent(const double dt, Eigen::SparseMatrix<double> & Msigma, Eigen::VectorXd & jaux);
 
@@ -166,6 +168,8 @@ private:
 	Eigen::Vector3d getSpeciesFaceFlux(const Face * face, const int fluidIdx);
 	const Eigen::Vector3d getSpeciesFaceFluxAtCathode(const Face * face, const int fluidIdx);
 	void setFluidSourceTerm();
+	void setSumOfFaceFluxes();
+	void setImplicitMassFluxTerms(const double dt);
 	void updateFluidStates(const double dt);
 
 	void solveMaxwellSystem(const double time, const double dt, const double dt_previous, const Eigen::SparseMatrix<double> & Msigma);
