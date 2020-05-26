@@ -130,9 +130,10 @@ private:
 	void init_multiFluid(const std::string & filename);
 
 	void init_SodShockTube(const double zRef);
-	void init_Uniformly(const double n, const double p, const double u);
+	void init_Uniformly(const double n, const double p, const Eigen::Vector3d u);
 	void init_Explosion(const Eigen::Vector3d refPos, const double radius);
-
+	void init_testcase_frictionTerm();
+	
 	void set_Efield_uniform(const Eigen::Vector3d direction);
 	void set_Bfield_azimuthal();
 

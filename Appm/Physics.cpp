@@ -12,18 +12,19 @@ Physics::~Physics()
 {
 }
 
-const Eigen::VectorXd Physics::primitive2state(const double n, const double p, const Eigen::Vector3d u)
+const Eigen::VectorXd Physics::primitive2state(const double massRatio, const double n, const double p, const Eigen::Vector3d u)
 {
 	assert(n > 0);
 	assert(p > 0);
-	const double e = 1. / (gamma - 1) * p / n; // ideal gas law
-	assert(e > 0);
-	const double etot = e + 0.5 * u.squaredNorm();
-	assert(etot > 0);
+	assert(massRatio > 0);
+	const double n_e = 1. / (gamma - 1) * 1. / massRatio * p; // ideal gas law
+	assert(n_e > 0);
+	const double n_etot = n_e + 0.5 * n * u.squaredNorm();
+	assert(n_etot > 0);
 	Eigen::VectorXd state = Eigen::VectorXd::Zero(5);
 	state(0) = n;
 	state.segment(1, 3) = n * u;
-	state(4) = n * etot;
+	state(4) = n_etot;
 	return state;
 }
 
@@ -52,7 +53,24 @@ const Eigen::Vector3d Physics::getFluidFluxFromState(const Eigen::Vector3d & q)
 	return flux;
 }
 
-const double Physics::getMaxWavespeed(const Eigen::Vector3d & qL, const Eigen::Vector3d & qR) 
+void Physics::state2primitive(const double massRatio, const Eigen::VectorXd & state, double & n, double & p, Eigen::Vector3d & u)
+{
+	assert(state.size() == 5);
+	assert(massRatio > 0);
+	n = state(0);
+	if (!(n > 0)) {
+		std::cout << n << std::endl;
+		std::cout << "stop" << std::endl;
+	}
+	assert(n > 0);
+	u = state.segment(1, 3) / n;
+	const double n_etot = state(4);
+	const double nu_sq = state.segment(1, 3).squaredNorm();
+	p = (gamma - 1) * massRatio * (n_etot - 0.5 * nu_sq / n);
+	assert(p > 0);
+}
+
+const double Physics::getMaxWavespeed(const Eigen::Vector3d & qL, const Eigen::Vector3d & qR)
 {
 	const double sL = Physics::getMaxWavespeed(qL);
 	const double sR = Physics::getMaxWavespeed(qR);

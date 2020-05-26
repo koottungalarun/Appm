@@ -42,8 +42,8 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 		std::cout << "Initialize fluid states: " << "Uniform" << std::endl;
 		double p = 1.0;
 		double n = 1.0;
-		double u = 0.0;
-		init_Uniformly(n, p, u);
+		Eigen::Vector3d uvec = Eigen::Vector3d::Zero();
+		init_Uniformly(n, p, uvec);
 	}
 		break;
 
@@ -53,6 +53,12 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 		const Eigen::Vector3d refPos = Eigen::Vector3d(0, 0, 0);
 		const double radius = 0.2;
 		init_Explosion(refPos, radius);
+	}
+		break;
+
+	case 4:
+	{
+		init_testcase_frictionTerm();
 	}
 	break;
 
@@ -627,23 +633,27 @@ void AppmSolver::init_SodShockTube(const double zRef) {
 
 		const double pL = 1;
 		const double nL = 1;
-		const double rhoL = epsilon2 * nL;
 		const Eigen::Vector3d uL = Eigen::Vector3d::Zero();
 
 		const double pR = 0.1;
 		const double nR = 0.125;
-		const double rhoR = epsilon2 * nR;
 		const Eigen::Vector3d uR = Eigen::Vector3d::Zero();
 
-		Eigen::VectorXd singleFluidStateLeft(5);
-		singleFluidStateLeft.setZero();
-		singleFluidStateLeft(0) = nL;
-		singleFluidStateLeft(4) = 1. / epsilon2 * (pL / (Physics::gamma - 1) + 0.5 * rhoL * uL.squaredNorm());
+		Eigen::VectorXd singleFluidStateLeft;
+		singleFluidStateLeft = Physics::primitive2state(epsilon2, nL, pL, uL);
+		assert(singleFluidStateLeft.size() == 5);
+		//singleFluidStateLeft.setZero();
+		//singleFluidStateLeft(0) = nL;
+		//singleFluidStateLeft.segment(1, 3) = nL * uL;
+		//singleFluidStateLeft(4) = pL / (Physics::gamma - 1) + 0.5 * nL * uL.squaredNorm();
 
-		Eigen::VectorXd singleFluidStateRight(5);
-		singleFluidStateRight.setZero();
-		singleFluidStateRight(0) = nR;
-		singleFluidStateRight(4) = 1. / epsilon2 * (pR / (Physics::gamma - 1) + 0.5 * rhoR * uR.squaredNorm());
+		Eigen::VectorXd singleFluidStateRight;
+		singleFluidStateRight = Physics::primitive2state(epsilon2, nR, pR, uR);
+		assert(singleFluidStateRight.size() == 5);
+		//singleFluidStateRight.setZero();
+		//singleFluidStateRight(0) = nR;
+		//singleFluidStateRight.segment(1, 3) = nR * uR;
+		//singleFluidStateRight(4) = pR / (Physics::gamma - 1) + 0.5 * nR * uR.squaredNorm();
 
 		leftState.segment(5 * k, 5) = singleFluidStateLeft;
 		rightState.segment(5 * k, 5) = singleFluidStateRight;
@@ -666,7 +676,7 @@ void AppmSolver::init_SodShockTube(const double zRef) {
 	}
 }
 
-void AppmSolver::init_Uniformly(const double n, const double p, const double u)
+void AppmSolver::init_Uniformly(const double n, const double p, const Eigen::Vector3d uvec)
 {
 	const int nCells = dualMesh.getNumberOfCells();
 	const int nFluids = getNFluids();
@@ -674,12 +684,13 @@ void AppmSolver::init_Uniformly(const double n, const double p, const double u)
 	Eigen::VectorXd state(fluidStateLength);
 	for (int k = 0; k < nFluids; k++) {
 		const double epsilon2 = particleParams[k].mass;
-		const double e = p / ((Physics::gamma - 1) * epsilon2 * n);
-		const double etot = e + 0.5 * pow(u, 2);
-		Eigen::VectorXd singleFluidState(5);
-		singleFluidState(0) = n;
-		singleFluidState.segment(1, 3) = n * u * Eigen::Vector3d::UnitZ();
-		singleFluidState(4) = n * etot;
+		Eigen::VectorXd singleFluidState;
+		singleFluidState = Physics::primitive2state(epsilon2, n, p, uvec);
+		//const double e = p / ((Physics::gamma - 1) * epsilon2 * n);
+		//const double etot = e + 0.5 * pow(u, 2);
+		//singleFluidState(0) = n;
+		//singleFluidState.segment(1, 3) = n * u * Eigen::Vector3d::UnitZ();
+		//singleFluidState(4) = n * etot;
 		state.segment(5 * k, 5) = singleFluidState;
 	}
 	fluidStates.setConstant(std::nan(""));
@@ -693,21 +704,27 @@ void AppmSolver::init_Uniformly(const double n, const double p, const double u)
 
 void AppmSolver::init_Explosion(const Eigen::Vector3d refPos, const double radius)
 {
-	Eigen::VectorXd state_lo = Physics::primitive2state(1, 1, Eigen::Vector3d::Zero());
-	Eigen::VectorXd state_hi = Physics::primitive2state(1, 5, Eigen::Vector3d::Zero());
 
 	const int nCells = dualMesh.getNumberOfCells();
 	const int nFluids = getNFluids();
-	for (int cIdx = 0; cIdx < nCells; cIdx++) {
-		const Cell * cell = dualMesh.getCell(cIdx);
-		if (cell->getType() != Cell::Type::FLUID) { continue; } // Skip cells that are not Fluid type
-		const Eigen::Vector3d cc = cell->getCenter();
-		for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+	for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+		const double massRatio = particleParams[fluidIdx].mass;
+		Eigen::VectorXd state_lo = Physics::primitive2state(massRatio, 1, 1, Eigen::Vector3d::Zero());
+		Eigen::VectorXd state_hi = Physics::primitive2state(massRatio, 1, 5, Eigen::Vector3d::Zero());
+		
+		for (int cIdx = 0; cIdx < nCells; cIdx++) {
+			const Cell * cell = dualMesh.getCell(cIdx);
+			if (cell->getType() != Cell::Type::FLUID) { continue; } // Skip cells that are not Fluid type
+			const Eigen::Vector3d cc = cell->getCenter();
 			const bool isInside = (cc - refPos).norm() < radius;
 			const Eigen::VectorXd state = isInside ? state_hi : state_lo;
 			fluidStates.col(cIdx).segment(5 * fluidIdx, 5) = state;
 		}
 	}
+}
+
+void AppmSolver::init_testcase_frictionTerm()
+{
 }
 
 /**
@@ -1925,22 +1942,32 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 		Eigen::MatrixXd qU(3, nCells);
 		Eigen::VectorXd qE(nCells);
 
+		// Initialize data vectors with NaN (not-a-number)
+		density.setConstant(std::nan("")); 
+		velocity.setConstant(std::nan(""));
+		pressure.setConstant(std::nan(""));
+		qN.setConstant(std::nan("")); 
+		qU.setConstant(std::nan("")); 
+		qE.setConstant(std::nan("")); 
+
 		const double epsilon2 = particleParams[fluidIdx].mass;
 		for (int i = 0; i < nCells; i++) {
+			const Cell * cell = dualMesh.getCell(i);
+			if (cell->getType() != Cell::Type::FLUID) { 
+				continue; // Skip non-fluid cells
+			}
 			const Eigen::VectorXd state = fluidStates.block(5 * fluidIdx, i, 5, 1);
-
 			if (isStateWrittenToOutput) {
 				qN(i) = state(0);
 				qU.col(i) = state.segment(1, 3);
 				qE(i) = state(4);
 			}
-
-			const double n = state(0);
-			const double rho = epsilon2 * n;
-			const Eigen::Vector3d u = epsilon2 * state.segment(1, 3) / n;
-			const double p = epsilon2 * (Physics::gamma - 1) * (state(4) - 0.5 * n * u.squaredNorm());
-
-			density(i) = rho;
+			double n = 0;
+			double p = 0;
+			Eigen::Vector3d u;
+			u.setZero();
+			Physics::state2primitive(epsilon2, state, n, p, u);
+			density(i) = epsilon2 * n;
 			velocity.col(i) = u;
 			pressure(i) = p;
 		}
