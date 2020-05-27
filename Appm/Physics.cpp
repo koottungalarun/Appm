@@ -66,7 +66,17 @@ void Physics::state2primitive(const double massRatio, const Eigen::VectorXd & st
 	u = state.segment(1, 3) / n;
 	const double n_etot = state(4);
 	const double nu_sq = state.segment(1, 3).squaredNorm();
-	p = (gamma - 1) * massRatio * (n_etot - 0.5 * nu_sq / n);
+	const double ne = n_etot - 0.5 * nu_sq / n;
+	p = (gamma - 1) * massRatio * ne;
+	if (!(p > 0)) {
+		std::stringstream ss;
+		ss << "Non-positive pressure: p = " << p << std::endl;
+		ss << "ne: " << ne << std::endl;
+		ss << "State: " << state.transpose() << std::endl;
+		ss << "mass ratio: " << massRatio << std::endl;
+		std::string str = ss.str();
+		throw std::domain_error(str);
+	}
 	assert(p > 0);
 }
 

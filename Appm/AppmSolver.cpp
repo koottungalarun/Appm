@@ -189,100 +189,112 @@ void AppmSolver::run()
 	/*
 	* Time integration loop 
 	*/
-	while (iteration < maxIterations && time < maxTime && !isStopFileActive()) {
-		std::cout << std::endl;
-		std::cout << "*********************************************" << std::endl;
-		std::cout << "* Iteration " << iteration << ",\t time = " << time << std::endl;
-		std::cout << "*********************************************" << std::endl;
-	
-		dt_previous = dt;
+	try {
+		while (iteration < maxIterations && time < maxTime && !isStopFileActive()) {
+			std::cout << std::endl;
+			std::cout << "*********************************************" << std::endl;
+			std::cout << "* Iteration " << iteration << ",\t time = " << time << std::endl;
+			std::cout << "*********************************************" << std::endl;
 
-		//fluidFluxes.setZero();
-		fluidSources.setZero();
-		//faceFluxes.setZero();
-		//faceFluxesImExRusanov.setZero();
+			dt_previous = dt;
 
-		// Determine timestep
-		if (appmParams.isFluidEnabled) {
-			dt = getNextFluidTimestepSize();
-			// Limit timestep such that maximum time is reached exactly
-			if (time + dt >= maxTime) {
-				std::cout << "timestep limited to reach maximum time; value before limiter is applied: dt = " << dt << std::endl;
-				dt = maxTime - time;
+			//fluidFluxes.setZero();
+			fluidSources.setZero();
+			//faceFluxes.setZero();
+			//faceFluxesImExRusanov.setZero();
+
+			// Determine timestep
+			if (appmParams.isFluidEnabled) {
+				dt = getNextFluidTimestepSize();
+				// Limit timestep such that maximum time is reached exactly
+				if (time + dt >= maxTime) {
+					std::cout << "timestep limited to reach maximum time; value before limiter is applied: dt = " << dt << std::endl;
+					dt = maxTime - time;
+				}
 			}
-		}
 
-		// Set explicit fluid source terms
-		setMagneticLorentzForceSourceTerms();
-		setFrictionSourceTerms();
+			// Set explicit fluid source terms
+			setMagneticLorentzForceSourceTerms();
+			setFrictionSourceTerms();
 
-		// Set explicit face fluxes
-		if (appmParams.isFluidEnabled) {
-			setFluidFaceFluxes();
-		}
+			// Set explicit face fluxes
+			if (appmParams.isFluidEnabled) {
+				setFluidFaceFluxes();
+			}
 
 
-		// Affine-linear function for implicit-consistent formulation of current density J_h = Msigma * E_h + Jaux
-		Eigen::SparseMatrix<double> Msigma;
-		Msigma = get_Msigma_spd(J_h_aux, dt, time);
+			// Affine-linear function for implicit-consistent formulation of current density J_h = Msigma * E_h + Jaux
+			Eigen::SparseMatrix<double> Msigma;
+			Msigma = get_Msigma_spd(J_h_aux, dt, time);
 
-		// Maxwell equations
-		if (appmParams.isMaxwellEnabled) {
-			solveMaxwellSystem(time, dt, dt_previous, Msigma);
-			// E- and B-field have been updated to new timestep
-		}
-		J_h = Msigma * E_h + J_h_aux;
+			// Maxwell equations
+			if (appmParams.isMaxwellEnabled) {
+				solveMaxwellSystem(time, dt, dt_previous, Msigma);
+				// E- and B-field have been updated to new timestep
+			}
+			J_h = Msigma * E_h + J_h_aux;
 
-		// Fluid equations
-		if (appmParams.isFluidEnabled) {
-			const int nFluids = this->getNFluids();
-			const int nCells = dualMesh.getNumberOfCells();
-			const int nFaces = dualMesh.getNumberOfFaces();
+			// Fluid equations
+			if (appmParams.isFluidEnabled) {
+				const int nFluids = this->getNFluids();
+				const int nCells = dualMesh.getNumberOfCells();
+				const int nFaces = dualMesh.getNumberOfFaces();
 
-			// Set source term for electric Lorentz force (implicit)
-			if (appmParams.isLorentzForceElectricEnabled) {
-				for (int i = 0; i < nCells; i++) {
-					const Cell * cell = dualMesh.getCell(i);
-					if (cell->getType() != Cell::Type::FLUID) {
-						continue; // Skip cells that are not of type Fluid
+				// Set source term for electric Lorentz force (implicit)
+				if (appmParams.isLorentzForceElectricEnabled) {
+					for (int i = 0; i < nCells; i++) {
+						const Cell * cell = dualMesh.getCell(i);
+						if (cell->getType() != Cell::Type::FLUID) {
+							continue; // Skip cells that are not of type Fluid
+						}
+						for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+							const int q = particleParams[fluidIdx].electricCharge;
+							const double n = fluidStates(5 * fluidIdx, i);
+							const double massRatio = particleParams[fluidIdx].mass;
+							LorentzForce_electric.col(i).segment(3 * fluidIdx, 3) = q * 1. / massRatio * n * E_cc.col(i);
+						}
 					}
+
+					// Update momentum source terms ...
 					for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-						const int q = particleParams[fluidIdx].electricCharge;
-						const double n = fluidStates(5 * fluidIdx, i);
-						const double massRatio = particleParams[fluidIdx].mass;
-						LorentzForce_electric.col(i).segment(3 * fluidIdx, 3) = q * 1./massRatio * n * E_cc.col(i);
+						fluidSources.block(5 * fluidIdx + 1, 0, 3, nCells) += LorentzForce_electric.block(3 * fluidIdx, 0, 3, nCells);
+					}
+					// Update energy source terms ...
+					std::cout << "TODO: Update of energy source term due to electric field" << std::endl;
+					for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+						// TODO
+						//fluidSources.row(5 * fluidIdx + 4) += 0;
 					}
 				}
+				std::cout << "Electric Lorentz Force maxCoeff: " << LorentzForce_electric.cwiseAbs().maxCoeff() << std::endl;
 
-				// Update momentum source terms ...
-				for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-					fluidSources.block(5 * fluidIdx + 1, 0, 3, nCells) += LorentzForce_electric.block(3 * fluidIdx, 0, 3, nCells);
+				//setFluidSourceTerm();
+
+				// Set implicit terms for mass fluxes
+				if (appmParams.isMassFluxSchemeImplicit) {
+					setImplicitMassFluxTerms(dt);
 				}
-				// Update energy source terms ...
-				std::cout << "TODO: Update of energy source term due to electric field" << std::endl;
-				for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-					// TODO
-					//fluidSources.row(5 * fluidIdx + 4) += 0;
-				}
+
+				setSumOfFaceFluxes();
+				updateFluidStates(dt);
+
+				//debug_checkCellStatus();
 			}
-			std::cout << "Electric Lorentz Force maxCoeff: " << LorentzForce_electric.cwiseAbs().maxCoeff() << std::endl;
-
-			//setFluidSourceTerm();
-
-			// Set implicit terms for mass fluxes
-			if (appmParams.isMassFluxSchemeImplicit) {
-				setImplicitMassFluxTerms(dt);
-			}
-
-			setSumOfFaceFluxes();
-			updateFluidStates(dt);
-
-			//debug_checkCellStatus();
+			std::cout << "dt = " << dt << std::endl;
+			iteration++;
+			time += dt;
+			writeOutput(iteration, time);
 		}
-		std::cout << "dt = " << dt << std::endl;
-		iteration++;
-		time += dt;
-		writeOutput(iteration, time);
+	}
+	catch (const std::exception & e) {
+		std::cout << "**********************************************************" << std::endl;
+		std::cout << "**********************************************************" << std::endl;
+		std::cout << "**********************************************************" << std::endl;
+		std::cout << "AppmSolver failed; error stack is: " << std::endl;
+		std::cout << e.what() << std::endl;
+		std::cout << "**********************************************************" << std::endl;
+		std::cout << "**********************************************************" << std::endl;
+		std::cout << "**********************************************************" << std::endl;
 	}
 	std::cout << std::endl;
 	std::cout << "Final time:      " << time << std::endl;
@@ -1382,11 +1394,14 @@ void AppmSolver::setSumOfFaceFluxes() {
 
 		// get sum of face fluxes
 		const std::vector<Face*> cellFaces = cell->getFaceList();
+		Eigen::VectorXd temp = Eigen::VectorXd::Zero(faceFluxes.rows()); // use single-precision to accumulate
 		for (auto face : cellFaces) {
-			const double faceArea = face->getArea();
-			const int orientation = getOrientation(cell, face);
-			sumOfFaceFluxes.col(k) += orientation * faceFluxes.col(face->getIndex()) * faceArea / cellVolume;
+			double faceArea = face->getArea();
+			double orientation = getOrientation(cell, face);
+			Eigen::VectorXd ff = faceFluxes.col(face->getIndex());
+			temp += orientation * ff * faceArea / cellVolume;
 		}
+		sumOfFaceFluxes.col(k) = temp;
 	}
 }
 
@@ -1826,6 +1841,7 @@ void AppmSolver::writeXdmf(const std::string & filename)
 	assert(pos > 0);
 
 	const int nTimesteps = timeStamps.size();
+	std::cout << "Write XDMF output file with " << nTimesteps << " timesteps" << std::endl;
 	
 	std::string gridPrimalEdges;
 	std::string gridPrimalFaces;
@@ -1889,9 +1905,6 @@ void AppmSolver::writeXdmfDualVolume(const std::string & filename)
 */
 void AppmSolver::writeOutput(const int iteration, const double time)
 {
-	timeStamps.push_back(time);
-	timeFile << iteration << "," << time << std::endl;
-
 	std::cout << "Write output at iteration " << iteration << ", time = " << time << std::endl;
 	const std::string filename = (std::stringstream() << "appm-" << iteration << ".h5").str();
 
@@ -1915,6 +1928,10 @@ void AppmSolver::writeOutput(const int iteration, const double time)
 	Eigen::VectorXi iterVec(1);
 	iterVec(0) = iteration;
 	h5writer.writeData(iterVec, "/iteration");
+
+	// Add this time value to list of timesteps
+	timeStamps.push_back(time);
+	timeFile << iteration << "," << time << std::endl;
 }
 
 void AppmSolver::writeFluidStates(H5Writer & writer)
@@ -3415,8 +3432,10 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 							
 							// Extra term by implicit electric Lorentz force (electric field)
 							const double geomFactor = nj_dot_ni * (Ai * Aj) / Vk; // geometric factor
-							const double value = numSchemeFactor * 0.5 * dt * pow(q, 2) / massRatio * nk / Vk * Ai * Aj * nj_dot_ni;
-							triplets.push_back(T(i, j, value));
+							if (appmParams.isLorentzForceElectricEnabled) {
+								const double value = numSchemeFactor * 0.5 * dt * pow(q, 2) / massRatio * nk / Vk * Ai * Aj * nj_dot_ni;
+								triplets.push_back(T(i, j, value));
+							}
 							if (fluidIdx == 0) {
 								geomTriplets.push_back(T(i, j, geomFactor));
 							}
@@ -3472,9 +3491,11 @@ const Eigen::VectorXd AppmSolver::setVoltageBoundaryConditions(const double time
 	}
 	else {
 		// Set voltage values at terminal A (stressed electrode)
+		auto finalVoltage = 0;
 		auto t0 = 1;
 		auto tscale = 0.1;
-		xd.topRows(nPrimalTerminalVertices / 2).array() = 0.5 * (1 + tanh((time - t0) / tscale));
+		auto timeFunction = 0.5 * (1 + tanh((time - t0) / tscale));
+		xd.topRows(nPrimalTerminalVertices / 2).array() = finalVoltage * timeFunction;
 	}
 	// Set voltage condition to zero at terminal B (grounded electrode)
 	xd.bottomRows(nPrimalTerminalVertices / 2).array() = 0;

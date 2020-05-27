@@ -3,6 +3,8 @@
 #include <Eigen/Dense>
 #include <iostream>
 
+#include <stdexcept>
+
 class Physics
 {
 public:
