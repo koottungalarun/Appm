@@ -59,6 +59,7 @@ private:
 		bool isMassFluxSchemeImplicit = false;
 		double timestepSize = 1;
 		bool isMaxwellCurrentDefined = false;
+		bool isFrictionActive = true;
 	} appmParams;
 
 	std::ofstream timeFile;
@@ -114,6 +115,10 @@ private:
 	Eigen::MatrixXd fluidSources;
 	Eigen::MatrixXd LorentzForce_magnetic;
 	Eigen::MatrixXd LorentzForce_electric;
+	Eigen::MatrixXd frictionForceSourceTerm;
+	Eigen::MatrixXd frictionEnergySourceTerm;
+	Eigen::MatrixXd diffusionVelocity;
+	Eigen::MatrixXd bulkVelocity;
 
 	Eigen::MatrixXd faceFluxesImExRusanov;
 
@@ -143,6 +148,8 @@ private:
 	const Eigen::Matrix3Xd getCurrentDensityAtCellCenter();
 
 	void get_Msigma_consistent(const double dt, Eigen::SparseMatrix<double> & Msigma, Eigen::VectorXd & jaux);
+
+	void setFrictionSourceTerms();
 
 	const int getFluidStateLength() const;
 	const double getNextFluidTimestepSize() const;

@@ -1,13 +1,15 @@
-maxIterations: 40
-maxTime: 1.0
+maxIterations: 150
+maxTime: 10.0
 timestepSize: 0.1
 isFluidEnabled: 1
 isMaxwellEnabled: 0
 isEulerMaxwellCouplingEnabled: 1
 lambdaSquare: 1e-0
 isMassFluxSchemeImplicit: 0
-initType: 1
+initType: 4
 isElectricLorentzForceActive: 0
 isMagneticLorentzForceActive: 0
 isShowDataWriterOutput: 0
 isMaxwellCurrentDefined: 0
+isFrictionActive: 1
+

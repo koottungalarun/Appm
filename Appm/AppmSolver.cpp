@@ -198,7 +198,7 @@ void AppmSolver::run()
 		dt_previous = dt;
 
 		//fluidFluxes.setZero();
-		//fluidSources.setZero();
+		fluidSources.setZero();
 		//faceFluxes.setZero();
 		//faceFluxesImExRusanov.setZero();
 
@@ -238,6 +238,9 @@ void AppmSolver::run()
 					}
 				}
 				std::cout << "maxCoeff F_L magnetic: " << LorentzForce_magnetic.cwiseAbs().maxCoeff() << std::endl;
+			}
+			if (appmParams.isFrictionActive) {
+				setFrictionSourceTerms();
 			}
 		}
 
@@ -377,9 +380,10 @@ std::string AppmSolver::printSolverParameters() const
 	ss << "initType: " << initType << std::endl;
 	ss << "isElectricLorentzForceActive: " << isElectricLorentzForceActive << std::endl;
 	ss << "isMagneticLorentzForceActive: " << isMagneticLorentzForceActive << std::endl;
-	ss << "isShowDataWriterOutput:" << isShowDataWriterOutput << std::endl;
+	ss << "isShowDataWriterOutput: " << isShowDataWriterOutput << std::endl;
 	ss << "isMaxwellCurrentDefined: " << appmParams.isMaxwellCurrentDefined << std::endl;
 	ss << "isEulerMaxwellCouplingEnabled: " << appmParams.isEulerMaxwellCouplingEnabled << std::endl;
+	ss << "isFrictionActive: " << appmParams.isFrictionActive << std::endl;
 	ss << "=======================" << std::endl;
 	return ss.str();
 }
@@ -600,7 +604,10 @@ void AppmSolver::init_multiFluid(const std::string & filename)
 	fluidStates = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
 	fluidSources = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
 	sumOfFaceFluxes = Eigen::MatrixXd::Zero(fluidStates.rows(), nCells);
-
+	frictionForceSourceTerm = Eigen::MatrixXd::Zero(3 * nFluids, nCells);
+	frictionEnergySourceTerm = Eigen::MatrixXd::Zero(nFluids, nCells);
+	diffusionVelocity = Eigen::MatrixXd::Zero(3 * nFluids, nCells);
+	bulkVelocity = Eigen::Matrix3Xd::Zero(3, nCells);
 
 	const int nFaces = dualMesh.getNumberOfFaces();
 	faceTypeFluids = Eigen::MatrixXi::Zero(nFaces, nFluids);
@@ -723,8 +730,32 @@ void AppmSolver::init_Explosion(const Eigen::Vector3d refPos, const double radiu
 	}
 }
 
+/**
+* Initialize fluids such that first fluid is at velocity u = 1 and all others are quiescent (u = 0).
+*/
 void AppmSolver::init_testcase_frictionTerm()
 {
+	const int nCells = dualMesh.getNumberOfCells();
+	const int nFluids = getNFluids();
+	assert(nFluids >= 2);
+	for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+		const double massRatio = particleParams[fluidIdx].mass;
+		const double n = 1;
+		const double p = 1;
+		Eigen::Vector3d uvec;
+		Eigen::VectorXd state;
+		if (fluidIdx == 0) {
+			uvec = Eigen::Vector3d::UnitZ();
+			state = Physics::primitive2state(massRatio, n, p, uvec);
+		}
+		else {
+			uvec = Eigen::Vector3d::Zero();
+			state = Physics::primitive2state(massRatio, n, p, uvec);
+		}
+		for (int i = 0; i < nCells; i++) {
+			fluidStates.col(i).segment(5 * fluidIdx, 5) = state;
+		}
+	}
 }
 
 /**
@@ -1025,6 +1056,76 @@ void AppmSolver::get_Msigma_consistent(const double dt, Eigen::SparseMatrix<doub
 	Msigma.makeCompressed();
 
 	//assert(Msigma.nonZeros() > 0);
+}
+
+/** 
+* Apply friction force to all fluids. 
+*
+* Momentum source for species a: R_a = (-1) * sum_b( n_a * n_b * (u_a - u_b) * z_ab ), 
+* where b stands for all other fluids (b != a), and z_ab is a function that describes further parameters 
+* of the interaction between species a and b, e.g. temperature, mass ratio, and collision cross section.
+*
+* This also results in an energy source term Q_a = u_a * R_a.
+*/
+void AppmSolver::setFrictionSourceTerms()
+{
+	auto z_ab = 1; // assume a constant value for testing purpose
+	auto nCells = dualMesh.getNumberOfCells();
+	auto nFluids = getNFluids();
+
+	// For each fluid cell ...
+	for (int i = 0; i < nCells; i++) {
+		const Cell * cell = dualMesh.getCell(i);
+		if (cell->getType() != Cell::Type::FLUID) {
+			continue; // Skip non-fluid cells
+		}
+
+		double rho_avg = 0;    // bulk density
+		Eigen::Vector3d u_avg = Eigen::Vector3d::Zero(); // bulk velocity (mass-averaged velocity)
+
+		for (int alpha = 0; alpha < nFluids; alpha++) {
+			auto massRatio = particleParams[alpha].mass;
+			auto state = fluidStates.col(i).segment(5 * alpha, 5);
+			assert(state.size() == 5);
+			auto n_u = state.segment(1, 3);
+			u_avg += massRatio * n_u;
+			rho_avg += massRatio * state(0);
+		}
+		assert(rho_avg > 0);
+		u_avg /= rho_avg;
+		bulkVelocity.col(i) = u_avg;
+
+		// For each species alpha ...
+		for (int alpha = 0; alpha < nFluids; alpha++) {
+			Eigen::Vector3d R_a = Eigen::Vector3d::Zero();
+			auto stateA = fluidStates.col(i).segment(5 * alpha, 5); // state vector of fluid A in cell i
+			auto n_a = stateA(0); // number density
+			auto u_a = stateA.segment(1, 3) / n_a; // velocity vector
+
+			// ... for each species beta != alpha ...
+			for (int beta = 0; beta < nFluids; beta++) {
+				auto stateB = fluidStates.col(i).segment(5 * beta, 5);
+				auto n_b = stateB(0); // number density
+				auto u_b = stateB.segment(1, 3) / n_b; // velocity vector
+
+				if (beta == alpha) {
+					continue; // skip if indices are equal, since they contribute nothing
+				}
+				// ... get friction force due to interaction of species Alpha and Beta
+				R_a -= n_a * n_b * (u_a - u_b) * z_ab;
+			}
+			auto w_a = u_a - u_avg; // Diffusion velocity w_a 
+			auto Q_a = u_a.dot(R_a); // Source term for energy equation due to friction
+
+			// Save local data for post-processing
+			diffusionVelocity.col(i).segment(3 * alpha, 3) = w_a;
+			frictionForceSourceTerm.col(i).segment(3 * alpha, 3) = R_a;
+			frictionEnergySourceTerm(alpha, i) = Q_a;
+
+			fluidSources.col(i).segment(5 * alpha + 1, 3) += R_a; // set momentum source of fluid A
+			fluidSources(5 * alpha + 4, i) += Q_a;                // set   energy source of fluid A
+		}
+	}
 }
 
 
@@ -1528,7 +1629,7 @@ void AppmSolver::setFluidSourceTerm()
 
 			// TODO: reaction source terms
 
-			fluidSources.col(cIdx).segment(5 * fluidIdx, 5) = srcLocal;
+			fluidSources.col(cIdx).segment(5 * fluidIdx, 5) += srcLocal;
 		}
 	}
 	std::cout << "fluid sources maxCoeff: " << fluidSources.cwiseAbs().maxCoeff() << std::endl;
@@ -1934,6 +2035,9 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 		Eigen::VectorXd sumMassFluxes = sumOfFaceFluxes.row(5 * fluidIdx);
 		Eigen::MatrixXd sumMomentumFluxes = sumOfFaceFluxes.block(5 * fluidIdx + 1, 0, 3, nCells);
 		Eigen::VectorXd sumEnergyFluxes = sumOfFaceFluxes.row(5*fluidIdx + 4);
+		Eigen::Matrix3Xd frictionSource = frictionForceSourceTerm.block(3 * fluidIdx, 0, 3, nCells);
+		Eigen::VectorXd speciesFrictionEnergySource = frictionEnergySourceTerm.row(fluidIdx);
+		Eigen::Matrix3Xd speciesDiffusionVelocity = diffusionVelocity.block(3 * fluidIdx, 0, 3, nCells);
 
 		const std::string stateN = fluidTag + "stateN";
 		const std::string stateU = fluidTag + "stateU";
@@ -1979,7 +2083,9 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 		writer.writeData(sumMassFluxes, (std::stringstream() << fluidTag << "sumMassFlux").str());
 		writer.writeData(sumMomentumFluxes, (std::stringstream() << fluidTag << "sumMomentumFlux").str());
 		writer.writeData(sumEnergyFluxes, (std::stringstream() << fluidTag << "sumEnergyFlux").str());
-
+		writer.writeData(frictionSource, (std::stringstream() << fluidTag << "frictionSource").str());
+		writer.writeData(speciesDiffusionVelocity, (std::stringstream() << fluidTag << "diffusionVelocity").str());
+		writer.writeData(speciesFrictionEnergySource, (std::stringstream() << fluidTag << "frictionEnergySource").str());
 
 		Eigen::Matrix3Xd el_source = LorentzForce_electric.block(3 * fluidIdx, 0, 3, nCells);
 		writer.writeData(el_source, fluidTag + "LorentzForceEl");
@@ -2019,7 +2125,7 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 			writer.writeData(faceTypeFluid, (std::stringstream() << fluidTag << "faceType").str());
 		}
 	}
-
+	writer.writeData(bulkVelocity, "/bulkVelocity");
 	writer.writeData(faceFluxesImExRusanov, "/faceFluxesImExRusanov");
 }
 
@@ -2949,6 +3055,14 @@ const std::string AppmSolver::xdmf_GridDualCells(const int iteration) const
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
+	ss << "<Attribute Name=\"" << "Bulk Velocity" << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << " 3\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << datafilename << ":/" << "bulkVelocity" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+
 	ss << fluidXdmfOutput(datafilename) << std::endl;
 	ss << "</Grid>";
 	return ss.str();
@@ -3030,6 +3144,26 @@ const std::string AppmSolver::fluidXdmfOutput(const std::string & datafilename) 
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
+		ss << "<Attribute Name=\"" << fluidName << " Diffusion Velocity" << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << " 3\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << datafilename << ":/" << fluidName << "-diffusionVelocity" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+
+		ss << "<Attribute Name=\"" << fluidName << " Friction Force Source Term" << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << " 3\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << datafilename << ":/" << fluidName << "-frictionSource" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+
+		ss << "<Attribute Name=\"" << fluidName << " Friction Energy Source Term" << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << "\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << datafilename << ":/" << fluidName << "-frictionEnergySource" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
 
 		if (isStateWrittenToOutput) {
 			ss << "<Attribute Name=\"" << fluidName << " state N" << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
@@ -3040,14 +3174,14 @@ const std::string AppmSolver::fluidXdmfOutput(const std::string & datafilename) 
 			ss << "</Attribute>" << std::endl;
 
 
-			ss << "<Attribute Name=\"" << fluidName << " stateU\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+			ss << "<Attribute Name=\"" << fluidName << " state U\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 			ss << "<DataItem Dimensions=\"" << nCells << " 3\""
 				<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
 			ss << datafilename << ":/" << fluidName << "-stateU" << std::endl;
 			ss << "</DataItem>" << std::endl;
 			ss << "</Attribute>" << std::endl;
 
-			ss << "<Attribute Name=\"" << fluidName << " stateE\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+			ss << "<Attribute Name=\"" << fluidName << " state E\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 			ss << "<DataItem Dimensions=\"" << nCells << "\""
 				<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
 			ss << datafilename << ":/" << fluidName << "-stateE" << std::endl;
