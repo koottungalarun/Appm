@@ -148,9 +148,10 @@ private:
 	const Eigen::Matrix3Xd getEfieldAtCellCenter();
 	const Eigen::Matrix3Xd getCurrentDensityAtCellCenter();
 
-	void get_Msigma_consistent(const double dt, Eigen::SparseMatrix<double> & Msigma, Eigen::VectorXd & jaux);
+	//void get_Msigma_consistent(const double dt, Eigen::SparseMatrix<double> & Msigma, Eigen::VectorXd & jaux);
 
 	void setFrictionSourceTerms();
+	void setMagneticLorentzForceSourceTerms();
 
 	const int getFluidStateLength() const;
 	const double getNextFluidTimestepSize() const;
@@ -161,10 +162,10 @@ private:
 	const int getOrientation(const Cell * cell, const Face * face) const;
 	
 	//const Eigen::Vector3d getFluidFluxFromState(const Eigen::Vector3d & q) const;
-	const Eigen::Vector3d getRusanovFluxExplicit(const int faceIdx, const int fluidIdx) const;
-	const Eigen::Vector3d getRusanovFluxImEx(const int faceIdx, const int fluidIdx, const double dt);
+	//const Eigen::Vector3d getRusanovFluxExplicit(const int faceIdx, const int fluidIdx) const;
+	//const Eigen::Vector3d getRusanovFluxImEx(const int faceIdx, const int fluidIdx, const double dt);
 
-	const double getImplicitExtraTermMomentumFlux(const int cellIdx, const Eigen::Vector3d & faceNormal, const int fluidIdx) const;
+	//const double getImplicitExtraTermMomentumFlux(const int cellIdx, const Eigen::Vector3d & faceNormal, const int fluidIdx) const;
 
 	const std::pair<int,int> getAdjacientCellStates(const Face * face, const int fluidIdx, Eigen::Vector3d & qL, Eigen::Vector3d & qR) const;
 
@@ -176,7 +177,7 @@ private:
 	void setFluidFaceFluxes();
 	Eigen::Vector3d getSpeciesFaceFlux(const Face * face, const int fluidIdx);
 	const Eigen::Vector3d getSpeciesFaceFluxAtCathode(const Face * face, const int fluidIdx);
-	void setFluidSourceTerm();
+	//void setFluidSourceTerm();
 	void setSumOfFaceFluxes();
 	void setImplicitMassFluxTerms(const double dt);
 	void updateFluidStates(const double dt);

@@ -215,30 +215,8 @@ void AppmSolver::run()
 		// Set explicit fluid source terms
 		if (appmParams.isFluidEnabled) {
 			if (appmParams.isLorentzForceMagneticEnabled) {
-				for (int idx = 0; idx < nCells; idx++) {
-					const Cell * cell = dualMesh.getCell(idx);
-					if (cell->getType() != Cell::Type::FLUID) {
-						continue; // Skip cell that are not of type Fluid 
-					}
-					for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-						assert(idx < fluidStates.cols());
-						assert(5 * fluidIdx + 3 < fluidStates.rows());
-						const Eigen::Vector3d nu = fluidStates.col(idx).segment(5 * fluidIdx + 1, 3);
-						assert(nu.allFinite());
-						const Eigen::Vector3d B = B_vertex.col(idx);
-						assert(B.allFinite());
-						const int q = particleParams[fluidIdx].electricCharge;
-						const double massRatio = particleParams[fluidIdx].mass;
-						const Eigen::Vector3d result = q * 1. / massRatio * nu.cross(B);
-						if (!result.allFinite()) {
-							std::cout << "result: " << result.transpose() << std::endl;
-							assert(result.allFinite());
-						}
-						LorentzForce_magnetic.col(idx).segment(3 * fluidIdx, 3) = result;
-					}
-				}
-				std::cout << "maxCoeff F_L magnetic: " << LorentzForce_magnetic.cwiseAbs().maxCoeff() << std::endl;
-			} // end if isMagneticLorentzForceActive
+				setMagneticLorentzForceSourceTerms();
+			} 
 			if (appmParams.isFrictionActive) {
 				setFrictionSourceTerms();
 			}
@@ -269,22 +247,33 @@ void AppmSolver::run()
 
 			// Set source term for electric Lorentz force (implicit)
 			if (appmParams.isLorentzForceElectricEnabled) {
-				for (int idx = 0; idx < nCells; idx++) {
-					const Cell * cell = dualMesh.getCell(idx);
+				for (int i = 0; i < nCells; i++) {
+					const Cell * cell = dualMesh.getCell(i);
 					if (cell->getType() != Cell::Type::FLUID) {
 						continue; // Skip cells that are not of type Fluid
 					}
 					for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
 						const int q = particleParams[fluidIdx].electricCharge;
-						const double n = fluidStates(5 * fluidIdx, idx);
+						const double n = fluidStates(5 * fluidIdx, i);
 						const double massRatio = particleParams[fluidIdx].mass;
-						LorentzForce_electric.col(idx).segment(3 * fluidIdx, 3) = q * 1./massRatio * n * E_cc.col(idx);
+						LorentzForce_electric.col(i).segment(3 * fluidIdx, 3) = q * 1./massRatio * n * E_cc.col(i);
 					}
+				}
+
+				// Update momentum source terms ...
+				for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+					fluidSources.block(5 * fluidIdx + 1, 0, 3, nCells) += LorentzForce_electric.block(3 * fluidIdx, 0, 3, nCells);
+				}
+				// Update energy source terms ...
+				std::cout << "TODO: Update of energy source term due to electric field" << std::endl;
+				for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+					// TODO
+					//fluidSources.row(5 * fluidIdx + 4) += 0;
 				}
 			}
 			std::cout << "Electric Lorentz Force maxCoeff: " << LorentzForce_electric.cwiseAbs().maxCoeff() << std::endl;
 
-			setFluidSourceTerm();
+			//setFluidSourceTerm();
 
 			// Set implicit terms for mass fluxes
 			if (appmParams.isMassFluxSchemeImplicit) {
@@ -928,135 +917,6 @@ const Eigen::Matrix3Xd AppmSolver::getCurrentDensityAtCellCenter()
 	return result;
 }
 
-/** 
-* Setup of equation J_h = Msigma * E_h + J_h_aux, which results of the consistent-implicit formulation.
-*/
-void AppmSolver::get_Msigma_consistent(const double dt, Eigen::SparseMatrix<double>& Msigma, Eigen::VectorXd & jaux)
-{
-	const int nPrimalEdges = primalMesh.getNumberOfEdges();
-	const int nDualFaces = dualMesh.getNumberOfFaces();
-	const int nFluids = getNFluids();
-
-	typedef Eigen::Triplet<double> T;
-	std::vector<T> triplets;
-
-	std::cout << "isElectricLorentzForceActive: " << appmParams.isLorentzForceElectricEnabled << std::endl;
-	std::cout << "isMagneticLorentzForceActive: " << appmParams.isLorentzForceMagneticEnabled << std::endl;
-	std::cout << "isMomentumFluxActive: " << isMomentumFluxActive << std::endl;
-	if (!isMomentumFluxActive) {
-		std::cout << "Warning: momentum flux disabled in implicit-consistent current model" << std::endl;
-	}
-
-	std::cout << "Warning: check definition of implicit-consistent current: factors due to Rusanov scheme in magnetic Lorentz force" << std::endl;
-	std::cout << "Warning: check definition of implicit-consistent current: factors due to Rusanov scheme at domain boundary" << std::endl;
-
-	// Set parameters to zero
-	Msigma = Eigen::SparseMatrix<double>(nDualFaces, nPrimalEdges);
-	jaux = Eigen::VectorXd::Zero(nDualFaces);
-
-	// For each fluid ...
-	for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-		// species ionization degree 
-		const int q = particleParams[fluidIdx].electricCharge;
-		if (q == 0) { // skip species that are neutral
-			continue; 
-		}
-
-		// For each face in dual mesh at which we evaulate implicit-consistent current value
-		for (int jdx = 0; jdx < nDualFaces; jdx++) {
-			const Face * dualFace = dualMesh.getFace(jdx);
-			if (!dualFace->hasFluidCells()) { // skip faces that are not adjacient to a fluid cell
-				continue;
-			}
-
-			const Eigen::Vector3d fn = dualFace->getNormal();
-			const double fA = dualFace->getArea();
-			const std::vector<Cell*> adjacientCells = dualFace->getCellList();
-			assert(adjacientCells.size() >= 1);
-			assert(adjacientCells.size() <= 2);
-			assert((adjacientCells.size() == 1 &&  dualFace->isBoundary())
-				|| (adjacientCells.size() == 2 && !dualFace->isBoundary()));
-
-			// For each adjacient cell
-			for (auto cell : adjacientCells) {
-				// model is defined only for fluid cells; skip other cells
-				if (cell->getType() != Cell::Type::FLUID) {
-					continue;
-				}
-
-				// Number density in dual cell
-				const double numberDensity = fluidStates(5 * fluidIdx, cell->getIndex());
-
-				// List of faces that make this cell
-				std::vector<Face*> cellFaces = cell->getFaceList();
-				for (auto face : cellFaces) {
-					// Index of primal edge that is associated with dual face
-					const int edx = dualMesh.getAssociatedPrimalEdgeIndex(face->getIndex());
-					assert(edx >= 0 && edx < primalMesh.getNumberOfEdges());
-					const Edge * edge = primalMesh.getEdge(edx);
-					
-					const Eigen::Vector3d fc = face->getCenter();
-					const Eigen::Vector3d cc = cell->getCenter();
-					
-					// Use Perot's interpolation method to obtain cell-centered value
-					// of the electric field that is defined at dual faces (= primal edges)
-
-					const Eigen::Vector3d rvec = fc - cc; // Position vector of face center relative to cell center
-					const Eigen::Vector3d nj = face->getNormal();
-					const int incidence = rvec.dot(nj) > 0 ? 1 : -1;
-					const Eigen::Vector3d Lhat = edge->getDirection().normalized();
-					const double rvec_proj_fn = rvec.dot(fn);
-					const double dL = edge->getLength();
-					const double dA = face->getArea();
-					const double dV = cell->getVolume();
-
-					
-					// Consistent-implicit electric current due to electric Lorentz force (F = q*n*E)
-					if (appmParams.isLorentzForceElectricEnabled) {
-
-						// Electric field projected in direction of dual face and interpolated from dual face centers
-						double value = q * numberDensity * rvec_proj_fn * Lhat.dot(nj) * incidence * dA / dV * (1. / dL);
-						value *= dt * q * fA;
-
-						// Factor due to definition of reconstructed fluid flux:
-						// - At inner faces (Rusanov scheme): f = 0.5 * ( (nu)_k + (nu)_{k+1} ) - 0.5 * s * (n_{k+1} - n_k)
-						// - At opening faces: f = (nu)_k
-						// - At boundary faces: ???                  <<<---- TODO
-						const bool isFaceTypeOpening = dualFace->getType() == Face::Type::OPENING;
-						value *= isFaceTypeOpening ? 1 : 0.5;
-
-						triplets.push_back(T(jdx, edx, value));
-					} // end if isElectricLorentzForceActive
-
-						
-					// Consistent-implicit electric current due to momentum flux 
-					if (isMomentumFluxActive) {
-						const double momentumFlux = getRusanovFluxExplicit(face->getIndex(), fluidIdx)(1);
-						jaux(jdx) += -dt / dV * dA * nj.dot(fn) * momentumFlux * q * fA;
-					}
-
-
-				} // end for cellFaces			
-
-				// Consistent-implicit electric current due to magnetic Lorentz force (F = q * (nu) x B)
-				if (appmParams.isLorentzForceMagneticEnabled) {
-					const Eigen::Vector3d B = B_vertex.col(cell->getIndex());
-					const Eigen::Vector3d nu = fluidStates.col(cell->getIndex()).segment(5 * fluidIdx + 1, 3);
-					double value = q * nu.cross(B).dot(fn);
-					value *= dt * q * fA;
-					value *= 0.5; // this factor is due to defintion of reconstructed flux (Rusanov scheme)
-					jaux(jdx) += value;
-				}
-
-			} // end for adjacient cells
-		} // end for dual faces
-	} // end for fluidIdx
-
-	Msigma.setFromTriplets(triplets.begin(), triplets.end());
-	Msigma.makeCompressed();
-
-	//assert(Msigma.nonZeros() > 0);
-}
 
 /** 
 * Apply friction force to all fluids. 
@@ -1128,9 +988,49 @@ void AppmSolver::setFrictionSourceTerms()
 	}
 }
 
+/**
+* Evaluate magnetic Lorentz force (i.e., F_* = q_* * eps_*^(-2) * (nu)_* x B) 
+* and add this source term to the fluid sources.
+*/
+void AppmSolver::setMagneticLorentzForceSourceTerms()
+{
+	const int nFluids = this->getNFluids();
+	const int nCells = dualMesh.getNumberOfCells();
+
+	for (int i = 0; i < nCells; i++) {
+		const Cell * cell = dualMesh.getCell(i);
+		if (cell->getType() != Cell::Type::FLUID) {
+			continue; // Skip cell that are not of type Fluid 
+		}
+		for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+			assert(i < fluidStates.cols());
+			assert(5 * fluidIdx + 3 < fluidStates.rows());
+			const Eigen::Vector3d nu = fluidStates.col(i).segment(5 * fluidIdx + 1, 3);
+			assert(nu.allFinite());
+			const Eigen::Vector3d B = B_vertex.col(i);
+			assert(B.allFinite());
+			const int q = particleParams[fluidIdx].electricCharge;
+			const double massRatio = particleParams[fluidIdx].mass;
+			const Eigen::Vector3d result = q * 1. / massRatio * nu.cross(B);
+			if (!result.allFinite()) {
+				std::cout << "result: " << result.transpose() << std::endl;
+				assert(result.allFinite());
+			}
+			LorentzForce_magnetic.col(i).segment(3 * fluidIdx, 3) = result;
+		}
+	}
+
+	// Update of momentum source term
+	for (int fluidx = 0; fluidx < nFluids; fluidx++) {
+		fluidSources.block(5 * fluidx + 1, 0, 3, nCells) += LorentzForce_magnetic.block(3 * fluidx, 0, 3, nCells);
+	}
+	//std::cout << "maxCoeff F_L magnetic: " << LorentzForce_magnetic.cwiseAbs().maxCoeff() << std::endl;
+}
+
 
 /** 
-* Get timestep size for next iteration.
+* @return timestep size for next iteration, based on maximum local wavespeed 
+*         and projected cell size at each face.
 */
 const double AppmSolver::getNextFluidTimestepSize() const
 {
@@ -1200,8 +1100,8 @@ const double AppmSolver::getNextFluidTimestepSize() const
 //}
 
 /**
-* @return Fluid state in given cell and fluid, projected in direction of a unit normal vector. 
-* The normal vector may point in any direction. 
+* @return Fluid state in given cell and fluid, projected in direction of 
+*         a unit normal vector. The normal vector may point in any direction. 
 */
 const Eigen::Vector3d AppmSolver::getFluidState(const int cellIdx, const int fluidIdx, const Eigen::Vector3d & faceNormal) const
 {
@@ -1230,91 +1130,91 @@ const int AppmSolver::getOrientation(const Cell * cell, const Face * face) const
 /**
 * Get the face flux with explicit Rusanov scheme. 
 */
-const Eigen::Vector3d AppmSolver::getRusanovFluxExplicit(const int faceIdx, const int fluidIdx) const
-{
-	assert(false); // Do not use this anymore
+//const Eigen::Vector3d AppmSolver::getRusanovFluxExplicit(const int faceIdx, const int fluidIdx) const
+//{
+//	assert(false); // Do not use this anymore
+//
+//	const bool showOutput = false;
+//	Eigen::Vector3d qL, qR;
+//	Eigen::Vector3d faceFlux;
+//	faceFlux.setZero();
+//
+//	const Face * face = dualMesh.getFace(faceIdx);
+//	const Face::Type faceFluidType = getFaceTypeOfFluid(face, fluidIdx);
+//
+//	switch (faceFluidType) {
+//	case Face::Type::INTERIOR:
+//		getAdjacientCellStates(face, fluidIdx, qL, qR);
+//		faceFlux = Physics::getRusanovFlux(qL, qR, showOutput);
+//		break;
+//
+//
+//	}
+//
+//	return faceFlux; 
+//}
+//
+//const Eigen::Vector3d AppmSolver::getRusanovFluxImEx(const int faceIdx, const int fluidIdx, const double dt) 
+//{
+//	const Face * face = dualMesh.getFace(faceIdx);
+//	const Eigen::Vector3d faceNormal = face->getNormal();
+//	//const Face::FluidType faceFluidType = face->getFluidType();
+//	const Face::Type faceFluidType = getFaceTypeOfFluid(face, fluidIdx);
+//
+//	Eigen::Vector3d qL, qR;
+//	const std::pair<int, int> adjacientCellIdx = getAdjacientCellStates(face, fluidIdx, qL, qR);
+//
+//	double implicitExtraTerms = 0;
+//	int cellIndex;
+//
+//	if (faceFluidType != Face::Type::INTERIOR) {
+//		assert(adjacientCellIdx.first == -1 || adjacientCellIdx.second == -1);
+//	}
+//	const bool isInteriorFace = faceFluidType == Face::Type::INTERIOR;
+//	const bool isBoundaryFace = !isInteriorFace;
+//	if (appmParams.isMassFluxSchemeImplicit) {
+//		cellIndex = adjacientCellIdx.first;
+//		double extra_L = 0;
+//		if (cellIndex >= 0) {
+//			extra_L = getImplicitExtraTermMomentumFlux(cellIndex, faceNormal, fluidIdx);
+//		}
+//		cellIndex = adjacientCellIdx.second;
+//		double extra_R = 0;
+//		if (cellIndex >= 0) {
+//			extra_R = getImplicitExtraTermMomentumFlux(cellIndex, faceNormal, fluidIdx);
+//		}
+//		implicitExtraTerms -= dt * extra_L;
+//		implicitExtraTerms -= dt * extra_R;
+//		faceFluxesImExRusanov.coeffRef(faceIdx, fluidIdx) = implicitExtraTerms;
+//	}
+//	
+//
+//	Eigen::Vector3d faceFlux = getRusanovFluxExplicit(faceIdx, fluidIdx);
+//	faceFlux(0) += implicitExtraTerms;
+//	return faceFlux;
+//}
 
-	const bool showOutput = false;
-	Eigen::Vector3d qL, qR;
-	Eigen::Vector3d faceFlux;
-	faceFlux.setZero();
-
-	const Face * face = dualMesh.getFace(faceIdx);
-	const Face::Type faceFluidType = getFaceTypeOfFluid(face, fluidIdx);
-
-	switch (faceFluidType) {
-	case Face::Type::INTERIOR:
-		getAdjacientCellStates(face, fluidIdx, qL, qR);
-		faceFlux = Physics::getRusanovFlux(qL, qR, showOutput);
-		break;
-
-
-	}
-
-	return faceFlux; 
-}
-
-const Eigen::Vector3d AppmSolver::getRusanovFluxImEx(const int faceIdx, const int fluidIdx, const double dt) 
-{
-	const Face * face = dualMesh.getFace(faceIdx);
-	const Eigen::Vector3d faceNormal = face->getNormal();
-	//const Face::FluidType faceFluidType = face->getFluidType();
-	const Face::Type faceFluidType = getFaceTypeOfFluid(face, fluidIdx);
-
-	Eigen::Vector3d qL, qR;
-	const std::pair<int, int> adjacientCellIdx = getAdjacientCellStates(face, fluidIdx, qL, qR);
-
-	double implicitExtraTerms = 0;
-	int cellIndex;
-
-	if (faceFluidType != Face::Type::INTERIOR) {
-		assert(adjacientCellIdx.first == -1 || adjacientCellIdx.second == -1);
-	}
-	const bool isInteriorFace = faceFluidType == Face::Type::INTERIOR;
-	const bool isBoundaryFace = !isInteriorFace;
-	if (appmParams.isMassFluxSchemeImplicit) {
-		cellIndex = adjacientCellIdx.first;
-		double extra_L = 0;
-		if (cellIndex >= 0) {
-			extra_L = getImplicitExtraTermMomentumFlux(cellIndex, faceNormal, fluidIdx);
-		}
-		cellIndex = adjacientCellIdx.second;
-		double extra_R = 0;
-		if (cellIndex >= 0) {
-			extra_R = getImplicitExtraTermMomentumFlux(cellIndex, faceNormal, fluidIdx);
-		}
-		implicitExtraTerms -= dt * extra_L;
-		implicitExtraTerms -= dt * extra_R;
-		faceFluxesImExRusanov.coeffRef(faceIdx, fluidIdx) = implicitExtraTerms;
-	}
-	
-
-	Eigen::Vector3d faceFlux = getRusanovFluxExplicit(faceIdx, fluidIdx);
-	faceFlux(0) += implicitExtraTerms;
-	return faceFlux;
-}
-
-const double AppmSolver::getImplicitExtraTermMomentumFlux(const int cellIdx, const Eigen::Vector3d & faceNormal, const int fluidIdx) const
-{
-	assert(cellIdx >= 0); 
-	assert(std::fabs(faceNormal.norm() - 1) <= 4*std::numeric_limits<double>::epsilon());
-
-	const Cell * cell = dualMesh.getCell(cellIdx);
-	const double cellVolume = cell->getVolume();
-	const std::vector<Face*> cellFaces = cell->getFaceList();
-	double sumFaceFluxes = 0;
-	for (auto face : cellFaces) {
-		const int faceIdx = face->getIndex();
-		const Eigen::Vector3d faceFlux = getRusanovFluxExplicit(faceIdx, fluidIdx);
-		const double momentumFlux = faceFlux(1);
-		const double faceArea = face->getArea();
-		const Eigen::Vector3d fn = face->getNormal();
-		const double orientation = fn.dot(faceNormal) * getOrientation(cell, face);
-		sumFaceFluxes += momentumFlux * faceArea * orientation;
-	}
-	const double result = 0.5 * 1./cellVolume * sumFaceFluxes;
-	return result;
-}
+//const double AppmSolver::getImplicitExtraTermMomentumFlux(const int cellIdx, const Eigen::Vector3d & faceNormal, const int fluidIdx) const
+//{
+//	assert(cellIdx >= 0); 
+//	assert(std::fabs(faceNormal.norm() - 1) <= 4*std::numeric_limits<double>::epsilon());
+//
+//	const Cell * cell = dualMesh.getCell(cellIdx);
+//	const double cellVolume = cell->getVolume();
+//	const std::vector<Face*> cellFaces = cell->getFaceList();
+//	double sumFaceFluxes = 0;
+//	for (auto face : cellFaces) {
+//		const int faceIdx = face->getIndex();
+//		const Eigen::Vector3d faceFlux = getRusanovFluxExplicit(faceIdx, fluidIdx);
+//		const double momentumFlux = faceFlux(1);
+//		const double faceArea = face->getArea();
+//		const Eigen::Vector3d fn = face->getNormal();
+//		const double orientation = fn.dot(faceNormal) * getOrientation(cell, face);
+//		sumFaceFluxes += momentumFlux * faceArea * orientation;
+//	}
+//	const double result = 0.5 * 1./cellVolume * sumFaceFluxes;
+//	return result;
+//}
 
 const std::pair<int,int> AppmSolver::getAdjacientCellStates(const Face * face, const int fluidIdx, Eigen::Vector3d & qL, Eigen::Vector3d & qR) const
 {
@@ -1600,40 +1500,40 @@ const Eigen::Vector3d AppmSolver::getSpeciesFaceFluxAtCathode(const Face * face,
 	return flux;
 }
 
-void AppmSolver::setFluidSourceTerm()
-{
-	const int nCells = dualMesh.getNumberOfCells();
-	const int nFluids = getNFluids();
-
-	// Set source term
-	for (int cIdx = 0; cIdx < nCells; cIdx++) {
-		const Cell * cell = dualMesh.getCell(cIdx);
-
-		// Skip cell that ore not of type Fluid
-		if (cell->getType() != Cell::Type::FLUID) {
-			continue;
-		}
-		// For all fluids ... 
-		for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-			Eigen::VectorXd srcLocal(5);
-			srcLocal.setZero();
-
-			//srcLocal = testcase_001_FluidSourceTerm(time, cell, fluidIdx);
-
-			if (appmParams.isLorentzForceElectricEnabled) {
-				srcLocal.segment(1, 3) += LorentzForce_electric.col(cIdx).segment(3 * fluidIdx, 3);
-			}
-			if (appmParams.isLorentzForceMagneticEnabled) {
-				srcLocal.segment(1, 3) += LorentzForce_magnetic.col(cIdx).segment(3 * fluidIdx, 3);
-			}
-
-			// TODO: reaction source terms
-
-			fluidSources.col(cIdx).segment(5 * fluidIdx, 5) += srcLocal;
-		}
-	}
-	std::cout << "fluid sources maxCoeff: " << fluidSources.cwiseAbs().maxCoeff() << std::endl;
-}
+//void AppmSolver::setFluidSourceTerm()
+//{
+//	const int nCells = dualMesh.getNumberOfCells();
+//	const int nFluids = getNFluids();
+//
+//	// Set source term
+//	for (int cIdx = 0; cIdx < nCells; cIdx++) {
+//		const Cell * cell = dualMesh.getCell(cIdx);
+//
+//		// Skip cell that ore not of type Fluid
+//		if (cell->getType() != Cell::Type::FLUID) {
+//			continue;
+//		}
+//		// For all fluids ... 
+//		for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+//			Eigen::VectorXd srcLocal(5);
+//			srcLocal.setZero();
+//
+//			//srcLocal = testcase_001_FluidSourceTerm(time, cell, fluidIdx);
+//
+//			if (appmParams.isLorentzForceElectricEnabled) {
+//				srcLocal.segment(1, 3) += LorentzForce_electric.col(cIdx).segment(3 * fluidIdx, 3);
+//			}
+//			if (appmParams.isLorentzForceMagneticEnabled) {
+//				srcLocal.segment(1, 3) += LorentzForce_magnetic.col(cIdx).segment(3 * fluidIdx, 3);
+//			}
+//
+//			// TODO: reaction source terms
+//
+//			fluidSources.col(cIdx).segment(5 * fluidIdx, 5) += srcLocal;
+//		}
+//	}
+//	std::cout << "fluid sources maxCoeff: " << fluidSources.cwiseAbs().maxCoeff() << std::endl;
+//}
 
 /** 
 * Update to next timestep: U(m+1) = U(m) - dt / volume * sum(fluxes) + dt * source.
@@ -3467,7 +3367,7 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 
 			for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
 				const int q = particleParams[fluidIdx].electricCharge;
-				const double eps2 = particleParams[fluidIdx].mass;
+				const double massRatio = particleParams[fluidIdx].mass;
 				const Face::Type faceFluidType = getFaceTypeOfFluid(dualFace, fluidIdx);
 
 				// Term due to explicit mass flux
@@ -3488,10 +3388,12 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 						const double nk = fluidStates(5 * fluidIdx + 0, cell->getIndex()); // number density in cell k
 						const double Vk = cell->getVolume(); // volume of cell k
 
-						// Extra term by explicit magnetic Lorentz force (magnetic flux)
+						// Extra term by explicit Fluid sources (e.g., magnetic Lorentz force)
 						if (appmParams.isLorentzForceMagneticEnabled) {
-							const Eigen::Vector3d nu_x_B = LorentzForce_magnetic.col(cell->getIndex()).segment(3 * fluidIdx, 3);
-							Jaux(i) += numSchemeFactor * pow(q, 2) * 1. / eps2 * Ai * nu_x_B.dot(ni);
+							const Eigen::Vector3d fluidMomentumSource = fluidSources.col(cell->getIndex()).segment(5 * fluidIdx + 1, 3);
+							Jaux(i) += numSchemeFactor * q * Ai * fluidMomentumSource.dot(ni); 
+							//const Eigen::Vector3d nu_x_B = LorentzForce_magnetic.col(cell->getIndex()).segment(3 * fluidIdx, 3);
+							//Jaux(i) += numSchemeFactor * pow(q, 2) * 1. / massRatio * Ai * nu_x_B.dot(ni);
 						}
 
 						auto cellFaces = cell->getFaceList();
@@ -3511,7 +3413,7 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 							
 							// Extra term by implicit electric Lorentz force (electric field)
 							const double geomFactor = nj_dot_ni * (Ai * Aj) / Vk; // geometric factor
-							const double value = numSchemeFactor * 0.5 * dt * pow(q, 2) / eps2 * nk / Vk * Ai * Aj * nj_dot_ni;
+							const double value = numSchemeFactor * 0.5 * dt * pow(q, 2) / massRatio * nk / Vk * Ai * Aj * nj_dot_ni;
 							triplets.push_back(T(i, j, value));
 							if (fluidIdx == 0) {
 								geomTriplets.push_back(T(i, j, geomFactor));
