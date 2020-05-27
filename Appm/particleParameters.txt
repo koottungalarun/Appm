@@ -1,6 +1,6 @@
 # For each fluid: name, mass, charge
 Neutrals, 1, 0
 Ions, 1, 1
-# Electrons, 1, -1
+Electrons, 1, -1
 # Electrons, 5.446623093681917e-4, -1
 

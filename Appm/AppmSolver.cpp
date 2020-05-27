@@ -213,14 +213,8 @@ void AppmSolver::run()
 		}
 
 		// Set explicit fluid source terms
-		if (appmParams.isFluidEnabled) {
-			if (appmParams.isLorentzForceMagneticEnabled) {
-				setMagneticLorentzForceSourceTerms();
-			} 
-			if (appmParams.isFrictionActive) {
-				setFrictionSourceTerms();
-			}
-		}
+		setMagneticLorentzForceSourceTerms();
+		setFrictionSourceTerms();
 
 		// Set explicit face fluxes
 		if (appmParams.isFluidEnabled) {
@@ -929,63 +923,69 @@ const Eigen::Matrix3Xd AppmSolver::getCurrentDensityAtCellCenter()
 */
 void AppmSolver::setFrictionSourceTerms()
 {
-	auto z_ab = 1; // assume a constant value for testing purpose
 	auto nCells = dualMesh.getNumberOfCells();
 	auto nFluids = getNFluids();
 
-	// For each fluid cell ...
-	for (int i = 0; i < nCells; i++) {
-		const Cell * cell = dualMesh.getCell(i);
-		if (cell->getType() != Cell::Type::FLUID) {
-			continue; // Skip non-fluid cells
-		}
-
-		double rho_avg = 0;    // bulk density
-		Eigen::Vector3d u_avg = Eigen::Vector3d::Zero(); // bulk velocity (mass-averaged velocity)
-
-		for (int alpha = 0; alpha < nFluids; alpha++) {
-			auto massRatio = particleParams[alpha].mass;
-			auto state = fluidStates.col(i).segment(5 * alpha, 5);
-			assert(state.size() == 5);
-			auto n_u = state.segment(1, 3);
-			u_avg += massRatio * n_u;
-			rho_avg += massRatio * state(0);
-		}
-		assert(rho_avg > 0);
-		u_avg /= rho_avg;
-		bulkVelocity.col(i) = u_avg;
-
-		// For each species alpha ...
-		for (int alpha = 0; alpha < nFluids; alpha++) {
-			Eigen::Vector3d R_a = Eigen::Vector3d::Zero();
-			auto stateA = fluidStates.col(i).segment(5 * alpha, 5); // state vector of fluid A in cell i
-			auto n_a = stateA(0); // number density
-			auto u_a = stateA.segment(1, 3) / n_a; // velocity vector
-
-			// ... for each species beta != alpha ...
-			for (int beta = 0; beta < nFluids; beta++) {
-				auto stateB = fluidStates.col(i).segment(5 * beta, 5);
-				auto n_b = stateB(0); // number density
-				auto u_b = stateB.segment(1, 3) / n_b; // velocity vector
-
-				if (beta == alpha) {
-					continue; // skip if indices are equal, since they contribute nothing
-				}
-				// ... get friction force due to interaction of species Alpha and Beta
-				R_a -= n_a * n_b * (u_a - u_b) * z_ab;
+	if (appmParams.isFluidEnabled) {
+		// For each fluid cell ...
+		for (int i = 0; i < nCells; i++) {
+			const Cell * cell = dualMesh.getCell(i);
+			if (cell->getType() != Cell::Type::FLUID) {
+				continue; // Skip non-fluid cells
 			}
-			auto w_a = u_a - u_avg; // Diffusion velocity w_a 
-			auto Q_a = u_a.dot(R_a); // Source term for energy equation due to friction
 
-			// Save local data for post-processing
-			diffusionVelocity.col(i).segment(3 * alpha, 3) = w_a;
-			frictionForceSourceTerm.col(i).segment(3 * alpha, 3) = R_a;
-			frictionEnergySourceTerm(alpha, i) = Q_a;
+			double rho_avg = 0;    // bulk density
+			Eigen::Vector3d u_avg = Eigen::Vector3d::Zero(); // bulk velocity (mass-averaged velocity)
 
-			fluidSources.col(i).segment(5 * alpha + 1, 3) += R_a; // set momentum source of fluid A
-			fluidSources(5 * alpha + 4, i) += Q_a;                // set   energy source of fluid A
-		}
-	}
+			for (int alpha = 0; alpha < nFluids; alpha++) {
+				auto massRatio = particleParams[alpha].mass;
+				auto state = fluidStates.col(i).segment(5 * alpha, 5);
+				assert(state.size() == 5);
+				auto n_u = state.segment(1, 3);
+				u_avg += massRatio * n_u;
+				rho_avg += massRatio * state(0);
+			}
+			assert(rho_avg > 0);
+			u_avg /= rho_avg;
+			bulkVelocity.col(i) = u_avg;
+
+			// For each species alpha ...
+			for (int alpha = 0; alpha < nFluids; alpha++) {
+				Eigen::Vector3d R_a = Eigen::Vector3d::Zero();
+				auto stateA = fluidStates.col(i).segment(5 * alpha, 5); // state vector of fluid A in cell i
+				auto n_a = stateA(0); // number density
+				auto u_a = stateA.segment(1, 3) / n_a; // velocity vector
+
+				// ... for each species beta != alpha ...
+				for (int beta = 0; beta < nFluids; beta++) {
+					auto stateB = fluidStates.col(i).segment(5 * beta, 5);
+					auto n_b = stateB(0); // number density
+					auto u_b = stateB.segment(1, 3) / n_b; // velocity vector
+
+					if (beta == alpha) {
+						continue; // skip if indices are equal, since they contribute nothing
+					}
+					// species interaction term
+					auto z_ab = 1; // assume a constant value for testing purpose
+
+					// ... get friction force due to interaction of species Alpha and Beta
+					R_a -= n_a * n_b * (u_a - u_b) * z_ab;
+				} // end for each species B
+				auto w_a = u_a - u_avg; // Diffusion velocity w_a 
+				auto Q_a = u_a.dot(R_a); // Source term for energy equation due to friction
+
+				// Save local data for post-processing
+				diffusionVelocity.col(i).segment(3 * alpha, 3) = w_a;
+				if (appmParams.isFrictionActive) {
+					frictionForceSourceTerm.col(i).segment(3 * alpha, 3) = R_a;
+					frictionEnergySourceTerm(alpha, i) = Q_a;
+
+					fluidSources.col(i).segment(5 * alpha + 1, 3) += R_a; // set momentum source of fluid A
+					fluidSources(5 * alpha + 4, i) += Q_a;                // set   energy source of fluid A
+				} 
+			} // end for each species A
+		} // end for each fluid cell i
+	} // end if isFluidEnabled
 }
 
 /**
@@ -1019,12 +1019,14 @@ void AppmSolver::setMagneticLorentzForceSourceTerms()
 			LorentzForce_magnetic.col(i).segment(3 * fluidIdx, 3) = result;
 		}
 	}
+	//std::cout << "maxCoeff F_L magnetic: " << LorentzForce_magnetic.cwiseAbs().maxCoeff() << std::endl;
 
 	// Update of momentum source term
-	for (int fluidx = 0; fluidx < nFluids; fluidx++) {
-		fluidSources.block(5 * fluidx + 1, 0, 3, nCells) += LorentzForce_magnetic.block(3 * fluidx, 0, 3, nCells);
+	if (appmParams.isFluidEnabled && appmParams.isLorentzForceMagneticEnabled) {
+		for (int fluidx = 0; fluidx < nFluids; fluidx++) {
+			fluidSources.block(5 * fluidx + 1, 0, 3, nCells) += LorentzForce_magnetic.block(3 * fluidx, 0, 3, nCells);
+		}
 	}
-	//std::cout << "maxCoeff F_L magnetic: " << LorentzForce_magnetic.cwiseAbs().maxCoeff() << std::endl;
 }
 
 
@@ -3470,7 +3472,9 @@ const Eigen::VectorXd AppmSolver::setVoltageBoundaryConditions(const double time
 	}
 	else {
 		// Set voltage values at terminal A (stressed electrode)
-		xd.topRows(nPrimalTerminalVertices / 2).array() = 0.5 * (1 + tanh((time - 1) / 0.1));
+		auto t0 = 1;
+		auto tscale = 0.1;
+		xd.topRows(nPrimalTerminalVertices / 2).array() = 0.5 * (1 + tanh((time - t0) / tscale));
 	}
 	// Set voltage condition to zero at terminal B (grounded electrode)
 	xd.bottomRows(nPrimalTerminalVertices / 2).array() = 0;
