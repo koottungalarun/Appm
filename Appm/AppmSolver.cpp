@@ -214,7 +214,7 @@ void AppmSolver::run()
 
 		// Set explicit fluid source terms
 		if (appmParams.isFluidEnabled) {
-			if (isMagneticLorentzForceActive) {
+			if (appmParams.isLorentzForceMagneticEnabled) {
 				for (int idx = 0; idx < nCells; idx++) {
 					const Cell * cell = dualMesh.getCell(idx);
 					if (cell->getType() != Cell::Type::FLUID) {
@@ -238,7 +238,7 @@ void AppmSolver::run()
 					}
 				}
 				std::cout << "maxCoeff F_L magnetic: " << LorentzForce_magnetic.cwiseAbs().maxCoeff() << std::endl;
-			}
+			} // end if isMagneticLorentzForceActive
 			if (appmParams.isFrictionActive) {
 				setFrictionSourceTerms();
 			}
@@ -268,7 +268,7 @@ void AppmSolver::run()
 			const int nFaces = dualMesh.getNumberOfFaces();
 
 			// Set source term for electric Lorentz force (implicit)
-			if (isElectricLorentzForceActive) {
+			if (appmParams.isLorentzForceElectricEnabled) {
 				for (int idx = 0; idx < nCells; idx++) {
 					const Cell * cell = dualMesh.getCell(idx);
 					if (cell->getType() != Cell::Type::FLUID) {
@@ -378,8 +378,8 @@ std::string AppmSolver::printSolverParameters() const
 	ss << "lambdaSquare: " << lambdaSquare << std::endl;
 	ss << "massFluxScheme: " << appmParams.isMassFluxSchemeImplicit << std::endl;
 	ss << "initType: " << initType << std::endl;
-	ss << "isElectricLorentzForceActive: " << isElectricLorentzForceActive << std::endl;
-	ss << "isMagneticLorentzForceActive: " << isMagneticLorentzForceActive << std::endl;
+	ss << "isElectricLorentzForceActive: " << appmParams.isLorentzForceElectricEnabled << std::endl;
+	ss << "isMagneticLorentzForceActive: " << appmParams.isLorentzForceMagneticEnabled << std::endl;
 	ss << "isShowDataWriterOutput: " << isShowDataWriterOutput << std::endl;
 	ss << "isMaxwellCurrentDefined: " << appmParams.isMaxwellCurrentDefined << std::endl;
 	ss << "isEulerMaxwellCouplingEnabled: " << appmParams.isEulerMaxwellCouplingEnabled << std::endl;
@@ -940,8 +940,8 @@ void AppmSolver::get_Msigma_consistent(const double dt, Eigen::SparseMatrix<doub
 	typedef Eigen::Triplet<double> T;
 	std::vector<T> triplets;
 
-	std::cout << "isElectricLorentzForceActive: " << isElectricLorentzForceActive << std::endl;
-	std::cout << "isMagneticLorentzForceActive: " << isMagneticLorentzForceActive << std::endl;
+	std::cout << "isElectricLorentzForceActive: " << appmParams.isLorentzForceElectricEnabled << std::endl;
+	std::cout << "isMagneticLorentzForceActive: " << appmParams.isLorentzForceMagneticEnabled << std::endl;
 	std::cout << "isMomentumFluxActive: " << isMomentumFluxActive << std::endl;
 	if (!isMomentumFluxActive) {
 		std::cout << "Warning: momentum flux disabled in implicit-consistent current model" << std::endl;
@@ -1012,7 +1012,7 @@ void AppmSolver::get_Msigma_consistent(const double dt, Eigen::SparseMatrix<doub
 
 					
 					// Consistent-implicit electric current due to electric Lorentz force (F = q*n*E)
-					if (isElectricLorentzForceActive) {
+					if (appmParams.isLorentzForceElectricEnabled) {
 
 						// Electric field projected in direction of dual face and interpolated from dual face centers
 						double value = q * numberDensity * rvec_proj_fn * Lhat.dot(nj) * incidence * dA / dV * (1. / dL);
@@ -1039,7 +1039,7 @@ void AppmSolver::get_Msigma_consistent(const double dt, Eigen::SparseMatrix<doub
 				} // end for cellFaces			
 
 				// Consistent-implicit electric current due to magnetic Lorentz force (F = q * (nu) x B)
-				if (isMagneticLorentzForceActive) {
+				if (appmParams.isLorentzForceMagneticEnabled) {
 					const Eigen::Vector3d B = B_vertex.col(cell->getIndex());
 					const Eigen::Vector3d nu = fluidStates.col(cell->getIndex()).segment(5 * fluidIdx + 1, 3);
 					double value = q * nu.cross(B).dot(fn);
@@ -1620,10 +1620,10 @@ void AppmSolver::setFluidSourceTerm()
 
 			//srcLocal = testcase_001_FluidSourceTerm(time, cell, fluidIdx);
 
-			if (isElectricLorentzForceActive) {
+			if (appmParams.isLorentzForceElectricEnabled) {
 				srcLocal.segment(1, 3) += LorentzForce_electric.col(cIdx).segment(3 * fluidIdx, 3);
 			}
-			if (isMagneticLorentzForceActive) {
+			if (appmParams.isLorentzForceMagneticEnabled) {
 				srcLocal.segment(1, 3) += LorentzForce_magnetic.col(cIdx).segment(3 * fluidIdx, 3);
 			}
 
@@ -2703,10 +2703,10 @@ void AppmSolver::readParameters(const std::string & filename)
 			std::istringstream(line.substr(pos + 1)) >> initType;
 		}
 		if (tag == "isElectricLorentzForceActive") {
-			std::istringstream(line.substr(pos + 1)) >> isElectricLorentzForceActive;
+			std::istringstream(line.substr(pos + 1)) >> appmParams.isLorentzForceElectricEnabled;
 		}
 		if (tag == "isMagneticLorentzForceActive") {
-			std::istringstream(line.substr(pos + 1)) >> isMagneticLorentzForceActive;
+			std::istringstream(line.substr(pos + 1)) >> appmParams.isLorentzForceMagneticEnabled;
 		}
 		if (tag == "isShowDataWriterOutput") {
 			std::istringstream(line.substr(pos + 1)) >> isShowDataWriterOutput;

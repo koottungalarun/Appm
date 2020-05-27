@@ -55,6 +55,7 @@ private:
 		bool isFluidEnabled = false;
 		bool isMaxwellEnabled = false;
 		bool isEulerMaxwellCouplingEnabled = false;
+		bool isLorentzForceElectricEnabled = false;
 		bool isLorentzForceMagneticEnabled = false;
 		bool isMassFluxSchemeImplicit = false;
 		double timestepSize = 1;
@@ -76,8 +77,8 @@ private:
 	double maxTime = 0;
 	double lambdaSquare = 1.0;
 	int initType = 1;
-	bool isElectricLorentzForceActive = false;
-	bool isMagneticLorentzForceActive = false;
+	//bool isElectricLorentzForceActive = false;
+	//bool isMagneticLorentzForceActive = false;
 	bool isMomentumFluxActive = false;
 
 	bool isWriteEfield = false;
