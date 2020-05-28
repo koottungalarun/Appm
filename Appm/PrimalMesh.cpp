@@ -60,11 +60,16 @@ void PrimalMesh::init_hexagon(const double zValue)
 {
 	std::cout << "Initialize with hexagon" << std::endl;
 	Vertex * origin = addVertex(Eigen::Vector3d(0, 0, zValue));
+	addVertex(Eigen::Vector3d(+1.0,            0.0, zValue));
+	addVertex(Eigen::Vector3d(+0.5, +0.5 * sqrt(3), zValue));
+	addVertex(Eigen::Vector3d(-0.5, +0.5 * sqrt(3), zValue));
+	addVertex(Eigen::Vector3d(-1.0,            0.0, zValue));
+	addVertex(Eigen::Vector3d(-0.5, -0.5 * sqrt(3), zValue));
+	addVertex(Eigen::Vector3d(+0.5, -0.5 * sqrt(3), zValue));
+
 	const int corners = 6;
 	for (int k = 0; k < corners; k++) {
-		const double phi = 2 * M_PI * k / corners;
-		const Eigen::Vector3d pos(cos(phi), sin(phi), zValue);
-		Vertex * v = addVertex(pos);
+		Vertex * v = getVertex(k+1);
 		addEdge(origin, v);
 	}
 	const int nV = getNumberOfVertices();
@@ -998,7 +1003,7 @@ void PrimalMesh::validateParameters()
 	if (params.getAxialLayers() == 0) {
 		std::cout << "Warning: axialLayers is zero, a 2d mesh is created." << std::endl;
 	}
-	assert(params.getRefinements() >= 1);
+	//assert(params.getRefinements() >= 1);
 	if (params.getOuterLayers() > 0) {
 		assert(params.getRefinements() > 1);
 	}
