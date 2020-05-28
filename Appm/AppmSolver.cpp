@@ -42,7 +42,7 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 		std::cout << "Initialize fluid states: " << "Uniform" << std::endl;
 		double p = 1.0;
 		double n = 1.0;
-		Eigen::Vector3d uvec = Eigen::Vector3d::Zero();
+		Eigen::Vector3d uvec = Eigen::Vector3d::UnitZ();
 		init_Uniformly(n, p, uvec);
 	}
 		break;
@@ -200,7 +200,7 @@ void AppmSolver::run()
 
 			//fluidFluxes.setZero();
 			fluidSources.setZero();
-			//faceFluxes.setZero();
+			faceFluxes.setZero();
 			//faceFluxesImExRusanov.setZero();
 
 			// Determine timestep
@@ -595,7 +595,9 @@ void AppmSolver::init_multiFluid(const std::string & filename)
 	// Initialize data
 
 	const int nCells = dualMesh.getNumberOfCells();
+	const int nFaces = dualMesh.getNumberOfFaces();
 	const int fluidStateLength = getFluidStateLength();
+
 	fluidStates = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
 	fluidSources = Eigen::MatrixXd::Zero(fluidStateLength, nCells);
 	sumOfFaceFluxes = Eigen::MatrixXd::Zero(fluidStates.rows(), nCells);
@@ -603,8 +605,8 @@ void AppmSolver::init_multiFluid(const std::string & filename)
 	frictionEnergySourceTerm = Eigen::MatrixXd::Zero(nFluids, nCells);
 	diffusionVelocity = Eigen::MatrixXd::Zero(3 * nFluids, nCells);
 	bulkVelocity = Eigen::Matrix3Xd::Zero(3, nCells);
+	massFluxImplicitTerm = Eigen::MatrixXd::Zero(nFluids, nFaces);
 
-	const int nFaces = dualMesh.getNumberOfFaces();
 	faceTypeFluids = Eigen::MatrixXi::Zero(nFaces, nFluids);
 	for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
 		for (int i = 0; i < nFaces; i++) {
@@ -1360,26 +1362,26 @@ void AppmSolver::setFluidFaceFluxes()
 {
 	const int nFaces = dualMesh.getNumberOfFaces();
 	const int nFluids = getNFluids();
-
-	std::cout << "face fluxes: " << std::endl;
-
+	//std::cout << "face fluxes: " << std::endl;
 	for (int fidx = 0; fidx < nFaces; fidx++) {
 		const Face * face = dualMesh.getFace(fidx);
-		//const Eigen::Vector3d faceNormal = face->getNormal().normalized();
-		const Eigen::Vector3d faceNormal = face->getNormal();
-
 		// skip faces that have no adjacient fluid cell
 		if (!face->hasFluidCells()) { continue; }
-
 		assert(face->getType() != Face::Type::DEFAULT);
+
+		const double fA = face->getArea();
+		//const Eigen::Vector3d faceNormal = face->getNormal().normalized();
+
+		// Face normal vector, with length equal to face area
+		const Eigen::Vector3d faceNormal = face->getNormal();
 
 		for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
 			Eigen::VectorXd faceFlux3d(5);
 			Eigen::Vector3d flux = getSpeciesFaceFlux(face, fluidIdx);
 			//std::cout << "face idx: " << face->getIndex() << ", fluid " << fluidIdx << ": " << flux.transpose() << std::endl;
-			faceFlux3d(0) = flux(0);
+			faceFlux3d(0) = flux(0) * fA;
 			faceFlux3d.segment(1, 3) = flux(1) * faceNormal;
-			faceFlux3d(4) = flux(2);
+			faceFlux3d(4) = flux(2) * fA;
 			faceFluxes.col(fidx).segment(5 * fluidIdx, 5) = faceFlux3d;
 		}
 	}
@@ -1420,7 +1422,7 @@ void AppmSolver::setSumOfFaceFluxes() {
 
 		// Accumulator for absolute values
 		Eigen::VectorXd c = Eigen::VectorXd::Zero(sumFluxes.size());
-		const double scale = 1e3; // we also need a scaling factor for effectively removing truncation errors in the low bits
+		
 
 		for (auto face : cellFaces) {
 			//double faceArea = face->getArea();
@@ -1435,7 +1437,7 @@ void AppmSolver::setSumOfFaceFluxes() {
 			sumFluxes += temp;
 		}
 		// Guard against truncation errors
-		c *= scale;
+		c *= this->fluxTruncationErrorGuardScale; // scaling factor for effectively removing truncation errors in the low bits
 		sumFluxes += c;
 		sumFluxes -= c;
 
@@ -1443,7 +1445,6 @@ void AppmSolver::setSumOfFaceFluxes() {
 			std::cout << "Sum of face fluxes: " << std::endl;
 			std::cout << sumFluxes.transpose() << std::endl;
 		}
-
 		sumOfFaceFluxes.col(k) = sumFluxes / cellVolume;
 
 	}
@@ -1467,6 +1468,7 @@ void AppmSolver::setImplicitMassFluxTerms(const double dt)
 		if (!face->hasFluidCells()) { continue; }
 		assert(face->getType() != Face::Type::DEFAULT);
 
+		const double Ai = face->getArea();
 		const Eigen::Vector3d ni = face->getNormal().normalized();
 		const Face::Type faceType = face->getType();
 		const double numSchemeFactor = (faceType == Face::Type::INTERIOR) ? 0.5 : 1;
@@ -1495,19 +1497,28 @@ void AppmSolver::setImplicitMassFluxTerms(const double dt)
 					if (abs(ni_dot_nj) < 1e-10) {
 						ni_dot_nj = 0; // truncate small values
 					}
-					const double fj = faceFluxes.col(j).segment(5 * fluidIdx + 1, 3).dot(nj);
-					faceSum += s_kj * fj * Aj * ni_dot_nj;
+					bool isValid = abs(ni_dot_nj) <= (1 + 2 * std::numeric_limits<double>::epsilon());
+					if (!isValid) {
+						std::cout << "ni_dot_nj: " << ni_dot_nj << std::endl;
+						std::cout << std::endl;
+					}
+					assert(isValid);
+					//const double fj = faceFluxes.col(j).segment(5 * fluidIdx + 1, 3).dot(nj);
+					//faceSum += s_kj * fj * Aj * ni_dot_nj;
+					const Eigen::Vector3d fj = faceFluxes.col(j).segment(5 * fluidIdx + 1, 3);
+					faceSum += s_kj * fj.dot(ni) * Ai;
 				}
 				cellSum -= numSchemeFactor / Vk * faceSum;
 
 				// Implicit term due to fluid momentum source 				
 				Eigen::Vector3d Sk; // Momentum source term for this fluid
 				Sk = fluidSources.col(cell->getIndex()).segment(5 * fluidIdx + 1, 3);
-				cellSum += Sk.dot(ni);
+				cellSum += Sk.dot(ni) * Ai;
 			}
 			cellSum *= dt;
 
 			// Update mass flux with implicit terms
+			massFluxImplicitTerm(fluidIdx, faceIdx) = cellSum;
 			faceFluxes(5 * fluidIdx, faceIdx) += cellSum;
 		}
 	}
@@ -2005,6 +2016,7 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 		Eigen::Matrix3Xd frictionSource = frictionForceSourceTerm.block(3 * fluidIdx, 0, 3, nCells);
 		Eigen::VectorXd speciesFrictionEnergySource = frictionEnergySourceTerm.row(fluidIdx);
 		Eigen::Matrix3Xd speciesDiffusionVelocity = diffusionVelocity.block(3 * fluidIdx, 0, 3, nCells);
+		Eigen::VectorXd fluidMassFluxImplicitTerm = massFluxImplicitTerm.row(fluidIdx);
 
 		const std::string stateN = fluidTag + "stateN";
 		const std::string stateU = fluidTag + "stateU";
@@ -2037,7 +2049,18 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 			double p = 0;
 			Eigen::Vector3d u;
 			u.setZero();
-			Physics::state2primitive(epsilon2, state, n, p, u);
+			try {
+				Physics::state2primitive(epsilon2, state, n, p, u);
+			}
+			catch (std::exception & e) {
+				std::cout << "cell idx: " << i << std::endl;
+				std::cout << "state:    " << state.transpose() << std::endl;
+
+				Eigen::VectorXd sumFaceFluxes = sumOfFaceFluxes.col(i).segment(5 * fluidIdx, 5);
+				std::cout << "sumOfFaceFluxes: " << sumFaceFluxes.transpose() << std::endl;
+				assert(false);
+				//createStopFile(); // write a positive value into stop file, this indicates that the iteration loop should terminate.
+			}
 			density(i) = epsilon2 * n;
 			velocity.col(i) = u;
 			pressure(i) = p;
@@ -2053,6 +2076,7 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 		writer.writeData(frictionSource, (std::stringstream() << fluidTag << "frictionSource").str());
 		writer.writeData(speciesDiffusionVelocity, (std::stringstream() << fluidTag << "diffusionVelocity").str());
 		writer.writeData(speciesFrictionEnergySource, (std::stringstream() << fluidTag << "frictionEnergySource").str());
+		writer.writeData(fluidMassFluxImplicitTerm, (std::stringstream() << fluidTag << "massFluxImplicitTerm").str());
 
 		Eigen::Matrix3Xd el_source = LorentzForce_electric.block(3 * fluidIdx, 0, 3, nCells);
 		writer.writeData(el_source, fluidTag + "LorentzForceEl");
@@ -2924,6 +2948,14 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
 		ss << "appm-" << iteration << ".h5:/" << particleParams[fidx].name << "-energyFlux" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+
+		attributeName = (std::stringstream() << particleParams[fidx].name << " Implicit Mass Flux Term").str();
+		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << "appm-" << iteration << ".h5:/" << particleParams[fidx].name << "-massFluxImplicitTerm" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 	}

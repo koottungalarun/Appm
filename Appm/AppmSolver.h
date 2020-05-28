@@ -122,6 +122,7 @@ private:
 	Eigen::MatrixXd frictionEnergySourceTerm;
 	Eigen::MatrixXd diffusionVelocity;
 	Eigen::MatrixXd bulkVelocity;
+	Eigen::MatrixXd massFluxImplicitTerm;
 
 	Eigen::MatrixXd faceFluxesImExRusanov;
 
@@ -129,6 +130,10 @@ private:
 
 	// Isentropic expansion coefficient, aka ratio of heat capacities
 	//const double gamma = 1.4; 
+
+	/* scaling factor for effectively removing truncation errors in the low bits */
+	const double fluxTruncationErrorGuardScale = 1e4; 
+
 
 	void init_maxwellStates();
 	Eigen::SparseMatrix<double> getBoundaryGradientInnerInclusionOperator();
@@ -173,7 +178,7 @@ private:
 
 	//const double getMomentumUpdate(const int k, const Eigen::Vector3d & nvec, const int fluidIdx) const;
 	const std::string stopFilename = "stop.txt";
-	void createStopFile();
+	inline void createStopFile();
 	bool isStopFileActive();
 
 	void setFluidFaceFluxes();
