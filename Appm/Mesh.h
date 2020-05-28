@@ -100,6 +100,8 @@ public:
 	MeshInfo getMeshInfo() const;
 	const std::string getMeshDataFilename() const;
 
+	const double getMeshVolume() const;
+
 
 protected:
 	std::vector<Vertex*> vertexList;

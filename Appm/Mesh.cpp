@@ -1061,6 +1061,15 @@ const std::string Mesh::getMeshDataFilename() const
 	return this->meshPrefix + "-mesh.h5";
 }
 
+const double Mesh::getMeshVolume() const
+{
+	double sumVolumes = 0;
+	for (auto cell : cellList) {
+		sumVolumes += cell->getVolume();
+	}
+	return sumVolumes;
+}
+
 void Mesh::writeXdmfVolumeMesh() const
 {
 	{
