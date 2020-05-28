@@ -197,7 +197,12 @@ Eigen::VectorXi DualMesh::associateDualFacesWithPrimalEdges(const PrimalMesh & p
 		temp(i) = abs(edgeDir.dot(fn));
 	}
 	std::cout << "Smallest value of dot-product (edgeDir,faceNormal): " << temp.minCoeff() << std::endl;
-	assert(temp.minCoeff() > 0.90);
+	if (temp.minCoeff() < 0.9) {
+		//assert(temp.minCoeff() > 0.90);
+		std::cout << "*****************************" << std::endl;
+		std::cout << "* Warning: refine the mesh! *" << std::endl;
+		std::cout << "*****************************" << std::endl;
+	}
 	Eigen::MatrixXd data(indexMap.size(), 2);
 	data.col(0) = indexMap.cast<double>();
 	data.col(1) = temp;
