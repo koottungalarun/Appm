@@ -79,7 +79,7 @@ private:
 	const double computeArea() const;
 
 	const Eigen::Vector3d computeFaceNormal(const int version) const;
-	const Eigen::Vector3d computeFaceNormal_version1() const;
+	const Eigen::Vector3d computeFaceNormal_version1(const bool showOutput) const;
 	const Eigen::Vector3d computeFaceNormal_version2() const;
 
 

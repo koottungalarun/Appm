@@ -507,7 +507,7 @@ const double Face::computeArea() const
 	return area;
 }
 
-const Eigen::Vector3d Face::computeFaceNormal_version1() const
+const Eigen::Vector3d Face::computeFaceNormal_version1(const bool showOutput = false) const
 {
 	Eigen::Vector3d fn;
 	fn.setZero();
@@ -525,7 +525,30 @@ const Eigen::Vector3d Face::computeFaceNormal_version1() const
 		const Eigen::Vector3d posB = B->getPosition();
 		const Eigen::Vector3d a = (posA - center);
 		const Eigen::Vector3d b = (posB - center);
-		fn += 0.5 * a.cross(b); 
+
+		Eigen::Vector3d fn_sub = 0.5 * a.cross(b);
+
+		/*
+		* Guard against truncation error:
+		*
+		* Without further precautions, we will observe numerical cancellation effects
+		* because of adding and subtracting 'large' numbers(e.g., order of 1), and
+		* we will be left by truncation errors (e.g., order of 1e-16 = machine precision,
+		* times number of summands).
+		*
+		* For guarding against such truncation errors, we also sum the absolute values
+		* and add / subtract it after the loop. This removes the truncation errors.
+		*/
+		double maxCoeff = fn_sub.cwiseAbs().maxCoeff();
+		double scale = 1e3;
+		maxCoeff *= scale;
+		fn_sub.array() += maxCoeff;
+		fn_sub.array() -= maxCoeff;
+		
+		if (showOutput) {
+			std::cout << "fn-sub: " << fn_sub << std::endl;
+		}
+		fn += fn_sub; 
 	}
 	//const Eigen::Vector3d a = (posA - center).normalized();
 	//const Eigen::Vector3d b = (posB - center).normalized();
@@ -575,6 +598,13 @@ const Eigen::Vector3d Face::computeFaceNormal(const int version) const
 		for (auto edge : edgeList) {
 			std::cout << edge->getDirection().transpose() << std::endl;
 		}
+		std::cout << "vertex positions: " << std::endl;
+		for (auto vertex : vertexList) {
+			std::cout << vertex->getPosition().transpose() << std::endl;
+		}
+		std::cout << "output of computeNormal()" << std::endl;
+		computeFaceNormal_version1(true);
+		std::cout << std::endl;
 		assert(isParallel ^ isPerpendicular);
 	}
 	//if (fn.norm() != 1) {
