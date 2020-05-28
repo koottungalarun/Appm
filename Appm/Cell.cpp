@@ -35,10 +35,12 @@ Cell::Cell(const std::vector<Face*>& faces)
 	// Set cell volume
 	volume = 0;
 	for (auto face : faceList) {
-		const double fA = face->getArea();
 		const Eigen::Vector3d fn = face->getNormal();
-		double h = std::abs(fn.dot(center - face->getCenter()));
-		double dV = 1. / 3. * fA * h;
+		const double fn_length = fn.norm();
+		// Modified behaviour: face normal has length of face area
+		//const double fA = face->getArea();
+		//double h = std::abs(fn.dot(center - face->getCenter()));
+		double dV = 1. / 3. * std::abs(fn.dot(center - face->getCenter()));
 		assert(dV > 0);
 		volume += dV;
 	}
@@ -218,12 +220,13 @@ Eigen::Vector3d Cell::computeCellCenter() const
 	std::vector<Face*> parallelFaces, perpendicularFaces;
 	for (auto face : faceList) {
 		const Eigen::Vector3d fn = face->getNormal();
-		if (fn(2) != 0) {
+		if ((fn.segment(0,2).norm() == 0) && fn(2) != 0) {
 			const double tol = 2 * std::numeric_limits<double>::epsilon();
-			assert(abs(abs(fn(2)) - 1) < tol); // z-component is +/- 1.0
+			//assert(abs(abs(fn(2)) - 1) < tol); // z-component is +/- 1.0
 			perpendicularFaces.push_back(face);
 		}
 		else {
+			assert((fn.segment(0, 2).norm() != 0) && fn(2) == 0);
 			parallelFaces.push_back(face);
 		}
 	}

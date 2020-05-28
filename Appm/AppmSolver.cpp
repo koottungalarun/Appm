@@ -790,7 +790,8 @@ void AppmSolver::set_Bfield_azimuthal()
 
 		Eigen::Vector3d thetaVec;
 		thetaVec = zvec.cross(rvec);       // Azimuthal vector
-		B_h(idx) = thetaVec.dot(fn) * fA;  // Projection of azimuthal vector onto face normal
+		//B_h(idx) = thetaVec.dot(fn) * fA;  // Projection of azimuthal vector onto face normal
+		B_h(idx) = thetaVec.dot(fn);  // Projection of azimuthal vector onto face normal
 	}
 }
 
@@ -827,7 +828,7 @@ Eigen::SparseMatrix<double> AppmSolver::initPerotInterpolationMatrix()
 
 			const Eigen::Vector3d r = cc - fc;
 			const Eigen::Vector3d L = edge->getDirection().normalized();
-			const Eigen::Vector3d n = face->getNormal();
+			const Eigen::Vector3d n = face->getNormal().normalized();
 			const int incidence = r.dot(n) > 0 ? 1 : -1;
 
 			const double value = 1. / dL * L.dot(n) * incidence * dA / dV;
@@ -1062,7 +1063,7 @@ const double AppmSolver::getNextFluidTimestepSize() const
 	for (int fidx = 0; fidx < nFaces; fidx++) {
 		const Face * face = dualMesh.getFace(fidx); 
 		const Eigen::Vector3d fc = face->getCenter();
-		const Eigen::Vector3d faceNormal = face->getNormal();
+		const Eigen::Vector3d faceNormal = face->getNormal().normalized();
 		if (!face->hasFluidCells()) {
 			continue;
 		}
@@ -1123,10 +1124,11 @@ const Eigen::Vector3d AppmSolver::getFluidState(const int cellIdx, const int flu
 	assert(cellIdx < fluidStates.cols());
 	assert(fluidIdx >= 0);
 	assert(fluidIdx < this->getNFluids());
+	Eigen::Vector3d fn = faceNormal.normalized();
 	const double tol = 4 * std::numeric_limits<double>::epsilon();
-	assert(abs(faceNormal.norm() - 1) <= tol); // normal vector should be of unit length
+	assert(abs(fn.norm() - 1) <= tol); // normal vector should be of unit length
 	const Eigen::VectorXd state = fluidStates.col(cellIdx).segment(5 * fluidIdx, 5);
-	return Eigen::Vector3d(state(0), state.segment(1,3).dot(faceNormal), state(4));
+	return Eigen::Vector3d(state(0), state.segment(1,3).dot(fn), state(4));
 }
 
 const int AppmSolver::getOrientation(const Cell * cell, const Face * face) const
@@ -1236,7 +1238,7 @@ const std::pair<int,int> AppmSolver::getAdjacientCellStates(const Face * face, c
 	const std::vector<Cell*> faceCells = face->getCellList();
 	assert(faceCells.size() >= 1);
 
-	const Eigen::Vector3d faceNormal = face->getNormal();
+	const Eigen::Vector3d faceNormal = face->getNormal().normalized();
 	const int orientation = getOrientation(faceCells[0], face);
 	qL.setZero();
 	qR.setZero();
@@ -1361,7 +1363,7 @@ void AppmSolver::setFluidFaceFluxes()
 
 	for (int fidx = 0; fidx < nFaces; fidx++) {
 		const Face * face = dualMesh.getFace(fidx);
-		const Eigen::Vector3d faceNormal = face->getNormal();
+		const Eigen::Vector3d faceNormal = face->getNormal().normalized();
 
 		// skip faces that have no adjacient fluid cell
 		if (!face->hasFluidCells()) { continue; }
@@ -1423,7 +1425,7 @@ void AppmSolver::setImplicitMassFluxTerms(const double dt)
 		if (!face->hasFluidCells()) { continue; }
 		assert(face->getType() != Face::Type::DEFAULT);
 
-		const Eigen::Vector3d ni = face->getNormal();
+		const Eigen::Vector3d ni = face->getNormal().normalized();
 		const Face::Type faceType = face->getType();
 		const double numSchemeFactor = (faceType == Face::Type::INTERIOR) ? 0.5 : 1;
 
@@ -1446,7 +1448,7 @@ void AppmSolver::setImplicitMassFluxTerms(const double dt)
 					const int j = cellFace->getIndex();
 					const double Aj = cellFace->getArea();
 					const int s_kj = cell->getOrientation(cellFace);
-					const Eigen::Vector3d nj = cellFace->getNormal();
+					const Eigen::Vector3d nj = cellFace->getNormal().normalized();
 					double ni_dot_nj = ni.dot(nj);
 					if (abs(ni_dot_nj) < 1e-10) {
 						ni_dot_nj = 0; // truncate small values
@@ -1496,6 +1498,7 @@ Eigen::Vector3d AppmSolver::getSpeciesFaceFlux(const Face * face, const int flui
 
 const Eigen::Vector3d AppmSolver::getSpeciesFaceFluxAtCathode(const Face * face, const int fluidIdx)
 {
+	assert(false); // Check implementation before usage
 	const double Ts = 3695; // melting point of Wolfram, Kelvin
 	const double workFunction = 4.55; // units: eV
 	const double j_em = Physics::thermionicEmissionCurrentDensity(Ts, workFunction); 
@@ -1512,8 +1515,9 @@ const Eigen::Vector3d AppmSolver::getSpeciesFaceFluxAtCathode(const Face * face,
 	flux(1) = 2;
 	flux(2) = 1;
 
-	flux(1) *= face->getNormal().dot(Eigen::Vector3d::UnitZ());
-	flux *= face->getNormal().dot(Eigen::Vector3d::UnitZ());
+	Eigen::Vector3d fn = face->getNormal().normalized();
+	flux(1) *= fn.dot(Eigen::Vector3d::UnitZ());
+	flux *= fn.dot(Eigen::Vector3d::UnitZ());
 	return flux;
 }
 
@@ -1826,6 +1830,8 @@ void AppmSolver::init_meshes(const PrimalMesh::PrimalMeshParams & primalParams)
 	dualMesh.writeXdmf();
 
 	std::cout << "Dual mesh has " << dualMesh.getNumberOfVertices() << " vertices" << std::endl;
+	std::cout << "Primal mesh volume: " << primalMesh.getMeshVolume() << std::endl;
+	std::cout << "Dual mesh volume:   " << dualMesh.getMeshVolume() << std::endl;
 }
 
 /**
@@ -2059,7 +2065,7 @@ void AppmSolver::writeMaxwellStates(H5Writer & writer)
 	Eigen::Matrix3Xd B(3, nPrimalFaces);
 	for (int i = 0; i < nPrimalFaces; i++) {
 		const Face * face = primalMesh.getFace(i);
-		const Eigen::Vector3d fn = face->getNormal();
+		const Eigen::Vector3d fn = face->getNormal().normalized();
 		const double fA = face->getArea();
 		B.col(i) = (B_h(i) / fA) * fn;
 	}
@@ -2087,7 +2093,7 @@ void AppmSolver::writeMaxwellStates(H5Writer & writer)
 	for (int i = 0; i < J_h.size(); i++) {
 		const Face * face = dualMesh.getFace(i);
 		const double fA = face->getArea();
-		const Eigen::Vector3d fn = face->getNormal();
+		const Eigen::Vector3d fn = face->getNormal().normalized();
 		currentDensity.col(i) = J_h(i) / fA * fn;
 	}
 	writer.writeData(currentDensity, "/CurrentDensity");
@@ -2099,7 +2105,7 @@ void AppmSolver::writeMaxwellStates(H5Writer & writer)
 	for (int i = 0; i < J_h_aux.size(); i++) {
 		const Face * face = dualMesh.getFace(i);
 		const double fA = face->getArea();
-		const Eigen::Vector3d fn = face->getNormal();
+		const Eigen::Vector3d fn = face->getNormal().normalized();
 		J_h_aux_vector.col(i) = J_h_aux(i) / fA * fn;
 	}
 	writer.writeData(J_h_aux_vector, "/j_h_aux_vector");
@@ -3328,7 +3334,7 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 
 		for (int i = 0; i < nEdges; i++) {
 			const Face * dualFace = dualMesh.getFace(i);
-			const Eigen::Vector3d fn = dualFace->getNormal();
+			const Eigen::Vector3d fn = dualFace->getNormal().normalized();
 			const double fA = dualFace->getArea();
 			const Eigen::Vector3d fc = dualFace->getCenter();
 
@@ -3351,7 +3357,7 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 			const Eigen::Vector3d Lhat = edge->getDirection().normalized();
 
 			const Face * face = dualMesh.getFace(i);
-			const Eigen::Vector3d nhat = face->getNormal();
+			const Eigen::Vector3d nhat = face->getNormal().normalized();
 
 			orientation(i) = Lhat.dot(nhat); // this value should be equal to 1.000
 		}
@@ -3372,7 +3378,7 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 		for (int i = 0; i < nDualFaces; i++) {
 			//std::cout << "i = " << i << std::endl;
 			const Face * dualFace = dualMesh.getFace(i);
-			const Eigen::Vector3d ni = dualFace->getNormal();
+			const Eigen::Vector3d ni = dualFace->getNormal().normalized();
 			const double Ai = dualFace->getArea();
 			const Face::Type faceType = dualFace->getType();
 			const double numSchemeFactor = (faceType == Face::Type::INTERIOR) ? 0.5 : 1;
@@ -3418,7 +3424,7 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 						auto cellFaces = cell->getFaceList();
 						for (auto face : cellFaces) {
 							const double Aj = face->getArea();
-							const Eigen::Vector3d nj = face->getNormal();
+							const Eigen::Vector3d nj = face->getNormal().normalized();
 							const int s_kj = cell->getOrientation(face);
 							const int j = face->getIndex();
 							double nj_dot_ni = nj.dot(ni); // angle between face i and face j

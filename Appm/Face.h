@@ -57,6 +57,8 @@ public:
 	void setType(const Type & fluidType);
 	const Type getType() const;
 
+	bool isTriangle() const;
+
 
 private:
 	std::vector<Edge*> edgeList;
