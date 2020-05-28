@@ -42,7 +42,7 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 		std::cout << "Initialize fluid states: " << "Uniform" << std::endl;
 		double p = 1.0;
 		double n = 1.0;
-		Eigen::Vector3d uvec = Eigen::Vector3d::UnitZ();
+		Eigen::Vector3d uvec = Eigen::Vector3d::Zero();
 		init_Uniformly(n, p, uvec);
 	}
 		break;
@@ -3472,8 +3472,7 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 				// Term due to explicit mass flux
 				assert(i < faceFluxes.cols());
 				const double massFlux = faceFluxes(5 * fluidIdx + 0, i);
-				Jaux(i) += q * Ai * massFlux;
-
+				Jaux(i) += q * massFlux;
 
 				// Add extra terms due to implicit formulation
 				if (appmParams.isMassFluxSchemeImplicit) {
@@ -3507,8 +3506,8 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 							}
 
 							// Extra term by explicit momentum flux
-							const double fj = faceFluxes.col(j).segment(5 * fluidIdx + 1, 3).dot(nj); // momentum flux at face j
-							Jaux(i) += numSchemeFactor * q * Ai * -dt * 1 / Vk * s_kj * Aj * fj * nj_dot_ni;
+							const Eigen::Vector3d fj = faceFluxes.col(j).segment(5 * fluidIdx + 1, 3); // (directional) momentum flux at face j, times face area
+							Jaux(i) += numSchemeFactor * q * Ai * -dt * 1 / Vk * s_kj * fj.dot(ni);
 							
 							// Extra term by implicit electric Lorentz force (electric field)
 							const double geomFactor = nj_dot_ni * (Ai * Aj) / Vk; // geometric factor
