@@ -60,7 +60,11 @@ void Physics::state2primitive(const double massRatio, const Eigen::VectorXd & st
 	n = state(0);
 	if (!(n > 0)) {
 		std::cout << n << std::endl;
-		std::cout << "stop" << std::endl;
+		std::stringstream ss;
+		ss << "Non-positive number density: n = " << n << std::endl;
+		ss << "State: " << state.transpose() << std::endl;
+		std::string str = ss.str();
+		throw std::domain_error(str);
 	}
 	assert(n > 0);
 	u = state.segment(1, 3) / n;
