@@ -1361,9 +1361,12 @@ void AppmSolver::setFluidFaceFluxes()
 	const int nFaces = dualMesh.getNumberOfFaces();
 	const int nFluids = getNFluids();
 
+	std::cout << "face fluxes: " << std::endl;
+
 	for (int fidx = 0; fidx < nFaces; fidx++) {
 		const Face * face = dualMesh.getFace(fidx);
-		const Eigen::Vector3d faceNormal = face->getNormal().normalized();
+		//const Eigen::Vector3d faceNormal = face->getNormal().normalized();
+		const Eigen::Vector3d faceNormal = face->getNormal();
 
 		// skip faces that have no adjacient fluid cell
 		if (!face->hasFluidCells()) { continue; }
@@ -1373,6 +1376,7 @@ void AppmSolver::setFluidFaceFluxes()
 		for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
 			Eigen::VectorXd faceFlux3d(5);
 			Eigen::Vector3d flux = getSpeciesFaceFlux(face, fluidIdx);
+			//std::cout << "face idx: " << face->getIndex() << ", fluid " << fluidIdx << ": " << flux.transpose() << std::endl;
 			faceFlux3d(0) = flux(0);
 			faceFlux3d.segment(1, 3) = flux(1) * faceNormal;
 			faceFlux3d(4) = flux(2);
@@ -1387,6 +1391,8 @@ void AppmSolver::setFluidFaceFluxes()
 void AppmSolver::setSumOfFaceFluxes() {
 	const int nCells = dualMesh.getNumberOfCells();
 	sumOfFaceFluxes.setZero();
+
+	const int kRef = -1;
 	for (int k = 0; k < nCells; k++) {
 		const Cell * cell = dualMesh.getCell(k);
 		// Skip non-fluid cells
@@ -1396,14 +1402,50 @@ void AppmSolver::setSumOfFaceFluxes() {
 
 		// get sum of face fluxes
 		const std::vector<Face*> cellFaces = cell->getFaceList();
-		Eigen::VectorXd temp = Eigen::VectorXd::Zero(faceFluxes.rows()); // use single-precision to accumulate
+		Eigen::VectorXd sumFluxes = Eigen::VectorXd::Zero(faceFluxes.rows()); 
+		if (k == kRef) {
+			std::cout << "Face fluxes: " << std::endl;
+		}
+
+		/*
+		* The following loop is a summation over the face fluxes. 
+		* Without further precautions, we will observe numerical cancellation effects 
+		* because of adding and subtracting 'large' numbers (e.g., order of 1), and 
+		* we will be left by truncation errors (e.g., order of 1e-16 = machine precision, 
+		* times number of summands). 
+		*
+		* For guarding against such truncation errors, we also sum the absolute values 
+		* and add/subtract it after the loop. This removes the truncation errors.
+		*/
+
+		// Accumulator for absolute values
+		Eigen::VectorXd c = Eigen::VectorXd::Zero(sumFluxes.size());
+		const double scale = 1e3; // we also need a scaling factor for effectively removing truncation errors in the low bits
+
 		for (auto face : cellFaces) {
-			double faceArea = face->getArea();
+			//double faceArea = face->getArea();
 			double orientation = getOrientation(cell, face);
 			Eigen::VectorXd ff = faceFluxes.col(face->getIndex());
-			temp += orientation * ff * faceArea / cellVolume;
+			//temp += orientation * ff * faceArea / cellVolume;
+			Eigen::VectorXd temp = orientation * ff;
+			if (k == kRef) {
+				std::cout << temp.transpose() << std::endl;
+			}
+			c += temp.cwiseAbs();
+			sumFluxes += temp;
 		}
-		sumOfFaceFluxes.col(k) = temp;
+		// Guard against truncation errors
+		c *= scale;
+		sumFluxes += c;
+		sumFluxes -= c;
+
+		if (k == kRef) {
+			std::cout << "Sum of face fluxes: " << std::endl;
+			std::cout << sumFluxes.transpose() << std::endl;
+		}
+
+		sumOfFaceFluxes.col(k) = sumFluxes / cellVolume;
+
 	}
 }
 
