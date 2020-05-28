@@ -43,7 +43,6 @@ private:
 	PrimalMeshParams params;
 
 	void init_hexagon(const double zValue);
-	void init_triangle();
 	void refineMesh(const int nRefinements);
 	void outerMeshExtrude(const int nLayers);
 	void outerMeshExtrude_triangles();

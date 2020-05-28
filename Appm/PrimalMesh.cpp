@@ -56,9 +56,14 @@ void PrimalMesh::init()
 	sortCells();
 }
 
+/**
+* Initialize the mesh with a hexagon.
+*/
 void PrimalMesh::init_hexagon(const double zValue)
 {
 	std::cout << "Initialize with hexagon" << std::endl;
+
+	// Define vertices
 	Vertex * origin = addVertex(Eigen::Vector3d(0, 0, zValue));
 	addVertex(Eigen::Vector3d(+1.0,            0.0, zValue));
 	addVertex(Eigen::Vector3d(+0.5, +0.5 * sqrt(3), zValue));
@@ -67,17 +72,21 @@ void PrimalMesh::init_hexagon(const double zValue)
 	addVertex(Eigen::Vector3d(-0.5, -0.5 * sqrt(3), zValue));
 	addVertex(Eigen::Vector3d(+0.5, -0.5 * sqrt(3), zValue));
 
+	// Define edges
 	const int corners = 6;
 	for (int k = 0; k < corners; k++) {
-		Vertex * v = getVertex(k+1);
+		Vertex * v = getVertex(k + 1);
 		addEdge(origin, v);
 	}
+
+	// Save vertex coordinates
 	const int nV = getNumberOfVertices();
 	vertexCoordinates = Eigen::Matrix3Xd(3, nV);
 	for (int k = 0; k < nV; k++) {
 		vertexCoordinates.col(k) = getVertex(k)->getPosition();
 	}
 
+	// Define faces
 	for (int k = 0; k < corners; k++) {
 		Vertex * A = getVertex(k + 1);
 		Vertex * B = getVertex(((k + 1) % corners) + 1);
@@ -86,24 +95,16 @@ void PrimalMesh::init_hexagon(const double zValue)
 		auto edgeC = addEdge(origin, B);
 		std::vector<Edge*> faceEdges = { edgeA, edgeB, edgeC };
 		Face * face = addFace(faceEdges);
-		//Face * face = addFace({origin, A, B});
 	}
 }
 
-void PrimalMesh::init_triangle()
-{
-	assert(false);
-	//Vertex * origin = addVertex(Eigen::Vector3d(0, 0, 0));
-	//Vertex * A = addVertex(Eigen::Vector3d(1, 0, 0));
-	//Vertex * B = addVertex(Eigen::Vector3d(0.5, 1, 0));
-	//Edge * edge0 = addEdge(origin, A);
-	//Edge * edge1 = addEdge(A, B);
-	//Edge * edge2 = addEdge(origin, B);
-	//addFace({ edge0, edge1, edge2 });
-}
-
+/**
+* Refine the 2D mesh by number of repetions.
+*/
 void PrimalMesh::refineMesh(const int nRefinements)
 {
+	assert(getNumberOfCells() == 0);
+
 	// Strategy: 
 	// construct refined f2v-map from current mesh 
 	// and reconstruct from that map
@@ -133,8 +134,7 @@ void PrimalMesh::refineMesh(const int nRefinements)
 		file = std::ofstream(ss.str());
 		file << f2v.transpose() << std::endl;
 
-		//if (level == 1) { break; }
-
+		// Check that z-coordinates are approximately equal
 		const double tol = 16 * std::numeric_limits<double>::epsilon();
 		const double zPosMax = vertexCoordinates.row(2).maxCoeff();
 		const double zPosMin = vertexCoordinates.row(2).minCoeff();
@@ -176,22 +176,12 @@ void PrimalMesh::refineMesh(const int nRefinements)
 				Edge * edge = addEdge(A, B);
 				faceEdges.push_back(edge);
 			}
-			//std::cout << "face idx: " << i << std::endl;
-			//std::cout << "Edges: ";
-			//for (auto edge : faceEdges) {
-			//	std::cout << *edge << std::endl;
-			//}
 			Face * face = addFace(faceEdges);
-			//Vertex * A = getVertex(triangleIdx(0));
-			//Vertex * B = getVertex(triangleIdx(1));
-			//Vertex * C = getVertex(triangleIdx(2));
-			//Face * face = addFace({A, B, C});
 		}
 
-		// Check
+		// Check if faces are triangles
 		for (auto face : faceList) {
-			assert(face->getEdgeList().size() == 3);
-			assert(face->getVertexList().size() == 3);
+			assert(face->isTriangle());
 		}
 	}
 
