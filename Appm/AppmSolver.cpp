@@ -260,10 +260,16 @@ void AppmSolver::run()
 						fluidSources.block(5 * fluidIdx + 1, 0, 3, nCells) += LorentzForce_electric.block(3 * fluidIdx, 0, 3, nCells);
 					}
 					// Update energy source terms ...
-					std::cout << "TODO: Update of energy source term due to electric field" << std::endl;
 					for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-						// TODO
-						//fluidSources.row(5 * fluidIdx + 4) += 0;
+						int q = particleParams[fluidIdx].electricCharge;
+						for (int i = 0; i < nCells; i++) {
+							Eigen::VectorXd state = fluidStates.col(i);
+							Eigen::Vector3d nu = state.segment(5 * fluidIdx + 1, 3); // mass flux in cell i at timestep m; 
+							Eigen::Vector3d E = E_cc.col(i); // electric field in cell i at timestep m+1
+							double ohmicSource = nu.dot(E);
+							ohmicSource *= q;
+							fluidSources(5 * fluidIdx + 4, i) += ohmicSource;
+						}
 					}
 				}
 				std::cout << "Electric Lorentz Force maxCoeff: " << LorentzForce_electric.cwiseAbs().maxCoeff() << std::endl;
@@ -2708,6 +2714,9 @@ void AppmSolver::readParameters(const std::string & filename)
 		if (tag == "isMaxwellCurrentDefined") {
 			std::istringstream(line.substr(pos + 1)) >> appmParams.isMaxwellCurrentDefined;
 		}
+		if (tag == "isFrictionActive") {
+			std::istringstream(line.substr(pos + 1)) >> appmParams.isFrictionActive;
+		}
 		//if (tag == "maxwellSolverBCType") {
 		//	std::string temp;
 		//	std::istringstream(line.substr(pos + 1)) >> temp;
@@ -3448,6 +3457,9 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 		std::vector<T> triplets;
 		std::vector<T> geomTriplets;
 
+		// accumulator to guard against truncation errors
+		Eigen::VectorXd c = Eigen::VectorXd::Zero(nDualFaces);
+
 		// Loop over all dual faces (where current density lives)
 		for (int i = 0; i < nDualFaces; i++) {
 			//std::cout << "i = " << i << std::endl;
@@ -3489,7 +3501,7 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 						// Extra term by explicit Fluid sources (e.g., magnetic Lorentz force)
 						if (appmParams.isLorentzForceMagneticEnabled) {
 							const Eigen::Vector3d fluidMomentumSource = fluidSources.col(cell->getIndex()).segment(5 * fluidIdx + 1, 3);
-							Jaux(i) += numSchemeFactor * q * Ai * fluidMomentumSource.dot(ni); 
+							Jaux(i) += numSchemeFactor * q * Ai * dt * fluidMomentumSource.dot(ni); 
 							//const Eigen::Vector3d nu_x_B = LorentzForce_magnetic.col(cell->getIndex()).segment(3 * fluidIdx, 3);
 							//Jaux(i) += numSchemeFactor * pow(q, 2) * 1. / massRatio * Ai * nu_x_B.dot(ni);
 						}
@@ -3507,7 +3519,9 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 
 							// Extra term by explicit momentum flux
 							const Eigen::Vector3d fj = faceFluxes.col(j).segment(5 * fluidIdx + 1, 3); // (directional) momentum flux at face j, times face area
-							Jaux(i) += numSchemeFactor * q * Ai * -dt * 1 / Vk * s_kj * fj.dot(ni);
+							const double temp = numSchemeFactor * q * Ai * -dt * 1 / Vk * s_kj * fj.dot(ni);
+							c(i) += abs(temp); // accumulator to guard against truncation error
+							Jaux(i) += temp;
 							
 							// Extra term by implicit electric Lorentz force (electric field)
 							const double geomFactor = nj_dot_ni * (Ai * Aj) / Vk; // geometric factor
@@ -3525,6 +3539,13 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 		}
 		Msigma.setFromTriplets(triplets.begin(), triplets.end());
 		Msigma.makeCompressed();
+
+		// guard against truncation errors
+		//std::ofstream("c.dat")    << std::scientific << std::setprecision(16) << c << std::endl;
+		//std::ofstream("jaux.dat") << std::scientific << std::setprecision(16) << Jaux << std::endl;
+		const double scale = 10 * this->fluxTruncationErrorGuardScale;
+		Jaux += c * scale;
+		Jaux -= c * scale;
 
 		//Eigen::SparseMatrix<double> Msigma_geom(nDualFaces, nEdges);
 		//Msigma_geom.setFromTriplets(geomTriplets.begin(), geomTriplets.end());
@@ -3570,11 +3591,15 @@ const Eigen::VectorXd AppmSolver::setVoltageBoundaryConditions(const double time
 	}
 	else {
 		// Set voltage values at terminal A (stressed electrode)
-		auto finalVoltage = 0;
-		auto t0 = 1;
-		auto tscale = 0.1;
-		auto timeFunction = 0.5 * (1 + tanh((time - t0) / tscale));
-		xd.topRows(nPrimalTerminalVertices / 2).array() = finalVoltage * timeFunction;
+		auto finalVoltage = 0.25;
+		auto t0 = 0.3;
+		auto t1 = 0.5;
+		auto tscale = 0.05;
+		auto timeFunction0 = 0.5 * (1 + tanh((time - t0) / tscale));
+		auto timeFunction1 = 0.5 * (1 + tanh(-(time - t1) / tscale));
+		auto voltage = finalVoltage * timeFunction0 * timeFunction1;
+		voltage = 1 * (time > 0);
+		xd.topRows(nPrimalTerminalVertices / 2).array() = voltage;
 	}
 	// Set voltage condition to zero at terminal B (grounded electrode)
 	xd.bottomRows(nPrimalTerminalVertices / 2).array() = 0;
