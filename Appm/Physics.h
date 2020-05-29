@@ -3,7 +3,7 @@
 #include <Eigen/Dense>
 #include <iostream>
 
-#include <stdexcept>
+#include <exception>
 
 class Physics
 {

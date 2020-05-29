@@ -6,6 +6,7 @@
 #include <cmath>
 #include <iostream>
 #include <iomanip>
+#include <exception>
 
 #include "PrimalMesh.h"
 #include "DualMesh.h"
@@ -179,8 +180,11 @@ private:
 
 	//const double getMomentumUpdate(const int k, const Eigen::Vector3d & nvec, const int fluidIdx) const;
 	const std::string stopFilename = "stop.txt";
-	inline void createStopFile();
+	void createStopFile(const int value);
 	bool isStopFileActive();
+
+
+
 
 	void setFluidFaceFluxes();
 	Eigen::Vector3d getSpeciesFaceFlux(const Face * face, const int fluidIdx);
@@ -235,6 +239,8 @@ private:
 
 	Eigen::MatrixXi faceTypeFluids;
 	const Face::Type getFaceTypeOfFluid(const Face * face, const int fluidIdx) const;
+
+	const double getNumericalSchemeFactor(const Face * face, const int fluidx) const;
 
 	const Eigen::VectorXd solveMaxwell_PardisoLU(Eigen::SparseMatrix<double> & Mf, Eigen::VectorXd & rhs);
 	const Eigen::VectorXd solveMaxwell_sparseLU(Eigen::SparseMatrix<double> & Mf, Eigen::VectorXd & rhs);
