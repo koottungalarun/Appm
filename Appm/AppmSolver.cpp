@@ -458,6 +458,8 @@ void AppmSolver::init_maxwellStates()
 
 	// Current density at cell centers
 	Jcc = Eigen::Matrix3Xd::Zero(3, dualMesh.getNumberOfCells());
+	Jaux_cc = Eigen::Matrix3Xd::Zero(3, dualMesh.getNumberOfCells());
+
 
 	// Initialize matrix that maps electric field on primal edges to electric current on dual faces; see Lorentz force in Fluid equations
 	//initMsigma();
@@ -927,8 +929,12 @@ const Eigen::Matrix3Xd AppmSolver::getCurrentDensityAtCellCenter()
 	M.setFromTriplets(triplets.begin(), triplets.end());
 	M.makeCompressed();
 
+	Eigen::VectorXd Jaux_cc_vectorFormat = M * J_h_aux;
+	Jaux_cc = Eigen::Map<Eigen::Matrix3Xd>(Jaux_cc_vectorFormat.data(), 3, nCells);
+
 	Eigen::VectorXd Jcc_vectorFormat = M * J_h;
 	Eigen::Map<Eigen::Matrix3Xd> result(Jcc_vectorFormat.data(), 3, nCells);
+
 	return result;
 }
 
@@ -2186,6 +2192,7 @@ void AppmSolver::writeMaxwellStates(H5Writer & writer)
 
 	Jcc = getCurrentDensityAtCellCenter();
 	writer.writeData(Jcc, "/Jcc");
+	writer.writeData(Jaux_cc, "/Jaux_cc");
 
 	// Interpolated values of B-field to primal vertices
 	writer.writeData(B_vertex, "/Bcc");
@@ -3060,6 +3067,13 @@ const std::string AppmSolver::xdmf_GridDualCells(const int iteration) const
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << " 3\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
 	ss << datafilename << ":/Jcc" << std::endl;
+	ss << "</DataItem>" << std::endl;
+	ss << "</Attribute>" << std::endl;
+
+	ss << "<Attribute Name=\"Current Density Aux Cell Centered\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << " 3\""
+		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+	ss << datafilename << ":/Jaux_cc" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 

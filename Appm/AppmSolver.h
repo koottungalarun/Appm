@@ -102,6 +102,7 @@ private:
 	Eigen::VectorXd J_h_aux;
 	Eigen::VectorXd J_h_aux_mm1;
 	Eigen::Matrix3Xd Jcc;
+	Eigen::Matrix3Xd Jaux_cc;
 	Eigen::Matrix3Xd E_cc; // Electric field at cell center
 
 	// M1 = lambda^2 * Q' * Meps * Q in the reformulated Ampere equation. 
