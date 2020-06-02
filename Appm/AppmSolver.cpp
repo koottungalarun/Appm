@@ -95,38 +95,37 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 		isWriteEfield = true;
 	}
 
-	
+	int iteration = 0;
+	double time = 0;
+	double dt = 1;
+
 	//set_Efield_uniform(Eigen::Vector3d::UnitZ());
 	//E_cc = getEfieldAtCellCenter();
 	//setFluidFaceFluxes();
-	//double dt = getNextFluidTimestepSize();
 	//dt = 1;
-	//double time = 5;
-	////E_h.setZero();
+	//dt = getNextFluidTimestepSize();
 	//Eigen::SparseMatrix<double> Msigma;
 	//Msigma = get_Msigma_spd(J_h_aux, dt, time);
 	//Eigen::sparseMatrixToFile(Msigma, "Msigma.dat");
+
+	//Eigen::isSymmetricPositiveDefinite(Msigma);
 	//std::cout << "nnz(Msigma): " << Msigma.nonZeros() << std::endl;
-	//std::cout << "J_h_aux maxcoeff: " << J_h_aux.cwiseAbs().maxCoeff() << std::endl;
-	////const int nEdges = primalMesh.getNumberOfEdges();
 	//J_h = Msigma * E_h + J_h_aux;
 	//Jcc = getCurrentDensityAtCellCenter();
-	//J_h = J_h_aux;
-	//assert(J_h.size() == nFaces);
-	//assert(J_h_aux.size() == nFaces);
 
 	//set_Bfield_azimuthal();
 	//interpolateMagneticFluxToPrimalVertices();
 
 	// write initial data to file (iteration = 0, time = 0)
-	int iteration = 0;
-	double time = 0;
+
+	iteration = 0;
+	time = 0;
 	writeOutput(iteration, time);
 
 	J_h_aux.setZero();
 	J_h.setZero();
-	//E_h.setZero();
-	//E_cc = getEfieldAtCellCenter();
+	E_h.setZero();
+	E_cc = getEfieldAtCellCenter();
 }
 
 
@@ -189,6 +188,8 @@ void AppmSolver::run()
 	/*
 	* Time integration loop 
 	*/
+	const int maxIterations = appmParams.maxIterations;
+	const double maxTime = appmParams.maxTime;
 	try {
 		while (iteration < maxIterations && time < maxTime && !isStopFileActive()) {
 			std::cout << std::endl;
@@ -382,8 +383,8 @@ std::string AppmSolver::printSolverParameters() const
 	std::stringstream ss;
 	ss << "Appm Solver parameters:" << std::endl;
 	ss << "=======================" << std::endl;
-	ss << "maxIterations:  " << maxIterations << std::endl;
-	ss << "maxTime:        " << maxTime << std::endl;
+	ss << "maxIterations:  " << appmParams.maxIterations << std::endl;
+	ss << "maxTime:        " << appmParams.maxTime << std::endl;
 	ss << "timestepSize:   " << appmParams.timestepSize << std::endl;
 	ss << "isFluidEnabled: " << appmParams.isFluidEnabled << std::endl;
 	ss << "isMaxwellEnabled: " << appmParams.isMaxwellEnabled << std::endl;
@@ -434,13 +435,16 @@ void AppmSolver::init_maxwellStates()
 	assert(Q.nonZeros() > 0);
 	assert(Q.rows() == primalMesh.getNumberOfEdges());
 	assert(Q.cols() == nDof);
+	Eigen::sparseMatrixToFile(Q, "Q.dat");
 
 	// Material laws
 	this->Meps = getElectricPermittivityOperator();
 	assert(Meps.nonZeros() > 0);
+	Eigen::sparseMatrixToFile(Meps, "Meps.dat");
 
 	this->Mnu = getMagneticPermeabilityOperator();
 	assert(Mnu.nonZeros() > 0);
+	Eigen::sparseMatrixToFile(Mnu, "Mnu.dat");
 
 	// Curl operator on all primal faces and all primal edges
 	this->C = primalMesh.get_f2eMap().cast<double>();
@@ -448,10 +452,12 @@ void AppmSolver::init_maxwellStates()
 
 	// Curl operator on inner primal faces and inner primal edges
 	const Eigen::SparseMatrix<double> C_inner = C.topLeftCorner(nPfi, nPei);
+	Eigen::sparseMatrixToFile(C_inner, "Ci.dat");
 
 	Eigen::SparseMatrix<double> P(nPfi, nDof);
 	assert(P.cols() == nPei + nPvb);
 	P.leftCols(nPei) = C_inner;
+	Eigen::sparseMatrixToFile(P, "P.dat");
 
 	M1 = lambdaSquare * Q.transpose() * Meps * Q;
 	M1.makeCompressed();
@@ -895,6 +901,13 @@ const Eigen::Matrix3Xd AppmSolver::getEfieldAtCellCenter()
 	//E_cellCenter = E_reshaped;
 
 	// The class Map allows to 'view' the underlying data in different manner (e.g., doing a reshape operation)
+
+	// Test: guard against trunctation error
+	//const double EmaxCoeff = E_h.cwiseAbs().maxCoeff();
+	//const double scale = 1e6;
+	//E_h.array() += scale * EmaxCoeff;
+	//E_h.array() -= scale * EmaxCoeff;
+
 	Eigen::Map<Eigen::Matrix3Xd> result(E_cc_vectorFormat.data(), 3, nCells);
 	return result;
 }
@@ -1005,7 +1018,7 @@ void AppmSolver::setFrictionSourceTerms()
 						continue; // skip if indices are equal, since they contribute nothing
 					}
 					// species interaction term
-					auto z_ab = 1; // assume a constant value for testing purpose
+					auto z_ab = 5; // assume a constant value for testing purpose
 
 					// ... get friction force due to interaction of species Alpha and Beta
 					R_a -= n_a * n_b * (u_a - u_b) * z_ab;
@@ -1677,7 +1690,8 @@ void AppmSolver::solveMaxwellSystem(const double time, const double dt, const do
 	assert(M2.nonZeros() > 0);
 
 	M = M1 + pow(dt, 2) * M2;
-	M += dt * Q.transpose() * Msigma_inner * Q;
+	M += dt * Q.transpose() * Msigma_inner * Q; 
+	//M += dt * Q.transpose() * Msigma_inner * Q; // Test: leave this term out. To be activated again
 	M.makeCompressed();
 	//Eigen::sparseMatrixToFile(M, "M.dat");
 
@@ -1688,8 +1702,8 @@ void AppmSolver::solveMaxwellSystem(const double time, const double dt, const do
 	rhs.setZero();
 	rhs = M1 * (1 + dt_ratio) * maxwellState;
 	rhs -= dt_ratio * M1 * maxwellStatePrevious;
-	//rhs += dt * Q.transpose() * Msigma_inner * Q * maxwellState;
-	rhs -= dt * Q.transpose() * (J_h_aux - J_h).topRows(nEdges);
+	rhs -= dt * Q.transpose() * (J_h_aux - J_h).topRows(nEdges); 
+	//rhs -= dt * Q.transpose() * (J_h_aux - J_h).topRows(nEdges); // Test: leave this term out
 
 
 	// The system of equations has fixed and free values; 
@@ -1738,8 +1752,16 @@ void AppmSolver::solveMaxwellSystem(const double time, const double dt, const do
 	//xf = solveMaxwell_sparseLU(Mf, rhsFree);
 	//xf = solveMaxwell_BiCGStab(Mf, rhsFree); // Slow solver
 	//xf = solveMaxwell_LSCG(Mf, rhsFree); // error: iterative solver base is not initialized
-	//xf = solveMaxwell_CG(Mf, rhsFree);
+	//xf = solveMaxwell_CG(Mf, rhsFree); // remark: Matrix Mf is numerically not SPD. Is it symmetric non-negative definite? 
 	xf = solveMaxwell_PardisoLU(Mf, rhsFree);
+
+	// Test: apply guard against truncation errors by adding and subtracting a large number, 
+	//       so that small values (of order 1e-10 smaller than largest number) goes to zero 
+	//       due to finite precision arithmetic
+	//const double x_maxCoeff = xf.cwiseAbs().maxCoeff();
+	//const double scale = 1e6;
+	//xf.array() += x_maxCoeff * scale;
+	//xf.array() -= x_maxCoeff * scale;
 
 	// assemble new state vector
 	x.topRows(nFree) = xf;
@@ -1748,6 +1770,12 @@ void AppmSolver::solveMaxwellSystem(const double time, const double dt, const do
 
 	// Update state vectors for discrete states
 	E_h = Q * x;
+
+	const double Emax = E_h.cwiseAbs().maxCoeff();
+	const double scale = 1e9;
+	E_h.array() += scale * Emax;
+	E_h.array() -= scale * Emax;
+
 	B_h -= dt * C * E_h;
 
 	// Get electric current due to Ohms law (see implicit and consistent formulation of electric current)
@@ -1909,6 +1937,12 @@ void AppmSolver::init_meshes(const PrimalMesh::PrimalMeshParams & primalParams)
 	std::cout << "Dual mesh has " << dualMesh.getNumberOfVertices() << " vertices" << std::endl;
 	std::cout << "Primal mesh volume: " << primalMesh.getMeshVolume() << std::endl;
 	std::cout << "Dual mesh volume:   " << dualMesh.getMeshVolume() << std::endl;
+
+	std::cout << "Primal mesh" << std::endl;
+	std::cout << primalMesh.getMeshInfo() << std::endl;
+
+	std::cout << "Dual mesh" << std::endl;
+	std::cout << dualMesh.getMeshInfo() << std::endl;
 }
 
 /**
@@ -2696,10 +2730,10 @@ void AppmSolver::readParameters(const std::string & filename)
 		std::string tag = line.substr(0, pos);
 
 		if (tag == "maxIterations") {
-			std::istringstream(line.substr(pos + 1)) >> this->maxIterations;
+			std::istringstream(line.substr(pos + 1)) >> appmParams.maxIterations;
 		}
 		if (tag == "maxTime") {
-			std::istringstream(line.substr(pos + 1)) >> this->maxTime;
+			std::istringstream(line.substr(pos + 1)) >> appmParams.maxTime;
 		}
 		if (tag == "timestepSize") {
 			std::istringstream(line.substr(pos + 1)) >> appmParams.timestepSize;
@@ -2737,17 +2771,6 @@ void AppmSolver::readParameters(const std::string & filename)
 		if (tag == "isFrictionActive") {
 			std::istringstream(line.substr(pos + 1)) >> appmParams.isFrictionActive;
 		}
-		//if (tag == "maxwellSolverBCType") {
-		//	std::string temp;
-		//	std::istringstream(line.substr(pos + 1)) >> temp;
-		//	if (temp == "Voltage") {
-		//		maxwellSolverBCType = MaxwellSolverBCType::VOLTAGE_BC;
-		//	}
-		//	if (temp == "Current") {
-		//		maxwellSolverBCType = MaxwellSolverBCType::CURRENT_BC;
-		//	}
-		//}
-
 	}
 
 	std::cout << std::endl;
@@ -3402,9 +3425,11 @@ const Eigen::VectorXd AppmSolver::solveMaxwell_CG(Eigen::SparseMatrix<double>& M
 	std::cout << "Setup solver for Maxwell system: ConjugateGradient" << std::endl;
 	Eigen::VectorXd xf(rhs.size());
 	Eigen::ConjugateGradient<Eigen::SparseMatrix<double>> maxwellSolver;
-	maxwellSolver.setTolerance(Eigen::NumTraits<double>::epsilon() * 1024);
+	//maxwellSolver.setTolerance(Eigen::NumTraits<double>::epsilon() * 1024);
 
 	auto timer_start = std::chrono::high_resolution_clock::now();
+	//Eigen::SparseMatrix<double> Mf_t = Mf.transpose();
+	//Eigen::SparseMatrix<double> A = 0.5 * (Mf + Mf_t);
 	maxwellSolver.compute(Mf);
 	auto timer_afterCompute = std::chrono::high_resolution_clock::now();
 
@@ -3523,49 +3548,56 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 				if (appmParams.isMassFluxSchemeImplicit) {
 					auto adjacientCells = dualFace->getCellList();
 					for (auto cell : adjacientCells) {
-						// skip non-fluid cells
+						// non-fluid cells
 						if (cell->getType() != Cell::Type::FLUID) {
-							continue;
+							//if (dualFace->getType() == Face::Type::DEFAULT) {
+							//	const double elCondSolid = 1e-3;
+							//	const double Li = primalMesh.getEdge(i)->getLength();
+							//	const double value = elCondSolid * Ai / Li;
+							//	triplets.push_back(T(i, i, elCondSolid));
+							//}
 						}
-						assert(cell->getType() == Cell::Type::FLUID);
-						const double nk = fluidStates(5 * fluidIdx + 0, cell->getIndex()); // number density in cell k
-						const double Vk = cell->getVolume(); // volume of cell k
+						else { // is fluid cell
+							assert(cell->getType() == Cell::Type::FLUID);
+							const double nk = fluidStates(5 * fluidIdx + 0, cell->getIndex()); // number density in cell k
+							const double Vk = cell->getVolume(); // volume of cell k
 
-						// Extra term by explicit Fluid sources (e.g., magnetic Lorentz force, or friction force)
-						if (appmParams.isLorentzForceMagneticEnabled || appmParams.isFrictionActive) {
-							const Eigen::Vector3d fluidMomentumSource = fluidSources.col(cell->getIndex()).segment(5 * fluidIdx + 1, 3);
-							Jaux(i) += numSchemeFactor * q * Ai * dt * fluidMomentumSource.dot(ni); 
-						}
-
-						auto cellFaces = cell->getFaceList();
-						for (auto face : cellFaces) {
-							const double Aj = face->getArea();
-							const Eigen::Vector3d nj = face->getNormal().normalized();
-							const int s_kj = cell->getOrientation(face);
-							const int j = face->getIndex();
-							double nj_dot_ni = nj.dot(ni); // angle between face i and face j
-							if (abs(nj_dot_ni) < 1e-10) { 
-								nj_dot_ni = 0; // Truncate small angles
+							// Extra term by explicit Fluid sources (e.g., magnetic Lorentz force, or friction force)
+							if (appmParams.isLorentzForceMagneticEnabled || appmParams.isFrictionActive) {
+								const Eigen::Vector3d fluidMomentumSource = fluidSources.col(cell->getIndex()).segment(5 * fluidIdx + 1, 3);
+								Jaux(i) += numSchemeFactor * q * Ai * dt * fluidMomentumSource.dot(ni);
 							}
 
-							// Extra term by explicit momentum flux
-							if (true) {
-								const Eigen::Vector3d fj = faceFluxes.col(j).segment(5 * fluidIdx + 1, 3); // (directional) momentum flux at face j, times face area
-								const double temp = numSchemeFactor * q * Ai * -dt * 1 / Vk * s_kj * fj.dot(ni);
-								c(i) += abs(temp); // accumulator to guard against truncation error
-								Jaux(i) += temp;
+							auto cellFaces = cell->getFaceList();
+							for (auto face : cellFaces) {
+								const double Aj = face->getArea();
+								const Eigen::Vector3d nj = face->getNormal().normalized();
+								const int s_kj = cell->getOrientation(face);
+								const int j = face->getIndex();
+								double nj_dot_ni = nj.dot(ni); // angle between face i and face j
+								if (abs(nj_dot_ni) < 1e-10) {
+									nj_dot_ni = 0; // Truncate small angles
+								}
+
+								// Extra term by explicit momentum flux
+								if (true) {
+									const Eigen::Vector3d fj = faceFluxes.col(j).segment(5 * fluidIdx + 1, 3); // (directional) momentum flux at face j, times face area
+									const double temp = numSchemeFactor * q * Ai * -dt * 1 / Vk * s_kj * fj.dot(ni);
+									c(i) += abs(temp); // accumulator to guard against truncation error
+									Jaux(i) += temp;
+								}
+
+								// Extra term by implicit electric Lorentz force (electric field)
+								const double geomFactor = nj_dot_ni * (Ai * Aj) / Vk; // geometric factor
+								if (appmParams.isLorentzForceElectricEnabled) {
+									const double value = numSchemeFactor * 0.5 * dt * pow(q, 2) / massRatio * nk / Vk * Ai * Aj * nj_dot_ni;
+									triplets.push_back(T(i, j, value));
+								}
+								if (fluidIdx == 0) {
+									geomTriplets.push_back(T(i, j, geomFactor));
+								}
 							}
-							
-							// Extra term by implicit electric Lorentz force (electric field)
-							const double geomFactor = nj_dot_ni * (Ai * Aj) / Vk; // geometric factor
-							if (appmParams.isLorentzForceElectricEnabled) {
-								const double value = numSchemeFactor * 0.5 * dt * pow(q, 2) / massRatio * nk / Vk * Ai * Aj * nj_dot_ni;
-								triplets.push_back(T(i, j, value));
-							}
-							if (fluidIdx == 0) {
-								geomTriplets.push_back(T(i, j, geomFactor));
-							}
-						}
+						} // end if cellType != Fluid
 					}
 				} // end if isMassFluxSchemeImplicit
 			}
@@ -3577,7 +3609,7 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 		//std::ofstream("c.dat")    << std::scientific << std::setprecision(16) << c << std::endl;
 		//std::ofstream("jaux.dat") << std::scientific << std::setprecision(16) << Jaux << std::endl;
 		if (true) {
-			const double scale = 10 * this->fluxTruncationErrorGuardScale;
+			const double scale = 1000 * this->fluxTruncationErrorGuardScale;
 			Jaux += c * scale;
 			Jaux -= c * scale;
 		}

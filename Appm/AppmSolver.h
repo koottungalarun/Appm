@@ -55,6 +55,8 @@ private:
 	std::vector<ParticleParameters> particleParams;
 
 	struct AppmParameters {
+		int maxIterations = 0;
+		double maxTime = 0;
 		bool isFluidEnabled = false;
 		bool isMaxwellEnabled = false;
 		bool isEulerMaxwellCouplingEnabled = false;
@@ -76,8 +78,6 @@ private:
 	bool isStateWrittenToOutput = false;
 
 
-	int maxIterations = 0;
-	double maxTime = 0;
 	double lambdaSquare = 1.0;
 	int initType = 1;
 	//bool isElectricLorentzForceActive = false;
