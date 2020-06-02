@@ -1208,6 +1208,20 @@ Mesh::MeshInfo Mesh::getMeshInfo() const
 	return meshInfo;
 }
 
+std::ostream & operator<<(std::ostream & os, const Mesh::MeshInfo & obj)
+{
+	os << "Mesh info: " << std::endl;
+	os << "Vertices: " << obj.nVertices << std::endl;
+	os << "Boundary vertices: " << obj.nVerticesBoundary<< std::endl;
+	os << "Terminal vertices: " << obj.nVerticesTerminal << std::endl;
+	os << "Edges: " << obj.nEdges << std::endl;
+	os << "Inner edges: " << obj.nEdgesInner << std::endl;
+	os << "Faces: " << obj.nFaces << std::endl;
+	os << "Inner faces: " << obj.nFacesInner << std::endl;
+	os << "Cells: " << obj.nCells << std::endl;
+	return os;
+}
+
 
 //void Mesh::writeXdmf_volume()
 //{

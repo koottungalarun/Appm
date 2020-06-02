@@ -98,6 +98,9 @@ public:
 	const Eigen::VectorXi getFaceTypes() const;
 
 	MeshInfo getMeshInfo() const;
+
+	friend std::ostream & operator<<(std::ostream & os, const Mesh::MeshInfo & obj);
+
 	const std::string getMeshDataFilename() const;
 
 	const double getMeshVolume() const;
