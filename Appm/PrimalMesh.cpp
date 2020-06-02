@@ -114,11 +114,11 @@ void PrimalMesh::refineMesh(const int nRefinements)
 		Eigen::Matrix3Xi f2v;
 
 		// Get face-to-vertex list of refined faces
-		if (level != 1) {
-			f2v = refine_triangles();
+		if (level == 1) {
+			f2v = refine_triangles_specialCorners();
 		}
 		else {
-			f2v = refine_triangles_specialCorners();
+			f2v = refine_triangles();
 		}
 		//std::cout << "f2v: " << std::endl;
 		//std::cout << f2v.transpose() << std::endl;
