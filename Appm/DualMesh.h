@@ -30,7 +30,7 @@ private:
 	Eigen::VectorXi dualFaceToPrimalEdgeList;
 	Eigen::VectorXi associateDualFacesWithPrimalEdges(const PrimalMesh & primal);
 
-	void init_cellFluidType();
+	void init_cellFluidType(const PrimalMesh & primal);
 	void init_faceFluidType(const double terminalRadius);
 
 	void init_dualVertices(const PrimalMesh & primal);

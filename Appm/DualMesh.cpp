@@ -69,7 +69,7 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal, const double terminalRad
 	assert(delta.nonZeros() == 0);
 
 	// Cell fluid type
-	init_cellFluidType();
+	init_cellFluidType(primal);
 
 	// Set terminals and ghost cells
 	for (int i = 0; i < primal.getNumberOfVertices(); i++) {
@@ -249,16 +249,15 @@ XdmfGrid DualMesh::getXdmfVolumeGrid() const
 	return volumeGrid;
 }
 
-void DualMesh::init_cellFluidType()
+void DualMesh::init_cellFluidType(const PrimalMesh & primal)
 {
 	const int nCells = this->getNumberOfCells();
 	for (int i = 0; i < nCells; i++) {
 		Cell::Type fluidType;
 		Cell * cell = getCell(i);
-		const Eigen::Vector3d cellCenter = cell->getCenter();
-		const Eigen::Vector2d cellCenter2d = cellCenter.segment(0, 2);
-
-		if (cellCenter2d.norm() < 1) {
+		Vertex * primalVertex = primal.getVertex(i);
+		const Eigen::Vector2d vertexPos2d = primalVertex->getPosition().segment(0,2);
+		if (vertexPos2d.norm() <= 1) {
 			fluidType = Cell::Type::FLUID;
 		}
 		else {
