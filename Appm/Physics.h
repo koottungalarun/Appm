@@ -19,6 +19,7 @@ public:
 	
 	static const double getMaxWavespeed(const Eigen::Vector3d & qL, const Eigen::Vector3d & qR);
 	static double getMaxWavespeed(const Eigen::Vector3d & state);
+	static double getTemperature(const Eigen::VectorXd & state, const double massRatio);
 
 	static const Eigen::Vector3d getFluidFluxFromState(const Eigen::Vector3d & q);
 

@@ -42,6 +42,19 @@ double Physics::getMaxWavespeed(const Eigen::Vector3d & state)
 	return smax;
 }
 
+double Physics::getTemperature(const Eigen::VectorXd & state, const double massRatio)
+{
+	double n = state(0);
+	double ne_tot = state(5);
+	assert(n > 0);
+	assert(ne_tot > 0);
+	const Eigen::Vector3d uvec = state.segment(1, 3) / n;
+	double ne = ne_tot - 0.5 * n * uvec.norm();
+	double T = (Physics::gamma - 1) * massRatio * ne;
+	assert(T > 0);
+	return T;
+}
+
 const Eigen::Vector3d Physics::getFluidFluxFromState(const Eigen::Vector3d & q)
 {
 	assert(q.norm() > 0);
