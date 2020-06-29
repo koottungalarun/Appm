@@ -13,6 +13,7 @@
 #include "Numerics.h"
 
 #include "Physics.h"
+#include "ScalingParameters.h"
 
 #include <Eigen/SparseLU>
 #include <Eigen/IterativeLinearSolvers> 	
@@ -46,6 +47,8 @@ protected:
 	bool isMaxwellCurrentSource = false;
 
 private:
+
+	ScalingParameters scalingParameters;
 
 	struct ParticleParameters {
 		std::string name = "neutral";

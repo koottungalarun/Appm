@@ -54,13 +54,16 @@ void Mesh::writeToFile()
 
 	// Create incidence maps and write them to file
 	createIncidenceMaps();
-	Eigen::sparseMatrixToFile(edge2vertexMap, this->meshPrefix + "-e2v.dat");
-	Eigen::sparseMatrixToFile(face2edgeMap, this->meshPrefix + "-f2e.dat");
-	Eigen::sparseMatrixToFile(cell2faceMap, this->meshPrefix + "-c2f.dat");
+	//Eigen::sparseMatrixToFile(edge2vertexMap, this->meshPrefix + "-e2v.dat");
+	//Eigen::sparseMatrixToFile(face2edgeMap, this->meshPrefix + "-f2e.dat");
+	//Eigen::sparseMatrixToFile(cell2faceMap, this->meshPrefix + "-c2f.dat");
 
 
 	const std::string h5filename = this->meshPrefix + "-mesh.h5";
 	H5Writer h5writer(h5filename);
+	Eigen::sparseMatrixToFile(edge2vertexMap, "/e2v", h5writer);
+	Eigen::sparseMatrixToFile(face2edgeMap, "/f2e", h5writer);
+	Eigen::sparseMatrixToFile(cell2faceMap, "/c2f", h5writer);
 
 	const int nVertices = getNumberOfVertices();
 	if (nVertices > 0) {
@@ -143,9 +146,9 @@ void Mesh::writeToFile()
 		}
 		const int f2v_maxCoeff = f2v.array().abs().maxCoeff();
 
-		std::ofstream file;
-		file = std::ofstream(this->meshPrefix + "-f2v.dat");
-		file << f2v.transpose() << std::endl;
+		//std::ofstream file;
+		//file = std::ofstream(this->meshPrefix + "-f2v.dat");
+		//file << f2v.transpose() << std::endl;
 
 		Eigen::Matrix3Xd fc(3, nFaces);
 		Eigen::Matrix3Xd fn(3, nFaces);

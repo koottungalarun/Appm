@@ -18,6 +18,7 @@ public:
 		const int getOuterLayers() const;
 		const double getElectrodeRadius() const;
 		const double getZmax() const;
+		const double getOuterRadius() const;
 
 		friend std::ostream & operator<<(std::ostream & os, const PrimalMeshParams & obj);
 
@@ -25,6 +26,7 @@ public:
 		int nAxialLayers = 10;
 		int nRefinements = 2;
 		int nOuterLayers = 2;
+		double outerRadius = 1;
 		double electrodeRadius = 0.35;
 		double zmax = 1;
 
@@ -44,9 +46,9 @@ private:
 
 	void init_hexagon(const double zValue);
 	void refineMesh(const int nRefinements);
-	void outerMeshExtrude(const int nLayers);
+	void outerMeshExtrude();
 	void outerMeshExtrude_triangles();
-	void outerMeshExtrude_prisms();
+	void outerMeshExtrude_prisms(const double primsVertexRadius);
 	void extrudeMesh(const int nLayers, const double zmax);
 
 	Eigen::Matrix3Xi refine_triangles();

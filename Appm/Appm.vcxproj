@@ -149,7 +149,9 @@
     <ClInclude Include="Mesh.h" />
     <ClInclude Include="Numerics.h" />
     <ClInclude Include="Physics.h" />
+    <ClInclude Include="PhysicsConstants.h" />
     <ClInclude Include="PrimalMesh.h" />
+    <ClInclude Include="ScalingParameters.h" />
     <ClInclude Include="TriPrism.h" />
     <ClInclude Include="Vertex.h" />
     <ClInclude Include="XdmfAttribute.h" />
@@ -175,7 +177,9 @@
     <ClCompile Include="Mesh.cpp" />
     <ClCompile Include="Numerics.cpp" />
     <ClCompile Include="Physics.cpp" />
+    <ClCompile Include="PhysicsConstants.cpp" />
     <ClCompile Include="PrimalMesh.cpp" />
+    <ClCompile Include="ScalingParameters.cpp" />
     <ClCompile Include="TriPrism.cpp" />
     <ClCompile Include="Vertex.cpp" />
     <ClCompile Include="XdmfAttribute.cpp" />
@@ -192,6 +196,7 @@
     <Text Include="AppmSolverParams.txt" />
     <Text Include="particleParameters.txt" />
     <Text Include="primalMeshParams.txt" />
+    <Text Include="scales.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

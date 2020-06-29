@@ -13,6 +13,7 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	this->timeFile = std::ofstream("timesteps.dat");
 
 	isStateWrittenToOutput = true;
+	scalingParameters = ScalingParameters("scales.txt");
 	readParameters("AppmSolverParams.txt");
 	init_meshes(primalMeshParams);  // Initialize primal and dual meshes
 	if (primalMesh.getNumberOfCells() == 0) {
@@ -144,7 +145,9 @@ void AppmSolver::run()
 
 	// Set fluid face fluxes before start of iteration loop. 
 	// This ensures that all required data of 'previous' timestep is also available at first iteration.
-	setFluidFaceFluxes();
+	if (appmParams.maxIterations > 0) {
+		setFluidFaceFluxes();
+	}
 
 
 	/*
@@ -403,16 +406,21 @@ void AppmSolver::init_maxwellStates()
 	assert(Q.nonZeros() > 0);
 	assert(Q.rows() == primalMesh.getNumberOfEdges());
 	assert(Q.cols() == nDof);
-	Eigen::sparseMatrixToFile(Q, "Q.dat");
+
+	//Eigen::sparseMatrixToFile(Q, "Q.dat");
+	H5Writer h5writer("discreteMaps.h5");
+	Eigen::sparseMatrixToFile(Q, "/Q", h5writer);
 
 	// Material laws
 	this->Meps = getElectricPermittivityOperator();
 	assert(Meps.nonZeros() > 0);
-	Eigen::sparseMatrixToFile(Meps, "Meps.dat");
+	//Eigen::sparseMatrixToFile(Meps, "Meps.dat");
+	Eigen::sparseMatrixToFile(Meps, "/Meps", h5writer);
 
 	this->Mnu = getMagneticPermeabilityOperator();
 	assert(Mnu.nonZeros() > 0);
-	Eigen::sparseMatrixToFile(Mnu, "Mnu.dat");
+	//Eigen::sparseMatrixToFile(Mnu, "Mnu.dat");
+	Eigen::sparseMatrixToFile(Mnu, "/Mnu", h5writer);
 
 	// Curl operator on all primal faces and all primal edges
 	this->C = primalMesh.get_f2eMap().cast<double>();
@@ -420,12 +428,14 @@ void AppmSolver::init_maxwellStates()
 
 	// Curl operator on inner primal faces and inner primal edges
 	const Eigen::SparseMatrix<double> C_inner = C.topLeftCorner(nPfi, nPei);
-	Eigen::sparseMatrixToFile(C_inner, "Ci.dat");
+	//Eigen::sparseMatrixToFile(C_inner, "Ci.dat");
+	Eigen::sparseMatrixToFile(C_inner, "/Ci_", h5writer);
 
 	Eigen::SparseMatrix<double> P(nPfi, nDof);
 	assert(P.cols() == nPei + nPvb);
 	P.leftCols(nPei) = C_inner;
-	Eigen::sparseMatrixToFile(P, "P.dat");
+	//Eigen::sparseMatrixToFile(P, "P.dat");
+	Eigen::sparseMatrixToFile(P, "/P", h5writer);
 
 	M1 = lambdaSquare * Q.transpose() * Meps * Q;
 	M1.makeCompressed();
@@ -2815,6 +2825,7 @@ void AppmSolver::readParameters(const std::string & filename)
 	const char delim = ':';
 
 	while (std::getline(file, line)) {
+		if (line.size() == 0) { continue; } // skip empty lines
 		int pos = line.find(delim);
 		std::string tag = line.substr(0, pos);
 

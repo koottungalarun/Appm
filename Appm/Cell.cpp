@@ -239,15 +239,16 @@ Eigen::Vector3d Cell::computeCellCenter() const
 	Eigen::Vector3d posVecDelta = posVec1 - posVec0;
 	Eigen::Vector2d posVec2d = posVecDelta.segment(0, 2);
 	const double tol0 = 2 * std::numeric_limits<double>::epsilon();
-	if (posVec2d.norm() > tol0) { // this should not be true
-		std::cout << std::scientific << std::setprecision;
-		std::cout << "posVec2d: " << posVec2d.transpose() << std::endl;
-		std::cout << "pos face0: " << posVec0.transpose() << std::endl;
-		std::cout << "pos face1: " << posVec1.transpose() << std::endl;
+	// TODO check 
+	//if (posVec2d.norm() > tol0) { // this should not be true
+	//	std::cout << std::scientific << std::setprecision;
+	//	std::cout << "posVec2d: " << posVec2d.transpose() << std::endl;
+	//	std::cout << "pos face0: " << posVec0.transpose() << std::endl;
+	//	std::cout << "pos face1: " << posVec1.transpose() << std::endl;
 
-		isValid &= false;
-		assert(isValid);
-	}
+	//	isValid &= false;
+	//	assert(isValid);
+	//}
 	cc = 0.5 * (posVec0 + posVec1);
 
 	// Check that parallel faces have same z-value in face centers

@@ -18,6 +18,7 @@ PrimalMesh::PrimalMesh(const PrimalMeshParams & p)
 	: PrimalMesh()
 {
 	this->params = p;
+	std::cout << "Primal mesh parameters: " << this->params;
 }
 
 
@@ -39,7 +40,8 @@ void PrimalMesh::init()
 	refineMesh(params.getRefinements());
 	check_zCoord(z0);
 
-	outerMeshExtrude(params.getOuterLayers());
+	std::cout << "Primal mesh parameters: " << this->params;
+	outerMeshExtrude();
 	check_zCoord(z0);
 	
 	const int axialLayers = params.getAxialLayers();
@@ -187,11 +189,24 @@ void PrimalMesh::refineMesh(const int nRefinements)
 
 }
 
-void PrimalMesh::outerMeshExtrude(const int nLayers)
+void PrimalMesh::outerMeshExtrude()
 {
-	for (int layer = 0; layer < nLayers; layer++) {
+	const int nLayers = params.getOuterLayers();
+	const int nRefinements = params.getRefinements();
+	assert(nRefinements >= 2);
+
+	// Linear spacing for mesh layers
+	const int nExtrudeLayers = nLayers * pow(2, nRefinements - 2);
+	const double high = params.getOuterRadius();
+	const double h = (high - 1.) / nExtrudeLayers;
+	const double low = 1 + h;
+	const Eigen::VectorXd vertexRadii = Eigen::VectorXd::LinSpaced(nExtrudeLayers, low, high);
+
+	// Extrude mesh in radial direction
+	for (int layer = 0; layer < nExtrudeLayers; layer++) {
 		//outerMeshExtrude_triangles();
-		outerMeshExtrude_prisms();
+		const double primsVertexRadius = vertexRadii(layer);
+		outerMeshExtrude_prisms(primsVertexRadius);
 	}
 }
 
@@ -348,7 +363,7 @@ void PrimalMesh::outerMeshExtrude_triangles()
 	}
 }
 
-void PrimalMesh::outerMeshExtrude_prisms()
+void PrimalMesh::outerMeshExtrude_prisms(const double primsVertexRadius)
 {
 	const int nVertices = getNumberOfVertices();
 	assert(nVertices == vertexCoordinates.cols());
@@ -379,7 +394,9 @@ void PrimalMesh::outerMeshExtrude_prisms()
 		const Vertex * vertex = getVertex(idxV);
 		const Eigen::Vector3d posBoundary = vertex->getPosition();
 		const Eigen::Vector2d posBoundary_2d = posBoundary.segment(0, 2);
-		Eigen::Vector2d pos_2d = 1.2 * posBoundary_2d;
+		// Radius at new vertex
+		//Eigen::Vector2d pos_2d = 1.2 * posBoundary_2d;
+		Eigen::Vector2d pos_2d = primsVertexRadius / posBoundary_2d.norm() * posBoundary_2d;
 		Eigen::Vector3d newPos(pos_2d(0), pos_2d(1), posBoundary(2));
 		newPosCoords.col(i) = newPos;
 		Vertex * V = addVertex(newPos);
@@ -1047,6 +1064,11 @@ const double PrimalMesh::PrimalMeshParams::getZmax() const
 	return zmax;
 }
 
+const double PrimalMesh::PrimalMeshParams::getOuterRadius() const
+{
+	return outerRadius;
+}
+
 void PrimalMesh::PrimalMeshParams::readParameters(const std::string & filename)
 {
 	if (filename.size() <= 0) {
@@ -1080,12 +1102,23 @@ void PrimalMesh::PrimalMeshParams::readParameters(const std::string & filename)
 		if (tag == "outerLayers") {
 			std::stringstream(line.substr(pos + 1)) >> this->nOuterLayers;
 		}
+		if (tag == "outerRadius") {
+			std::stringstream(line.substr(pos + 1)) >> this->outerRadius;
+		}
 		if (tag == "zMax") {
 			std::stringstream(line.substr(pos + 1)) >> this->zmax;
 		}
 		if (tag == "terminalRadius") {
 			std::stringstream(line.substr(pos + 1)) >> this->electrodeRadius;
 		}
+	}
+	if (zmax == 0) {
+		std::cout << "zmax is zero; adjust such that cells have unit length in z-direction" << std::endl;
+		zmax = nAxialLayers;
+	}
+	if (nRefinements <= 1) {
+		std::cout << "Refinement level is below 2; no outer layer cells allowed" << std::endl;
+		nOuterLayers = 0;
 	}
 }
 
@@ -1095,6 +1128,7 @@ std::ostream & operator<<(std::ostream & os, const PrimalMesh::PrimalMeshParams 
 	os << "refinements:      " << obj.nRefinements << std::endl;
 	os << "axial layers:     " << obj.nAxialLayers << std::endl;
 	os << "outer layers:     " << obj.nOuterLayers << std::endl;
+	os << "outer radius:     " << obj.outerRadius << std::endl;
 	os << "zMax:             " << obj.zmax << std::endl;
 	return os;
 }

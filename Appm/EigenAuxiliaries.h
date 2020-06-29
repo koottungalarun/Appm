@@ -6,6 +6,7 @@
 #include <iostream>
 #include <iomanip>
 #include <fstream>
+#include "H5Writer.h"
 
 namespace Eigen {
 	/**
@@ -33,6 +34,32 @@ namespace Eigen {
 			}
 		}
 		return triplets;
+	}
+
+	template <typename T>
+	void sparseMatrixToFile(const SparseMatrix<T> & M, const std::string & dataname, H5Writer & h5writer) {
+		const int nnz = M.nonZeros();
+		Eigen::VectorXi rows(nnz);
+		Eigen::VectorXi cols(nnz);
+		Eigen::VectorXd values(nnz);
+		int idx = 0;
+		for (int i = 0; i < M.outerSize(); i++) {
+			for (typename Eigen::SparseMatrix<T>::InnerIterator it(M, i); it; ++it) {
+				assert(idx < nnz);
+				rows(idx) = it.row();
+				cols(idx) = it.col();
+				values(idx) = it.value();
+				idx++;
+			}
+		}
+		assert(idx == nnz);
+		const std::string datanameRows = dataname + "_rowIdx";
+		const std::string datanameCols = dataname + "_colIdx";
+		const std::string datanameValues = dataname + "_values";
+
+		h5writer.writeData(rows, datanameRows);
+		h5writer.writeData(cols, datanameCols);
+		h5writer.writeData(values, datanameValues);
 	}
 
 	/**

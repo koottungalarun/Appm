@@ -90,6 +90,12 @@
     <ClInclude Include="Physics.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ScalingParameters.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PhysicsConstants.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -164,6 +170,12 @@
     <ClCompile Include="Physics.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ScalingParameters.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PhysicsConstants.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Text Include="primalMeshParams.txt">
@@ -173,6 +185,9 @@
       <Filter>Resource Files</Filter>
     </Text>
     <Text Include="particleParameters.txt">
+      <Filter>Resource Files</Filter>
+    </Text>
+    <Text Include="scales.txt">
       <Filter>Resource Files</Filter>
     </Text>
   </ItemGroup>
