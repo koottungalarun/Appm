@@ -143,11 +143,13 @@ private:
 	Eigen::SparseMatrix<double> getMagneticPermeabilityOperator();
 
 	void init_multiFluid(const std::string & filename);
+	void applyFluidInitializationType(const int initType);
 
 	void init_SodShockTube(const double zRef);
 	void init_Uniformly(const double n, const double p, const Eigen::Vector3d u);
 	void init_Explosion(const Eigen::Vector3d refPos, const double radius);
 	void init_testcase_frictionTerm();
+	void init_ignitionWire();
 	
 	void set_Efield_uniform(const Eigen::Vector3d direction);
 	void set_Bfield_azimuthal();
@@ -158,7 +160,8 @@ private:
 	const Eigen::Matrix3Xd getCurrentDensityAtCellCenter();
 
 	//void get_Msigma_consistent(const double dt, Eigen::SparseMatrix<double> & Msigma, Eigen::VectorXd & jaux);
-
+	
+	void setRadiationSource();
 	void setFrictionSourceTerms();
 	void setMagneticLorentzForceSourceTerms();
 

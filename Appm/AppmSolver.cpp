@@ -27,46 +27,8 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	}
 
 	init_multiFluid("particleParameters.txt");
+
 	
-	switch (initType) {
-	case 1:
-	{
-		std::cout << "Initialize fluid states: " << "Shock tube" << std::endl;
-		const double zRef = 0.;
-		init_SodShockTube(zRef);
-	}
-	break;
-
-	case 2:
-	{
-		std::cout << "Initialize fluid states: " << "Uniform" << std::endl;
-		double p = 1.0;
-		double n = 1.0;
-		Eigen::Vector3d uvec = Eigen::Vector3d::Zero();
-		init_Uniformly(n, p, uvec);
-	}
-		break;
-
-	case 3:
-	{
-		std::cout << "Initialize fluid states: " << "Explosion" << std::endl;
-		const Eigen::Vector3d refPos = Eigen::Vector3d(0, 0, 0);
-		const double radius = 0.2;
-		init_Explosion(refPos, radius);
-	}
-		break;
-
-	case 4:
-	{
-		init_testcase_frictionTerm();
-	}
-	break;
-
-	default:
-		std::cout << "InitType unknown: " << initType << std::endl;
-		exit(-1);
-	}
-
 	const int nFluids = this->getNFluids();
 	const int nFaces = dualMesh.getNumberOfFaces();
 	const int nCells = dualMesh.getNumberOfCells();
@@ -228,6 +190,7 @@ void AppmSolver::run()
 			// Set explicit fluid source terms
 			setMagneticLorentzForceSourceTerms();
 			setFrictionSourceTerms();
+			setRadiationSource();
 
 			// Set explicit face fluxes
 			if (appmParams.isFluidEnabled) {
@@ -645,6 +608,59 @@ void AppmSolver::init_multiFluid(const std::string & filename)
 			faceTypeFluids(i, fluidIdx) = static_cast<int>(faceType);
 		}
 	}
+
+	applyFluidInitializationType(initType);
+}
+
+/**
+* Define initial state of fluid.
+*/
+void AppmSolver::applyFluidInitializationType(const int initType)
+{
+	switch (initType) {
+	case 1:
+	{
+		std::cout << "Initialize fluid states: " << "Shock tube" << std::endl;
+		const double zRef = 0.;
+		init_SodShockTube(zRef);
+	}
+	break;
+
+	case 2:
+	{
+		std::cout << "Initialize fluid states: " << "Uniform" << std::endl;
+		double p = 1.0;
+		double n = 1.0;
+		Eigen::Vector3d uvec = Eigen::Vector3d::Zero();
+		init_Uniformly(n, p, uvec);
+	}
+	break;
+
+	case 3:
+	{
+		std::cout << "Initialize fluid states: " << "Explosion" << std::endl;
+		const Eigen::Vector3d refPos = Eigen::Vector3d(0, 0, 0);
+		const double radius = 0.2;
+		init_Explosion(refPos, radius);
+	}
+	break;
+
+	case 4:
+	{
+		init_testcase_frictionTerm();
+	}
+	break;
+
+	case 5:
+	{
+		init_ignitionWire();
+	}
+	break;
+
+	default:
+		std::cout << "InitType unknown: " << initType << std::endl;
+		exit(-1);
+	}
 }
 
 const int AppmSolver::getFluidStateLength() const {
@@ -785,6 +801,46 @@ void AppmSolver::init_testcase_frictionTerm()
 	}
 }
 
+/**
+* Initialize fluid states like an ignition wire, i.e., a quasineutral, hot, thin channel of gas.
+*/
+void AppmSolver::init_ignitionWire()
+{
+	const int nCells = dualMesh.getNumberOfCells();
+	for (int cellIdx = 0; cellIdx < nCells; cellIdx++) {
+		const Cell * cell = dualMesh.getCell(cellIdx);
+		if (cell->getType() != Cell::Type::FLUID) {
+			// Skip non-fluid cells
+			continue;
+		}
+		const Eigen::Vector3d & pos = cell->getCenter();
+		const Eigen::Vector2d pos2d = pos.segment(0, 2);
+		for (int fluidx = 0; fluidx < getNFluids(); fluidx++) {
+			const double massRatio = particleParams[fluidx].mass;
+			const int q = particleParams[fluidx].electricCharge;
+			const Eigen::Vector3d u = Eigen::Vector3d::Zero();
+			double n = 1;
+			double p = 1;
+			Eigen::VectorXd state;
+			if (q == 0) {
+				n = 1;
+				p = 1;
+			}
+			else {
+				if (pos2d.norm() < 0.1) {
+					n = 1;
+					p = 2;
+				}
+				else {
+					n = 0.1;
+					p = 1;
+				}
+			}
+			state = Physics::primitive2state(massRatio, n, p, u);
+			fluidStates.col(cellIdx).segment(5 * fluidx, 5) = state;
+		}
+	}
+}
 /**
 * For Testing purposes. 
 * Set E_h uniform in a given direction. 
@@ -968,8 +1024,31 @@ const Eigen::Matrix3Xd AppmSolver::getCurrentDensityAtCellCenter()
 	return result;
 }
 
+/**
+* Set source term in energy equation due to radiation.
+*/
+void AppmSolver::setRadiationSource()
+{
+	int nFluids = getNFluids();
+	assert(nFluids >= 1);
+	nFluids = std::max(1, nFluids);	 // Consider only the first fluid species
+	const int nCells = dualMesh.getNumberOfCells();
+	for (int i = 0; i < nCells; i++) {
+		const Cell * cell = dualMesh.getCell(i);
+		if (cell->getType() != Cell::Type::FLUID) { continue; }
+		for (int fluidx = 0; fluidx < nFluids; fluidx++) {
+			const Eigen::VectorXd state = fluidStates.col(i).segment(5 * fluidx, 5);
+			assert(state.size() == 5);
+			const double massRatio = particleParams[fluidx].mass;
+			double T = 0;
+			T = Physics::getTemperature(state, massRatio);
+			const double Qrad = -pow(T, 4);	// use T^4-law
+			fluidSources(5 * 0 + 4, i) += Qrad;
+		}
+	}
+}
 
-/** 
+/**
 * Apply friction force to all fluids. 
 *
 * Momentum source for species a: R_a = (-1) * sum_b( n_a * n_b * (u_a - u_b) * z_ab ), 
@@ -1023,7 +1102,7 @@ void AppmSolver::setFrictionSourceTerms()
 						continue; // skip if indices are equal, since they contribute nothing
 					}
 					// species interaction term
-					auto z_ab = 5; // assume a constant value for testing purpose
+					auto z_ab = 1; // assume a constant value for testing purpose
 
 					// ... get friction force due to interaction of species Alpha and Beta
 					R_a -= n_a * n_b * (u_a - u_b) * z_ab;
@@ -2073,6 +2152,7 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 		Eigen::VectorXd density(nCells);
 		Eigen::MatrixXd velocity(3, nCells);
 		Eigen::VectorXd pressure(nCells);
+		Eigen::VectorXd temperature(nCells);
 		Eigen::VectorXd sumMassFluxes = sumOfFaceFluxes.row(5 * fluidIdx);
 		Eigen::MatrixXd sumMomentumFluxes = sumOfFaceFluxes.block(5 * fluidIdx + 1, 0, 3, nCells);
 		Eigen::VectorXd sumEnergyFluxes = sumOfFaceFluxes.row(5*fluidIdx + 4);
@@ -2092,6 +2172,7 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 		density.setConstant(std::nan("")); 
 		velocity.setConstant(std::nan(""));
 		pressure.setConstant(std::nan(""));
+		temperature.setConstant(std::nan(""));
 		qN.setConstant(std::nan("")); 
 		qU.setConstant(std::nan("")); 
 		qE.setConstant(std::nan("")); 
@@ -2128,12 +2209,15 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 			density(i) = epsilon2 * n;
 			velocity.col(i) = u;
 			pressure(i) = p;
+			const double T = p / n;
+			temperature(i) = T;
 		}
 
 		writer.writeData(density, densityTag);
 		writer.writeData(numberDensity, numberDensityTag);
 		writer.writeData(pressure, pressureTag);
 		writer.writeData(velocity, velocityTag);
+		writer.writeData(temperature, (std::stringstream() << fluidTag << "temperature").str());
 		writer.writeData(sumMassFluxes, (std::stringstream() << fluidTag << "sumMassFlux").str());
 		writer.writeData(sumMomentumFluxes, (std::stringstream() << fluidTag << "sumMomentumFlux").str());
 		writer.writeData(sumEnergyFluxes, (std::stringstream() << fluidTag << "sumEnergyFlux").str());
@@ -3164,6 +3248,12 @@ const std::string AppmSolver::fluidXdmfOutput(const std::string & datafilename) 
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
+		ss << "<Attribute Name=\"" << fluidName << " temperature" << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << nCells << "\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << datafilename << ":/" << fluidName << "-temperature" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
 
 		ss << "<Attribute Name=\"" << fluidName << " velocity" << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << nCells << " 3\""
@@ -3682,7 +3772,7 @@ const Eigen::VectorXd AppmSolver::setVoltageBoundaryConditions(const double time
 		auto timeFunction0 = 0.5 * (1 + tanh((time - t0) / tscale));
 		auto timeFunction1 = 0.5 * (1 + tanh(-(time - t1) / tscale));
 		auto voltage = finalVoltage * timeFunction0 * timeFunction1;
-		voltage = 1 * (time > 0);
+		voltage = 1e2 * (time > 0);
 		xd.topRows(nPrimalTerminalVertices / 2).array() = voltage;
 	}
 	// Set voltage condition to zero at terminal B (grounded electrode)

@@ -44,8 +44,9 @@ double Physics::getMaxWavespeed(const Eigen::Vector3d & state)
 
 double Physics::getTemperature(const Eigen::VectorXd & state, const double massRatio)
 {
+	assert(state.size() == 5);
 	double n = state(0);
-	double ne_tot = state(5);
+	double ne_tot = state(4);
 	assert(n > 0);
 	assert(ne_tot > 0);
 	const Eigen::Vector3d uvec = state.segment(1, 3) / n;
