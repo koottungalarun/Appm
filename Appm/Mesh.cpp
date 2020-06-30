@@ -54,9 +54,13 @@ void Mesh::writeToFile()
 
 	// Create incidence maps and write them to file
 	createIncidenceMaps();
-	//Eigen::sparseMatrixToFile(edge2vertexMap, this->meshPrefix + "-e2v.dat");
-	//Eigen::sparseMatrixToFile(face2edgeMap, this->meshPrefix + "-f2e.dat");
-	//Eigen::sparseMatrixToFile(cell2faceMap, this->meshPrefix + "-c2f.dat");
+
+	bool isWriteDatFiles = false;
+	if (isWriteDatFiles) {
+		Eigen::sparseMatrixToFile(edge2vertexMap, this->meshPrefix + "-e2v.dat");
+		Eigen::sparseMatrixToFile(face2edgeMap, this->meshPrefix + "-f2e.dat");
+		Eigen::sparseMatrixToFile(cell2faceMap, this->meshPrefix + "-c2f.dat");
+	}
 
 
 	const std::string h5filename = this->meshPrefix + "-mesh.h5";
@@ -146,9 +150,14 @@ void Mesh::writeToFile()
 		}
 		const int f2v_maxCoeff = f2v.array().abs().maxCoeff();
 
-		//std::ofstream file;
-		//file = std::ofstream(this->meshPrefix + "-f2v.dat");
-		//file << f2v.transpose() << std::endl;
+		if (isWriteDatFiles) {
+			std::ofstream file;
+			file = std::ofstream(this->meshPrefix + "-f2v.dat");
+			file << f2v.transpose() << std::endl;
+		}
+		else {
+			h5writer.writeData(f2v, "/f2v");
+		}
 
 		Eigen::Matrix3Xd fc(3, nFaces);
 		Eigen::Matrix3Xd fn(3, nFaces);
@@ -646,6 +655,7 @@ void Mesh::create_edge2vertex_map()
 	for (int i = 0; i < nEdges; i++) {
 		auto e = edgeList[i];
 		int idxE = e->getIndex();
+		assert(idxE == i);
 		const Vertex * A = e->getVertexA();
 		const Vertex * B = e->getVertexB();
 		const int idxA = A->getIndex();
@@ -667,6 +677,7 @@ void Mesh::create_face2edge_map()
 	for (int i = 0; i < nFaces; i++) {
 		auto face = faceList[i];
 		const int idxF = face->getIndex();
+		assert(idxF == i);
 		const std::vector<Edge*> faceEdges = face->getEdgeList();
 		for (auto edge : faceEdges) {
 			auto idxE = edge->getIndex();
@@ -688,6 +699,7 @@ void Mesh::create_cell2face_map()
 	for (int i = 0; i < nCells; i++) {
 		auto cell = cellList[i];
 		const int idxC = cell->getIndex();
+		assert(idxC == i);
 		const std::vector<Face*> cellFaces = cell->getFaceList();
 		for (auto face : cellFaces) {
 			auto idxF = face->getIndex();
