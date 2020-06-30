@@ -1429,7 +1429,11 @@ const std::pair<int,int> AppmSolver::getAdjacientCellStates(const Face * face, c
 		else {
 			assert(faceCells.size() >= 2);
 			assert(faceCells[1]->getType() == Cell::Type::FLUID);
+			std::cout << "Boundary condition not implemented: " << std::endl;
+			std::cout << "Face type: WALL" << std::endl;
+			std::cout << "Cell types: SOLID and FLUID (presumably)" << std::endl;
 			assert(false); // Not yet implemented
+			exit(-1);
 		}
 		break;
 
