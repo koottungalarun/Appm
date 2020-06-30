@@ -57,6 +57,12 @@ private:
 	};
 	std::vector<ParticleParameters> particleParams;
 
+	enum class MaxwellSolverType {
+		CG, PardisoLU, BiCGStab
+	};
+	friend std::ostream & operator<<(std::ostream & os, const AppmSolver::MaxwellSolverType & obj);
+
+
 	struct AppmParameters {
 		int maxIterations = 0;
 		double maxTime = 0;
@@ -69,6 +75,7 @@ private:
 		double timestepSize = 1;
 		bool isMaxwellCurrentDefined = false;
 		bool isFrictionActive = true;
+		MaxwellSolverType maxwellSolverType = MaxwellSolverType::CG;
 	} appmParams;
 
 	std::ofstream timeFile;

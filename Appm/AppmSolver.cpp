@@ -204,7 +204,19 @@ void AppmSolver::run()
 			// Affine-linear function for implicit-consistent formulation of current density J_h = Msigma * E_h + Jaux
 			Eigen::SparseMatrix<double> Msigma;
 			Msigma = get_Msigma_spd(J_h_aux, dt, time);
-
+			//std::cout << "Analyze Msigma:" << std::endl;
+			//Eigen::isSymmetricPositiveDefinite(Msigma, true);
+			const int nEdges = primalMesh.getNumberOfEdges();
+			Eigen::SparseMatrix<double> Msigma_inner = Msigma.topLeftCorner(nEdges, nEdges);
+			std::cout << "Analyze Msigma inner:" << std::endl;
+			Eigen::isSymmetricPositiveDefinite(Msigma_inner, true);
+			{
+				std::stringstream ss;
+				ss << "Msigma-" << iteration << ".h5";
+				const std::string filename = ss.str();
+				H5Writer MsigmaWriter(filename);
+				Eigen::sparseMatrixToFile(Msigma_inner, "/MsigmaInner", MsigmaWriter);
+			}
 			// Maxwell equations
 			if (appmParams.isMaxwellEnabled) {
 				solveMaxwellSystem(time, dt, dt_previous, Msigma);
@@ -359,6 +371,7 @@ std::string AppmSolver::printSolverParameters() const
 	ss << "timestepSize:   " << appmParams.timestepSize << std::endl;
 	ss << "isFluidEnabled: " << appmParams.isFluidEnabled << std::endl;
 	ss << "isMaxwellEnabled: " << appmParams.isMaxwellEnabled << std::endl;
+	ss << "MaxwellSolverType: " << appmParams.maxwellSolverType << std::endl;
 	ss << "lambdaSquare: " << lambdaSquare << std::endl;
 	ss << "massFluxScheme: " << appmParams.isMassFluxSchemeImplicit << std::endl;
 	ss << "initType: " << initType << std::endl;
@@ -1850,9 +1863,25 @@ void AppmSolver::solveMaxwellSystem(const double time, const double dt, const do
 	//xf = solveMaxwell_sparseLU(Mf, rhsFree);
 	//xf = solveMaxwell_BiCGStab(Mf, rhsFree); // Slow solver
 	//xf = solveMaxwell_LSCG(Mf, rhsFree); // error: iterative solver base is not initialized
-	//xf = solveMaxwell_CG(Mf, rhsFree); // remark: Matrix Mf is numerically not SPD. Is it symmetric non-negative definite? 
-	xf = solveMaxwell_PardisoLU(Mf, rhsFree);
+	switch (appmParams.maxwellSolverType) {
+	case MaxwellSolverType::CG:
+		// remark: Matrix Mf is numerically not SPD. Is it symmetric non-negative definite? 
+		xf = solveMaxwell_CG(Mf, rhsFree); 
+		break;
 
+	case MaxwellSolverType::PardisoLU:
+		xf = solveMaxwell_PardisoLU(Mf, rhsFree);
+		break;
+
+	case MaxwellSolverType::BiCGStab:
+		xf = solveMaxwell_BiCGStab(Mf, rhsFree);
+		break;
+
+
+	default:
+		exit(-1);
+	}
+	
 	// Test: apply guard against truncation errors by adding and subtracting a large number, 
 	//       so that small values (of order 1e-10 smaller than largest number) goes to zero 
 	//       due to finite precision arithmetic
@@ -2875,6 +2904,25 @@ void AppmSolver::readParameters(const std::string & filename)
 		if (tag == "isFrictionActive") {
 			std::istringstream(line.substr(pos + 1)) >> appmParams.isFrictionActive;
 		}
+		if (tag == "MaxwellSolverType") {
+			bool isValid = false;
+			std::string value;
+			std::istringstream(line.substr(pos + 1)) >> value;
+			std::cout << "Maxwell solver type: value = " << value << std::endl;
+			if (value.compare("CG") == 0) {
+				appmParams.maxwellSolverType = MaxwellSolverType::CG;
+				isValid = true;
+			}
+			if (value.compare("PardisoLU") == 0) {
+				appmParams.maxwellSolverType = MaxwellSolverType::PardisoLU;
+				isValid = true;
+			}
+			if (value.compare("BiCGStab") == 0) {
+				appmParams.maxwellSolverType = MaxwellSolverType::BiCGStab;
+				isValid = true;
+			}
+			assert(isValid);
+		}
 	}
 
 	std::cout << std::endl;
@@ -3457,9 +3505,12 @@ const Eigen::VectorXd AppmSolver::solveMaxwell_BiCGStab(Eigen::SparseMatrix<doub
 {
 	std::cout << "Setup solver for Maxwell system: BiCGStab" << std::endl;
 	Eigen::VectorXd xf(rhs.size());
-	Eigen::BiCGSTAB<Eigen::SparseMatrix<double>, Eigen::IncompleteLUT<double>> maxwellSolver;
-	maxwellSolver.preconditioner().setDroptol(0.1);
-	maxwellSolver.preconditioner().setFillfactor(0.1);
+	//Eigen::BiCGSTAB<Eigen::SparseMatrix<double>, Eigen::IncompleteLUT<double>> maxwellSolver;
+	//maxwellSolver.preconditioner().setDroptol(0.1);
+	//maxwellSolver.preconditioner().setFillfactor(0.1);
+	Eigen::BiCGSTAB<Eigen::SparseMatrix<double>> maxwellSolver;
+	maxwellSolver.setTolerance(Eigen::NumTraits<double>::epsilon() * 1024);
+
 
 	auto timer_start = std::chrono::high_resolution_clock::now();
 	maxwellSolver.compute(Mf);
@@ -3473,7 +3524,9 @@ const Eigen::VectorXd AppmSolver::solveMaxwell_BiCGStab(Eigen::SparseMatrix<doub
 	}
 
 	auto timer_startSolve = std::chrono::high_resolution_clock::now();
-	xf = maxwellSolver.solve(rhs);
+	//xf = maxwellSolver.solve(rhs);
+	Eigen::VectorXd guess = maxwellState.topRows(rhs.size());
+	xf = maxwellSolver.solveWithGuess(rhs, guess);
 	auto timer_endSolve = std::chrono::high_resolution_clock::now();
 
 	std::cout << "Maxwell solver finished" << std::endl;
@@ -3535,7 +3588,7 @@ const Eigen::VectorXd AppmSolver::solveMaxwell_CG(Eigen::SparseMatrix<double>& M
 	std::cout << "Setup solver for Maxwell system: ConjugateGradient" << std::endl;
 	Eigen::VectorXd xf(rhs.size());
 	Eigen::ConjugateGradient<Eigen::SparseMatrix<double>> maxwellSolver;
-	//maxwellSolver.setTolerance(Eigen::NumTraits<double>::epsilon() * 1024);
+	maxwellSolver.setTolerance(Eigen::NumTraits<double>::epsilon() * 1024);
 
 	auto timer_start = std::chrono::high_resolution_clock::now();
 	//Eigen::SparseMatrix<double> Mf_t = Mf.transpose();
@@ -3551,7 +3604,9 @@ const Eigen::VectorXd AppmSolver::solveMaxwell_CG(Eigen::SparseMatrix<double>& M
 	}
 
 	auto timer_startSolve = std::chrono::high_resolution_clock::now();
-	xf = maxwellSolver.solve(rhs);
+	//xf = maxwellSolver.solve(rhs);
+	Eigen::VectorXd guess = maxwellState.topRows(rhs.size());
+	xf = maxwellSolver.solveWithGuess(rhs, guess);
 	auto timer_endSolve = std::chrono::high_resolution_clock::now();
 
 	std::cout << "Maxwell solver finished" << std::endl;
@@ -3787,7 +3842,7 @@ const Eigen::VectorXd AppmSolver::setVoltageBoundaryConditions(const double time
 		auto timeFunction0 = 0.5 * (1 + tanh((time - t0) / tscale));
 		auto timeFunction1 = 0.5 * (1 + tanh(-(time - t1) / tscale));
 		auto voltage = finalVoltage * timeFunction0 * timeFunction1;
-		voltage = 1e2 * (time > 0);
+		voltage = 1e0 * (time > 0);
 		xd.topRows(nPrimalTerminalVertices / 2).array() = voltage;
 	}
 	// Set voltage condition to zero at terminal B (grounded electrode)
@@ -3796,3 +3851,23 @@ const Eigen::VectorXd AppmSolver::setVoltageBoundaryConditions(const double time
 	return xd;
 }
 
+std::ostream & operator<<(std::ostream & os, const AppmSolver::MaxwellSolverType & obj)
+{
+	switch (obj) {
+		case AppmSolver::MaxwellSolverType::CG:
+			os << "CG";
+			break;
+
+		case AppmSolver::MaxwellSolverType::PardisoLU:
+			os << "PardisoLU";
+			break;
+
+		case AppmSolver::MaxwellSolverType::BiCGStab:
+			os << "BiCGStab";
+			break;
+
+		default:
+			os << "unknown";
+	}
+	return os;
+}

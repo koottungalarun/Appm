@@ -2,14 +2,16 @@ maxIterations: 10
 maxTime: 10
 timestepSize: 0.1
 isFluidEnabled: 1
-isMaxwellEnabled: 0
-isEulerMaxwellCouplingEnabled: 0
+isMaxwellEnabled: 1
+MaxwellSolverType: BiCGStab
+isEulerMaxwellCouplingEnabled: 1
 lambdaSquare: 1e-4
-isMassFluxSchemeImplicit: 0
+isMassFluxSchemeImplicit: 1
 initType: 2
-isElectricLorentzForceActive: 0
-isMagneticLorentzForceActive: 0
+isElectricLorentzForceActive: 1
+isMagneticLorentzForceActive: 1
 isShowDataWriterOutput: 0
 isMaxwellCurrentDefined: 0
-isFrictionActive: 0
+isFrictionActive: 1
+
 
