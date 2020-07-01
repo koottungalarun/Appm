@@ -3521,7 +3521,7 @@ const Eigen::VectorXd AppmSolver::solveMaxwell_BiCGStab(Eigen::SparseMatrix<doub
 	//maxwellSolver.preconditioner().setDroptol(0.1);
 	//maxwellSolver.preconditioner().setFillfactor(0.1);
 	Eigen::BiCGSTAB<Eigen::SparseMatrix<double>> maxwellSolver;
-	//maxwellSolver.setTolerance(Eigen::NumTraits<double>::epsilon() * 1024);
+	maxwellSolver.setTolerance(Eigen::NumTraits<double>::epsilon() * 1024);
 
 
 	auto timer_start = std::chrono::high_resolution_clock::now();

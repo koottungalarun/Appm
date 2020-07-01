@@ -18,7 +18,6 @@ PrimalMesh::PrimalMesh(const PrimalMeshParams & p)
 	: PrimalMesh()
 {
 	this->params = p;
-	std::cout << "Primal mesh parameters: " << this->params;
 }
 
 
@@ -40,7 +39,6 @@ void PrimalMesh::init()
 	refineMesh(params.getRefinements());
 	check_zCoord(z0);
 
-	std::cout << "Primal mesh parameters: " << this->params;
 	outerMeshExtrude();
 	check_zCoord(z0);
 	
@@ -196,7 +194,7 @@ void PrimalMesh::outerMeshExtrude()
 	assert(nRefinements >= 2);
 
 	// Linear spacing for mesh layers
-	const int nExtrudeLayers = nLayers * pow(2, nRefinements - 2);
+	const int nExtrudeLayers = nLayers; // *pow(2, nRefinements - 2);
 	const double high = params.getOuterRadius();
 	const double h = (high - 1.) / nExtrudeLayers;
 	const double low = 1 + h;
@@ -461,10 +459,11 @@ void PrimalMesh::extrudeMesh(const int nLayers, const double zmax)
 	// Create vertices
 	const double zmin = -0.5 * zmax;
 	const double dz = zmax / nLayers;
+	Eigen::VectorXd zpos(nLayers);
 	for (int layer = 1; layer <= nLayers; layer++) {
 		const double z = zmin + layer * dz;
-		std::cout << std::scientific << std::setprecision(16);
-		std::cout << "z = " << z << std::endl;
+		zpos(layer - 1) = z;
+		//std::cout << std::scientific << std::setprecision(16);
 		for (int i = 0; i < nVertices_2d; i++) {
 			Eigen::Vector3d pos = getVertex(i)->getPosition() + layer * ((zmax / nLayers) * z_unit);
 			//Eigen::Vector3d pos = getVertex(i)->getPosition();
@@ -474,7 +473,7 @@ void PrimalMesh::extrudeMesh(const int nLayers, const double zmax)
 	}
 
 	for (int layer = 1; layer <= nLayers; layer++) {
-		std::cout << "Mesh layer: " << layer << std::endl;
+		std::cout << "Mesh layer: " << layer << " (z = " << zpos(layer - 1) << ")" << std::endl;
 		// Create edges: parallel to z_unit
 		for (int i = 0; i < nVertices_2d; i++) {
 			const Vertex * vRef = getVertex(i);
@@ -1004,8 +1003,8 @@ void PrimalMesh::sortCells()
 
 void PrimalMesh::validateParameters()
 {
-	std::cout << "Primal mesh parameters: " << std::endl;
-	std::cout << params << std::endl;
+	//std::cout << "Primal mesh parameters: " << std::endl;
+	//std::cout << params << std::endl;
 	assert(params.getAxialLayers() >= 0);
 	if (params.getAxialLayers() == 0) {
 		std::cout << "Warning: axialLayers is zero, a 2d mesh is created." << std::endl;
@@ -1036,6 +1035,7 @@ PrimalMesh::PrimalMeshParams::PrimalMeshParams()
 
 PrimalMesh::PrimalMeshParams::PrimalMeshParams(const std::string & filename)
 {
+	assert(filename.size() > 0);
 	readParameters(filename);
 }
 
@@ -1073,16 +1073,21 @@ void PrimalMesh::PrimalMeshParams::readParameters(const std::string & filename)
 {
 	if (filename.size() <= 0) {
 		std::cout << "Filename of PrimalMeshParameters not valid: " << filename << std::endl;
+		exit(-1);
 	}
 	std::ifstream file(filename);
 	if (!file.is_open()) {
-		std::cout << "File is not open: " << filename << std::endl;
+		std::cout << "File could not be not opened: " << filename << std::endl;
+		exit(-1);
 	}
 
 	std::string line;
 	const char delim = ':';
 	while (std::getline(file, line)) {
-		std::cout << line << std::endl;
+		// Skip empty lines
+		if (line.size() == 0) { continue; }
+		// Skip comments
+		if (line.front() == '#') { continue; }
 
 		// find position of delimiter
 		int pos = line.find(delim);
@@ -1120,15 +1125,20 @@ void PrimalMesh::PrimalMeshParams::readParameters(const std::string & filename)
 		std::cout << "Refinement level is below 2; no outer layer cells allowed" << std::endl;
 		nOuterLayers = 0;
 	}
+	// Print parameters
+	std::cout << "Primal mesh parameters:" << std::endl;
+	std::cout << *this << std::endl;
 }
 
 std::ostream & operator<<(std::ostream & os, const PrimalMesh::PrimalMeshParams & obj)
 {
+	os << "=======================" << std::endl;
 	os << "electrode radius: " << obj.electrodeRadius << std::endl;
 	os << "refinements:      " << obj.nRefinements << std::endl;
 	os << "axial layers:     " << obj.nAxialLayers << std::endl;
 	os << "outer layers:     " << obj.nOuterLayers << std::endl;
 	os << "outer radius:     " << obj.outerRadius << std::endl;
 	os << "zMax:             " << obj.zmax << std::endl;
+	os << "=======================" << std::endl;
 	return os;
 }
