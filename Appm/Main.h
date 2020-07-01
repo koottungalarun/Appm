@@ -11,7 +11,14 @@ public:
 
 	void run();
 
+	void setInputFilename(const std::string & filename);
+
+	void readInputFile();
+
 private:
 	std::string showVersionInfo();
+
+	std::string inputFilename;
+	std::string meshFilename;
 };
 

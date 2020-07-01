@@ -1,0 +1,35 @@
+# This is the main input file.
+# 
+# Define:
+# - mesh
+# - solver
+# - species
+# - reactions
+#
+#
+######################
+### MESH
+######################
+mesh: mesh-coarse.txt
+# mesh: mesh-medium.txt
+# mesh: mesh-fine.txt
+#
+#
+#
+######################
+### SOLVER
+######################
+#
+#
+#
+######################
+### SPECIES
+######################
+#
+#
+#
+######################
+### REACTIONS
+######################
+
+
