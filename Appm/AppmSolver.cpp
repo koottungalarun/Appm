@@ -193,7 +193,7 @@ void AppmSolver::run()
 			// Set explicit fluid source terms
 			setMagneticLorentzForceSourceTerms();
 			setFrictionSourceTerms();
-			setRadiationSource();
+			//setRadiationSource(); // <<<----  TODO
 
 			// Set explicit face fluxes
 			if (appmParams.isFluidEnabled) {
@@ -281,7 +281,7 @@ void AppmSolver::run()
 			time += dt;
 			writeOutput(iteration, time);
 
-			if (iteration % 10 == 0) {
+			if (iteration % 10 == 0 || isStopFileActive()) {
 				writeXdmf("appm.xdmf");
 				writeXdmfDualVolume("appm-volume.xdmf");
 			}
@@ -1052,6 +1052,11 @@ const Eigen::Matrix3Xd AppmSolver::getCurrentDensityAtCellCenter()
 */
 void AppmSolver::setRadiationSource()
 {
+	assert(false);
+	// Extend implementation before using it:
+	// - apply to electron fluid
+	// - include and interpolate from material data 
+
 	int nFluids = getNFluids();
 	assert(nFluids >= 1);
 	nFluids = std::max(1, nFluids);	 // Consider only the first fluid species
@@ -2236,18 +2241,25 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 			double p = 0;
 			Eigen::Vector3d u;
 			u.setZero();
-			try {
-				Physics::state2primitive(epsilon2, state, n, p, u);
-			}
-			catch (std::exception & e) {
-				std::cout << "Exception: " << e.what() << std::endl;
-				std::cout << "cell idx: " << i << std::endl;
-				std::cout << "state:    " << state.transpose() << std::endl;
+			//try {
+			Physics::state2primitive(epsilon2, state, n, p, u);
+			//}
+			//catch (std::exception & e) {
+			//	std::cout << "Exception: " << e.what() << std::endl;
+			//	std::cout << "cell idx: " << i << std::endl;
+			//	std::cout << "state:    " << state.transpose() << std::endl;
 
-				Eigen::VectorXd sumFaceFluxes = sumOfFaceFluxes.col(i).segment(5 * fluidIdx, 5);
-				std::cout << "sumOfFaceFluxes: " << sumFaceFluxes.transpose() << std::endl;
-				createStopFile(1); // write a positive value into stop file, this indicates that the iteration loop should terminate.
-				assert(false);
+			//	Eigen::VectorXd sumFaceFluxes = sumOfFaceFluxes.col(i).segment(5 * fluidIdx, 5);
+			//	std::cout << "sumOfFaceFluxes: " << sumFaceFluxes.transpose() << std::endl;
+			//	createStopFile(1); // write a positive value into stop file, this indicates that the iteration loop should terminate.
+			//	//assert(false);
+			//}
+			if (p < 0 || n < 0) {
+				std::cout << "Invalid state " << std::endl;
+				std::cout << "fluid: " << particleParams[fluidIdx].name << std::endl;
+				std::cout << "cell idx: " << i << std::endl;
+				createStopFile(1);
+				break;
 			}
 			density(i) = epsilon2 * n;
 			velocity.col(i) = u;
@@ -3509,7 +3521,7 @@ const Eigen::VectorXd AppmSolver::solveMaxwell_BiCGStab(Eigen::SparseMatrix<doub
 	//maxwellSolver.preconditioner().setDroptol(0.1);
 	//maxwellSolver.preconditioner().setFillfactor(0.1);
 	Eigen::BiCGSTAB<Eigen::SparseMatrix<double>> maxwellSolver;
-	maxwellSolver.setTolerance(Eigen::NumTraits<double>::epsilon() * 1024);
+	//maxwellSolver.setTolerance(Eigen::NumTraits<double>::epsilon() * 1024);
 
 
 	auto timer_start = std::chrono::high_resolution_clock::now();
