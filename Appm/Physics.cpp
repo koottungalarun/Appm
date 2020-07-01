@@ -80,7 +80,7 @@ void Physics::state2primitive(const double massRatio, const Eigen::VectorXd & st
 		std::string str = ss.str();
 		throw std::domain_error(str);
 	}
-	assert(n > 0);
+	//assert(n > 0);
 	u = state.segment(1, 3) / n;
 	const double n_etot = state(4);
 	const double nu_sq = state.segment(1, 3).squaredNorm();
@@ -93,9 +93,14 @@ void Physics::state2primitive(const double massRatio, const Eigen::VectorXd & st
 		ss << "State: " << state.transpose() << std::endl;
 		ss << "mass ratio: " << massRatio << std::endl;
 		std::string str = ss.str();
-		throw std::domain_error(str);
+		//throw std::domain_error(str);
 	}
-	assert(p > 0);
+	//assert(p > 0);
+	if (!(n > 0) || !(p > 0)) {
+		std::cout << "invalid state: " << std::endl;
+		std::cout << "n = " << n << std::endl;
+		std::cout << "p = " << p << std::endl;
+	}
 }
 
 const double Physics::getMaxWavespeed(const Eigen::Vector3d & qL, const Eigen::Vector3d & qR)
