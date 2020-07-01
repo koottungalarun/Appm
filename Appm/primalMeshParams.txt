@@ -1,5 +1,5 @@
-axialLayers: 50
-refinements: 4
+axialLayers: 10
+refinements: 2
 outerRadius: 1.5
 outerLayers: 2
 zMax: 5
