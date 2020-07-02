@@ -3,19 +3,38 @@
 
 
 AppmSolver::AppmSolver() 
-	: AppmSolver(PrimalMesh::PrimalMeshParams())
+	//: AppmSolver(PrimalMesh::PrimalMeshParams(), 
+	//	AppmSolver::SolverParameters())
 {
 }
 
-AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
+//AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams,
+//	const AppmSolver::SolverParameters & solverParams)
+//{
+//	this->solverParams = solverParams;
+//}
+
+void AppmSolver::init() 
 {
+	// Show solver parameters
+	std::cout << solverParams << std::endl;
+
+	// Show mesh parameters
+	std::cout << primalMeshParams << std::endl;
+	std::cout << "Species list:" << std::endl;
+	for (int i = 0; i < speciesList.size(); i++) {
+		std::cout << "Species " << i << ":" << std::endl;
+		std::cout << speciesList[i] << std::endl;
+		std::cout << std::endl;
+	}
+
 	// Output file for time values at each timestep
 	this->timeFile = std::ofstream("timesteps.dat");
 
 	isStateWrittenToOutput = true;
 	scalingParameters = ScalingParameters("scales.txt");
-	readParameters("AppmSolverParams.txt");
-	init_meshes(primalMeshParams);  // Initialize primal and dual meshes
+	//readParameters("AppmSolverParams.txt");
+	init_meshes(this->primalMeshParams);  // Initialize primal and dual meshes
 	if (primalMesh.getNumberOfCells() == 0) {
 		return;
 	}
@@ -53,7 +72,7 @@ AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams)
 	init_RaviartThomasInterpolation();
 
 
-	if (appmParams.isMaxwellEnabled) {
+	if (solverParams.getMaxwellEnabled()) {
 		isWriteBfield = true;
 		isWriteEfield = true;
 	}
@@ -98,6 +117,8 @@ AppmSolver::~AppmSolver()
 
 void AppmSolver::run()
 {
+	init();
+	
 	if (primalMesh.getNumberOfCells() == 0) {
 		std::cout << "Primal mesh has no cells" << std::endl;
 		return;
@@ -110,7 +131,7 @@ void AppmSolver::run()
 		return;
 	}
 
-	double dt = appmParams.timestepSize;
+	double dt = solverParams.getMaxTimestepSize();
 	double dt_previous = dt;
 	double time = 0;
 	int iteration = 0;
@@ -145,7 +166,7 @@ void AppmSolver::run()
 
 	// Set fluid face fluxes before start of iteration loop. 
 	// This ensures that all required data of 'previous' timestep is also available at first iteration.
-	if (appmParams.maxIterations > 0) {
+	if (solverParams.getMaxIterations() > 0) {
 		setFluidFaceFluxes();
 	}
 
@@ -153,8 +174,8 @@ void AppmSolver::run()
 	/*
 	* Time integration loop 
 	*/
-	const int maxIterations = appmParams.maxIterations;
-	const double maxTime = appmParams.maxTime;
+	const int maxIterations = solverParams.getMaxIterations();
+	const double maxTime = solverParams.getMaxTime();
 	try {
 		while (iteration < maxIterations && time < maxTime && !isStopFileActive()) {
 			std::cout << std::endl;
@@ -178,7 +199,7 @@ void AppmSolver::run()
 			//faceFluxesImExRusanov.setZero();
 
 			// Determine timestep
-			if (appmParams.isFluidEnabled) {
+			if (solverParams.getFluidEnabled()) {
 				dt = getNextFluidTimestepSize();
 				// Use maximum timestep
 				//dt = std::min(dt, 1e-2);
@@ -196,7 +217,7 @@ void AppmSolver::run()
 			//setRadiationSource(); // <<<----  TODO
 
 			// Set explicit face fluxes
-			if (appmParams.isFluidEnabled) {
+			if (solverParams.getFluidEnabled()) {
 				setFluidFaceFluxes();
 			}
 
@@ -218,29 +239,30 @@ void AppmSolver::run()
 				Eigen::sparseMatrixToFile(Msigma_inner, "/MsigmaInner", MsigmaWriter);
 			}
 			// Maxwell equations
-			if (appmParams.isMaxwellEnabled) {
+			if (solverParams.getMaxwellEnabled()) {
 				solveMaxwellSystem(time, dt, dt_previous, Msigma);
 				// E- and B-field have been updated to new timestep
 			}
 			J_h = Msigma * E_h + J_h_aux;
 
 			// Fluid equations
-			if (appmParams.isFluidEnabled) {
+			if (solverParams.getFluidEnabled()) {
 				const int nFluids = this->getNFluids();
 				const int nCells = dualMesh.getNumberOfCells();
 				const int nFaces = dualMesh.getNumberOfFaces();
 
 				// Set source term for electric Lorentz force (implicit)
-				if (appmParams.isLorentzForceElectricEnabled) {
+				if (solverParams.getLorentzForceEnabled()) {
 					for (int i = 0; i < nCells; i++) {
 						const Cell * cell = dualMesh.getCell(i);
 						if (cell->getType() != Cell::Type::FLUID) {
 							continue; // Skip cells that are not of type Fluid
 						}
 						for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-							const int q = particleParams[fluidIdx].electricCharge;
+							//const int q = particleParams[fluidIdx].electricCharge;
+							const int q = getSpecies(fluidIdx).getCharge();
 							const double n = fluidStates(5 * fluidIdx, i);
-							const double massRatio = particleParams[fluidIdx].mass;
+							const double massRatio = getSpecies(fluidIdx).getMassRatio();
 							LorentzForce_electric.col(i).segment(3 * fluidIdx, 3) = q * 1. / massRatio * n * E_cc.col(i);
 						}
 					}
@@ -267,7 +289,7 @@ void AppmSolver::run()
 				//setFluidSourceTerm();
 
 				// Set implicit terms for mass fluxes
-				if (appmParams.isMassFluxSchemeImplicit) {
+				if (solverParams.getMassfluxSchemeImplicit()) {
 					setImplicitMassFluxTerms(dt);
 				}
 
@@ -305,7 +327,7 @@ void AppmSolver::run()
 	auto delta_appmSolver = std::chrono::duration<double>(timer_endAppmSolver - timer_startAppmSolver);
 	std::cout << "Elapsed time for APPM solver: " << delta_appmSolver.count() << std::endl;
 
-	std::cout << printSolverParameters() << std::endl;
+	std::cout << solverParams << std::endl;
 
 	// test_raviartThomas();
 
@@ -321,6 +343,25 @@ void AppmSolver::run()
 	writeXdmf("appm.xdmf");
 	writeXdmfDualVolume("appm-volume.xdmf");
 	//writeXdmfDualFaceFluxes();
+}
+
+void AppmSolver::setSolverParameters(const AppmSolver::SolverParameters & solverParams)
+{
+	this->solverParams = solverParams;
+}
+
+void AppmSolver::setMeshParameters(const PrimalMesh::PrimalMeshParams & meshParams)
+{
+	this->primalMeshParams = meshParams;
+}
+
+void AppmSolver::setSpecies(const std::vector<Species>& speciesList)
+{
+	//this->speciesList = std::vector<Species>();
+	//for (auto species : speciesList) {
+	//	this->speciesList.
+	//}
+	this->speciesList = speciesList;
 }
 
 void AppmSolver::debug_checkCellStatus() const
@@ -361,29 +402,29 @@ const int AppmSolver::getNFluids() const
 	return particleParams.size();
 }
 
-std::string AppmSolver::printSolverParameters() const
-{
-	std::stringstream ss;
-	ss << "Appm Solver parameters:" << std::endl;
-	ss << "=======================" << std::endl;
-	ss << "maxIterations:  " << appmParams.maxIterations << std::endl;
-	ss << "maxTime:        " << appmParams.maxTime << std::endl;
-	ss << "timestepSize:   " << appmParams.timestepSize << std::endl;
-	ss << "isFluidEnabled: " << appmParams.isFluidEnabled << std::endl;
-	ss << "isMaxwellEnabled: " << appmParams.isMaxwellEnabled << std::endl;
-	ss << "MaxwellSolverType: " << appmParams.maxwellSolverType << std::endl;
-	ss << "lambdaSquare: " << lambdaSquare << std::endl;
-	ss << "massFluxScheme: " << appmParams.isMassFluxSchemeImplicit << std::endl;
-	ss << "initType: " << initType << std::endl;
-	ss << "isElectricLorentzForceActive: " << appmParams.isLorentzForceElectricEnabled << std::endl;
-	ss << "isMagneticLorentzForceActive: " << appmParams.isLorentzForceMagneticEnabled << std::endl;
-	ss << "isShowDataWriterOutput: " << isShowDataWriterOutput << std::endl;
-	ss << "isMaxwellCurrentDefined: " << appmParams.isMaxwellCurrentDefined << std::endl;
-	ss << "isEulerMaxwellCouplingEnabled: " << appmParams.isEulerMaxwellCouplingEnabled << std::endl;
-	ss << "isFrictionActive: " << appmParams.isFrictionActive << std::endl;
-	ss << "=======================" << std::endl;
-	return ss.str();
-}
+//std::string AppmSolver::printSolverParameters() const
+//{
+//	std::stringstream ss;
+//	ss << "Appm Solver parameters:" << std::endl;
+//	ss << "=======================" << std::endl;
+//	ss << "maxIterations:  " << appmParams.maxIterations << std::endl;
+//	ss << "maxTime:        " << appmParams.maxTime << std::endl;
+//	ss << "timestepSize:   " << appmParams.timestepSize << std::endl;
+//	ss << "isFluidEnabled: " << appmParams.isFluidEnabled << std::endl;
+//	ss << "isMaxwellEnabled: " << appmParams.isMaxwellEnabled << std::endl;
+//	ss << "MaxwellSolverType: " << appmParams.maxwellSolverType << std::endl;
+//	ss << "lambdaSquare: " << lambdaSquare << std::endl;
+//	ss << "massFluxScheme: " << appmParams.isMassFluxSchemeImplicit << std::endl;
+//	ss << "initType: " << initType << std::endl;
+//	ss << "isElectricLorentzForceActive: " << appmParams.isLorentzForceElectricEnabled << std::endl;
+//	ss << "isMagneticLorentzForceActive: " << appmParams.isLorentzForceMagneticEnabled << std::endl;
+//	ss << "isShowDataWriterOutput: " << isShowDataWriterOutput << std::endl;
+//	ss << "isMaxwellCurrentDefined: " << appmParams.isMaxwellCurrentDefined << std::endl;
+//	ss << "isEulerMaxwellCouplingEnabled: " << appmParams.isEulerMaxwellCouplingEnabled << std::endl;
+//	ss << "isFrictionActive: " << appmParams.isFrictionActive << std::endl;
+//	ss << "=======================" << std::endl;
+//	return ss.str();
+//}
 
 void AppmSolver::init_maxwellStates()
 {
@@ -564,49 +605,54 @@ Eigen::SparseMatrix<double> AppmSolver::getMagneticPermeabilityOperator()
 void AppmSolver::init_multiFluid(const std::string & filename)
 {
 	// Read parameter file
-	assert(filename.size() > 4);
-	std::ifstream file(filename);
-	if (!file.is_open()) {
-		std::cout << "File not opened: " << filename << std::endl;
-		exit(-1);
-	}
-	std::string line;
-	while (std::getline(file, line)) {
-		if (line.empty() || line.substr(0, 1) == "#") {
-			continue;
-		}
-		std::string fluidName;
-		double mass;
-		int charge;
-		char delimiter;
-		std::stringstream ss(line);
-		ss >> fluidName;
-		ss >> mass >> delimiter;
-		ss >> charge;
+	//assert(filename.size() > 4);
+	//std::ifstream file(filename);
+	//if (!file.is_open()) {
+	//	std::cout << "File not opened: " << filename << std::endl;
+	//	exit(-1);
+	//}
+	//std::string line;
+	//while (std::getline(file, line)) {
+	//	if (line.empty() || line.substr(0, 1) == "#") {
+	//		continue;
+	//	}
+	//	std::string fluidName;
+	//	double mass;
+	//	int charge;
+	//	char delimiter;
+	//	std::stringstream ss(line);
+	//	ss >> fluidName;
+	//	ss >> mass >> delimiter;
+	//	ss >> charge;
 
-		ParticleParameters params;
-		params.name = fluidName.substr(0, fluidName.size() - 1);
-		params.mass = mass;
-		params.electricCharge = charge;
+	//	ParticleParameters params;
+	//	params.name = fluidName.substr(0, fluidName.size() - 1);
+	//	params.mass = mass;
+	//	params.electricCharge = charge;
 
-		particleParams.push_back(params);
-	}
+	//	particleParams.push_back(params);
+	//}
 
-	const int nFluids = particleParams.size();
+	//const int nFluids = particleParams.size();
 
-	// Print parameters to output
+	//// Print parameters to output
 
-	std::cout << std::endl;
-	std::cout << "Fluid parameters: " << std::endl;
-	std::cout << "Fluid #: Name,\tMass,\tCharge" << std::endl;
-	std::cout << "=====================" << std::endl;
-	for (int i = 0; i < nFluids; i++) {
-		std::cout << "Fluid " << i << ": "
-			<< particleParams[i].name << "\t"
-			<< particleParams[i].mass << "\t"
-			<< particleParams[i].electricCharge << std::endl;
-	}
-	std::cout << std::endl;
+	//std::cout << std::endl;
+	//std::cout << "Fluid parameters: " << std::endl;
+	//std::cout << "Fluid #: Name,\tMass,\tCharge" << std::endl;
+	//std::cout << "=====================" << std::endl;
+	//for (int i = 0; i < nFluids; i++) {
+	//	std::cout << "Fluid " << i << ": "
+	//		<< particleParams[i].name << "\t"
+	//		<< particleParams[i].mass << "\t"
+	//		<< particleParams[i].electricCharge << std::endl;
+	//}
+	//std::cout << std::endl;
+
+	assert(speciesList.size() > 0);
+	const int nFluids = speciesList.size();
+
+
 
 	// Initialize data
 
@@ -1090,7 +1136,7 @@ void AppmSolver::setFrictionSourceTerms()
 	auto nCells = dualMesh.getNumberOfCells();
 	auto nFluids = getNFluids();
 
-	if (appmParams.isFluidEnabled) {
+	if (solverParams.getFluidEnabled()) {
 		// For each fluid cell ...
 		for (int i = 0; i < nCells; i++) {
 			const Cell * cell = dualMesh.getCell(i);
@@ -1140,7 +1186,7 @@ void AppmSolver::setFrictionSourceTerms()
 
 				// Save local data for post-processing
 				diffusionVelocity.col(i).segment(3 * alpha, 3) = w_a;
-				if (appmParams.isFrictionActive) {
+				if (solverParams.getFrictionActive()) {
 					frictionForceSourceTerm.col(i).segment(3 * alpha, 3) = R_a;
 					frictionEnergySourceTerm(alpha, i) = Q_a;
 
@@ -1186,7 +1232,7 @@ void AppmSolver::setMagneticLorentzForceSourceTerms()
 	//std::cout << "maxCoeff F_L magnetic: " << LorentzForce_magnetic.cwiseAbs().maxCoeff() << std::endl;
 
 	// Update of momentum source term
-	if (appmParams.isFluidEnabled && appmParams.isLorentzForceMagneticEnabled) {
+	if (solverParams.getFluidEnabled() && solverParams.getLorentzForceEnabled()) {
 		for (int fluidx = 0; fluidx < nFluids; fluidx++) {
 			fluidSources.block(5 * fluidx + 1, 0, 3, nCells) += LorentzForce_magnetic.block(3 * fluidx, 0, 3, nCells);
 		}
@@ -1826,7 +1872,7 @@ void AppmSolver::solveMaxwellSystem(const double time, const double dt, const do
 	// - fixed values: electric potential at terminals (Dirichlet boundary condition)
 	// - free  values: electric potential at non-terminal vertices, and electric voltages at non-boundary edges
 	int nDirichlet = nPrimalTerminalVertices;
-	if (appmParams.isMaxwellCurrentDefined) {
+	if (solverParams.getMaxwellCurrentDefined()) {
 		// If we define a current, then only one electrode is grounded 
 		// and the other is on a free-floating potential.
 		//assert(nPrimalTerminalVertices % 2 == 0);
@@ -1868,7 +1914,7 @@ void AppmSolver::solveMaxwellSystem(const double time, const double dt, const do
 	//xf = solveMaxwell_sparseLU(Mf, rhsFree);
 	//xf = solveMaxwell_BiCGStab(Mf, rhsFree); // Slow solver
 	//xf = solveMaxwell_LSCG(Mf, rhsFree); // error: iterative solver base is not initialized
-	switch (appmParams.maxwellSolverType) {
+	switch (solverParams.getMaxwellSolverType()) {
 	case MaxwellSolverType::CG:
 		// remark: Matrix Mf is numerically not SPD. Is it symmetric non-negative definite? 
 		xf = solveMaxwell_CG(Mf, rhsFree); 
@@ -2856,90 +2902,90 @@ void AppmSolver::init_RaviartThomasInterpolation()
 	rt_piolaVector.resize(nPiolaMapsDefined);
 }
 
-void AppmSolver::readParameters(const std::string & filename)
-{
-	appmParams = AppmParameters();
-
-	std::ifstream file(filename);
-	if (!file.is_open()) {
-		std::cout << "File not opened: " << filename;
-		exit(-1);
-	}
-
-	std::string line;
-	const char delim = ':';
-
-	while (std::getline(file, line)) {
-		if (line.size() == 0) { continue; } // skip empty lines
-		int pos = line.find(delim);
-		std::string tag = line.substr(0, pos);
-
-		if (tag == "maxIterations") {
-			std::istringstream(line.substr(pos + 1)) >> appmParams.maxIterations;
-		}
-		if (tag == "maxTime") {
-			std::istringstream(line.substr(pos + 1)) >> appmParams.maxTime;
-		}
-		if (tag == "timestepSize") {
-			std::istringstream(line.substr(pos + 1)) >> appmParams.timestepSize;
-		}
-		if (tag == "isFluidEnabled") {
-			std::istringstream(line.substr(pos + 1)) >> appmParams.isFluidEnabled;
-		}
-		if (tag == "isMaxwellEnabled") {
-			std::istringstream(line.substr(pos + 1)) >> appmParams.isMaxwellEnabled;
-		}
-		if (tag == "lambdaSquare") {
-			std::istringstream(line.substr(pos + 1)) >> this->lambdaSquare;
-		}
-		if (tag == "isMassFluxSchemeImplicit") {
-			std::istringstream(line.substr(pos + 1)) >> appmParams.isMassFluxSchemeImplicit;
-		}
-		if (tag == "initType") {
-			std::istringstream(line.substr(pos + 1)) >> initType;
-		}
-		if (tag == "isElectricLorentzForceActive") {
-			std::istringstream(line.substr(pos + 1)) >> appmParams.isLorentzForceElectricEnabled;
-		}
-		if (tag == "isMagneticLorentzForceActive") {
-			std::istringstream(line.substr(pos + 1)) >> appmParams.isLorentzForceMagneticEnabled;
-		}
-		if (tag == "isShowDataWriterOutput") {
-			std::istringstream(line.substr(pos + 1)) >> isShowDataWriterOutput;
-		}
-		if (tag == "isEulerMaxwellCouplingEnabled") {
-			std::istringstream(line.substr(pos + 1)) >> appmParams.isEulerMaxwellCouplingEnabled;
-		}
-		if (tag == "isMaxwellCurrentDefined") {
-			std::istringstream(line.substr(pos + 1)) >> appmParams.isMaxwellCurrentDefined;
-		}
-		if (tag == "isFrictionActive") {
-			std::istringstream(line.substr(pos + 1)) >> appmParams.isFrictionActive;
-		}
-		if (tag == "MaxwellSolverType") {
-			bool isValid = false;
-			std::string value;
-			std::istringstream(line.substr(pos + 1)) >> value;
-			std::cout << "Maxwell solver type: value = " << value << std::endl;
-			if (value.compare("CG") == 0) {
-				appmParams.maxwellSolverType = MaxwellSolverType::CG;
-				isValid = true;
-			}
-			if (value.compare("PardisoLU") == 0) {
-				appmParams.maxwellSolverType = MaxwellSolverType::PardisoLU;
-				isValid = true;
-			}
-			if (value.compare("BiCGStab") == 0) {
-				appmParams.maxwellSolverType = MaxwellSolverType::BiCGStab;
-				isValid = true;
-			}
-			assert(isValid);
-		}
-	}
-
-	std::cout << std::endl;
-	std::cout << printSolverParameters() << std::endl;
-}
+//void AppmSolver::readParameters(const std::string & filename)
+//{
+//	appmParams = AppmParameters();
+//
+//	std::ifstream file(filename);
+//	if (!file.is_open()) {
+//		std::cout << "File not opened: " << filename;
+//		exit(-1);
+//	}
+//
+//	std::string line;
+//	const char delim = ':';
+//
+//	while (std::getline(file, line)) {
+//		if (line.size() == 0) { continue; } // skip empty lines
+//		int pos = line.find(delim);
+//		std::string tag = line.substr(0, pos);
+//
+//		if (tag == "maxIterations") {
+//			std::istringstream(line.substr(pos + 1)) >> appmParams.maxIterations;
+//		}
+//		if (tag == "maxTime") {
+//			std::istringstream(line.substr(pos + 1)) >> appmParams.maxTime;
+//		}
+//		if (tag == "timestepSize") {
+//			std::istringstream(line.substr(pos + 1)) >> appmParams.timestepSize;
+//		}
+//		if (tag == "isFluidEnabled") {
+//			std::istringstream(line.substr(pos + 1)) >> appmParams.isFluidEnabled;
+//		}
+//		if (tag == "isMaxwellEnabled") {
+//			std::istringstream(line.substr(pos + 1)) >> appmParams.isMaxwellEnabled;
+//		}
+//		if (tag == "lambdaSquare") {
+//			std::istringstream(line.substr(pos + 1)) >> this->lambdaSquare;
+//		}
+//		if (tag == "isMassFluxSchemeImplicit") {
+//			std::istringstream(line.substr(pos + 1)) >> appmParams.isMassFluxSchemeImplicit;
+//		}
+//		if (tag == "initType") {
+//			std::istringstream(line.substr(pos + 1)) >> initType;
+//		}
+//		if (tag == "isElectricLorentzForceActive") {
+//			std::istringstream(line.substr(pos + 1)) >> appmParams.isLorentzForceElectricEnabled;
+//		}
+//		if (tag == "isMagneticLorentzForceActive") {
+//			std::istringstream(line.substr(pos + 1)) >> appmParams.isLorentzForceMagneticEnabled;
+//		}
+//		if (tag == "isShowDataWriterOutput") {
+//			std::istringstream(line.substr(pos + 1)) >> isShowDataWriterOutput;
+//		}
+//		if (tag == "isEulerMaxwellCouplingEnabled") {
+//			std::istringstream(line.substr(pos + 1)) >> appmParams.isEulerMaxwellCouplingEnabled;
+//		}
+//		if (tag == "isMaxwellCurrentDefined") {
+//			std::istringstream(line.substr(pos + 1)) >> appmParams.isMaxwellCurrentDefined;
+//		}
+//		if (tag == "isFrictionActive") {
+//			std::istringstream(line.substr(pos + 1)) >> appmParams.isFrictionActive;
+//		}
+//		if (tag == "MaxwellSolverType") {
+//			bool isValid = false;
+//			std::string value;
+//			std::istringstream(line.substr(pos + 1)) >> value;
+//			std::cout << "Maxwell solver type: value = " << value << std::endl;
+//			if (value.compare("CG") == 0) {
+//				appmParams.maxwellSolverType = MaxwellSolverType::CG;
+//				isValid = true;
+//			}
+//			if (value.compare("PardisoLU") == 0) {
+//				appmParams.maxwellSolverType = MaxwellSolverType::PardisoLU;
+//				isValid = true;
+//			}
+//			if (value.compare("BiCGStab") == 0) {
+//				appmParams.maxwellSolverType = MaxwellSolverType::BiCGStab;
+//				isValid = true;
+//			}
+//			assert(isValid);
+//		}
+//	}
+//
+//	std::cout << std::endl;
+//	std::cout << printSolverParameters() << std::endl;
+//}
 
 const std::string AppmSolver::xdmf_GridPrimalEdges(const int iteration) const
 {
@@ -3647,7 +3693,7 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 	Eigen::SparseMatrix<double> Msigma(nDualFaces, nEdges);
 	Jaux.setZero();
 
-	if (appmParams.isMaxwellCurrentDefined) {
+	if (solverParams.getMaxwellCurrentDefined()) {
 		// Define a uniform current density for those faces being normal to z-axis
 		const double t0 = 2;
 		const double tscale = 0.5;
@@ -3694,9 +3740,9 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 	std::vector<T> triplets;
 	std::vector<T> geomTriplets;
 
-	if (appmParams.isFluidEnabled) {
-		std::cout << "isEulerMaxwellCouplingEnabled: " << appmParams.isEulerMaxwellCouplingEnabled << std::endl;
-		if (appmParams.isEulerMaxwellCouplingEnabled) {
+	if (solverParams.getFluidEnabled()) {
+		std::cout << "isEulerMaxwellCouplingEnabled: " << solverParams.getEulerMaxwellCouplingEnabled() << std::endl;
+		if (solverParams.getEulerMaxwellCouplingEnabled()) {
 
 			// accumulator to guard against truncation errors
 			Eigen::VectorXd c = Eigen::VectorXd::Zero(nDualFaces);
@@ -3723,7 +3769,7 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 					Jaux(i) += q * massFlux;
 
 					// Add extra terms due to implicit formulation
-					if (appmParams.isMassFluxSchemeImplicit) {
+					if (solverParams.getMassfluxSchemeImplicit()) {
 						auto adjacientCells = dualFace->getCellList();
 						for (auto cell : adjacientCells) {
 							// non-fluid cells
@@ -3741,7 +3787,7 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 								const double Vk = cell->getVolume(); // volume of cell k
 
 								// Extra term by explicit Fluid sources (e.g., magnetic Lorentz force, or friction force)
-								if (appmParams.isLorentzForceMagneticEnabled || appmParams.isFrictionActive) {
+								if (solverParams.getLorentzForceEnabled() || solverParams.getFrictionActive()) {
 									const Eigen::Vector3d fluidMomentumSource = fluidSources.col(cell->getIndex()).segment(5 * fluidIdx + 1, 3);
 									Jaux(i) += numSchemeFactor * q * Ai * dt * fluidMomentumSource.dot(ni);
 								}
@@ -3767,7 +3813,7 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 
 									// Extra term by implicit electric Lorentz force (electric field)
 									const double geomFactor = nj_dot_ni * (Ai * Aj) / Vk; // geometric factor
-									if (appmParams.isLorentzForceElectricEnabled) {
+									if (solverParams.getLorentzForceEnabled()) {
 										const double value = numSchemeFactor * 0.5 * dt * pow(q, 2) / massRatio * nk / Vk * Ai * Aj * nj_dot_ni;
 										triplets.push_back(T(i, j, value));
 									}
@@ -3836,13 +3882,13 @@ const Eigen::VectorXd AppmSolver::setVoltageBoundaryConditions(const double time
 	assert(nPrimalTerminalVertices > 0);
 
 	int nDirichlet = nPrimalTerminalVertices;
-	if (appmParams.isMaxwellCurrentDefined) {
+	if (solverParams.getMaxwellCurrentDefined()) {
 		nDirichlet = nPrimalTerminalVertices;
 	}
 
 	Eigen::VectorXd xd = Eigen::VectorXd::Zero(nDirichlet);
 
-	if (appmParams.isMaxwellCurrentDefined) {
+	if (solverParams.getMaxwellCurrentDefined()) {
 		xd.topRows(nPrimalTerminalVertices / 2).array() = 0;
 	}
 	else {
@@ -3861,6 +3907,13 @@ const Eigen::VectorXd AppmSolver::setVoltageBoundaryConditions(const double time
 	xd.bottomRows(nPrimalTerminalVertices / 2).array() = 0;
 
 	return xd;
+}
+
+const Species & AppmSolver::getSpecies(const int idx) const
+{
+	assert(idx >= 0);
+	assert(idx < speciesList.size());
+	return speciesList[idx];
 }
 
 std::ostream & operator<<(std::ostream & os, const AppmSolver::MaxwellSolverType & obj)
@@ -3912,6 +3965,51 @@ void AppmSolver::SolverParameters::setMaxTime(const double tmax)
 const double AppmSolver::SolverParameters::getMaxTime() const
 {
 	return this->maxTime;
+}
+
+const bool AppmSolver::SolverParameters::getMaxwellEnabled() const
+{
+	return this->isMaxwellEnabled;
+}
+
+const double AppmSolver::SolverParameters::getMaxTimestepSize() const
+{
+	return this->timestepSizeMax;
+}
+
+const bool AppmSolver::SolverParameters::getFluidEnabled() const
+{
+	return this->isFluidEnabled;
+}
+
+const bool AppmSolver::SolverParameters::getLorentzForceEnabled() const
+{
+	return this->isLorentzForceEnabled;
+}
+
+const bool AppmSolver::SolverParameters::getMassfluxSchemeImplicit() const
+{
+	return this->isMassFluxSchemeImplicit;
+}
+
+const bool AppmSolver::SolverParameters::getFrictionActive() const
+{
+	return false;
+}
+
+const bool AppmSolver::SolverParameters::getMaxwellCurrentDefined() const
+{
+	return false;
+}
+
+const AppmSolver::MaxwellSolverType AppmSolver::SolverParameters::getMaxwellSolverType() const
+{
+	return AppmSolver::MaxwellSolverType::BiCGStab;
+}
+
+const bool AppmSolver::SolverParameters::getEulerMaxwellCouplingEnabled() const
+{
+	return false;
 }
 
 std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters & obj)

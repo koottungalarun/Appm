@@ -1,7 +1,10 @@
 #pragma once
 
 #include <iostream>
+#include <vector>
 #include "AppmSolver.h"
+#include "Species.h"
+
 
 class Main
 {
@@ -21,6 +24,8 @@ private:
 	std::string inputFilename;
 	std::string meshFilename;
 
-	AppmSolver::SolverParameters appmParameters;
+	std::vector<Species> speciesList;
+
+	AppmSolver::SolverParameters solverParameters;
 };
 

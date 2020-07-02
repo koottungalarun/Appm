@@ -14,6 +14,7 @@
 
 #include "Physics.h"
 #include "ScalingParameters.h"
+#include "Species.h"
 
 #include <Eigen/SparseLU>
 #include <Eigen/IterativeLinearSolvers> 	
@@ -48,17 +49,36 @@ public:
 		const int getMaxIterations() const;
 		void setMaxTime(const double tmax);
 		const double getMaxTime() const;
+		void setMaxwellEnabled(const bool b);
+		const bool getMaxwellEnabled() const;
+		void setMaxTimestepSize(const double dtMax);
+		const double getMaxTimestepSize() const;
+		void setFluidEnabled(const bool b);
+		const bool getFluidEnabled() const;
+		void setLorentzForceEnabled(const bool b);
+		const bool getLorentzForceEnabled() const;
+		void setMassfluxSchemeImplicit(const bool b);
+		const bool getMassfluxSchemeImplicit() const;
+		void setFrictionActive(const bool b);
+		const bool getFrictionActive() const;
+		void setMaxwellCurrentDefined(const bool b);
+		const bool getMaxwellCurrentDefined() const;
+		void setMaxwellSolverType(const AppmSolver::MaxwellSolverType type);
+		const AppmSolver::MaxwellSolverType getMaxwellSolverType() const;
+		void setEulerMaxwellCouplingEnabled(const bool b);
+		const bool getEulerMaxwellCouplingEnabled() const;
 
 		friend std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters & obj);
 	private:
 		int maxIterations = 0;
 		double maxTime = 0;
 		double timestepSizeMax = 1;
-		bool isEulerMaxwellCouplingEnabled = true;
+		bool isEulerMaxwellCouplingEnabled = false;
 	
 		bool isFluidEnabled = false;
 		bool isMassFluxSchemeImplicit = true;
-		bool isFrictionEnabled = true;
+		bool isFrictionEnabled = false;
+		bool isLorentzForceEnabled = false;
 
 		bool isMaxwellEnabled = false;
 		MaxwellSolverType maxwellSolverType = MaxwellSolverType::BiCGStab;
@@ -68,10 +88,16 @@ public:
 
 
 	AppmSolver();
-	AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams);
+	//AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams, 
+	//	const AppmSolver::SolverParameters & appmParams);
 	~AppmSolver();
 
 	void run();
+
+	void setSolverParameters(const AppmSolver::SolverParameters & solverParams);
+	void setMeshParameters(const PrimalMesh::PrimalMeshParams & meshParams);
+	void setSpecies(const std::vector<Species> & speciesList);
+
 
 protected:
 	PrimalMesh primalMesh;
@@ -82,7 +108,9 @@ protected:
 	bool isMaxwellCurrentSource = false;
 
 private:
-
+	PrimalMesh::PrimalMeshParams primalMeshParams;
+	SolverParameters solverParams;
+	std::vector<Species> speciesList;
 	ScalingParameters scalingParameters;
 
 	struct ParticleParameters {
@@ -90,26 +118,28 @@ private:
 		double mass = 1.0;
 		int electricCharge = 0;
 	};
-	std::vector<ParticleParameters> particleParams;
+	//std::vector<ParticleParameters> particleParams;
 
 
 
-	struct AppmParameters {
-		int maxIterations = 0;
-		double maxTime = 0;
-		bool isFluidEnabled = false;
-		bool isMaxwellEnabled = false;
-		bool isEulerMaxwellCouplingEnabled = false;
-		bool isLorentzForceElectricEnabled = false;
-		bool isLorentzForceMagneticEnabled = false;
-		bool isMassFluxSchemeImplicit = false;
-		double timestepSize = 1;
-		bool isMaxwellCurrentDefined = false;
-		bool isFrictionActive = true;
-		MaxwellSolverType maxwellSolverType = MaxwellSolverType::CG;
-	} appmParams;
+	//struct AppmParameters {
+	//	int maxIterations = 0;
+	//	double maxTime = 0;
+	//	bool isFluidEnabled = false;
+	//	bool isMaxwellEnabled = false;
+	//	bool isEulerMaxwellCouplingEnabled = false;
+	//	bool isLorentzForceElectricEnabled = false;
+	//	bool isLorentzForceMagneticEnabled = false;
+	//	bool isMassFluxSchemeImplicit = false;
+	//	double timestepSize = 1;
+	//	bool isMaxwellCurrentDefined = false;
+	//	bool isFrictionActive = true;
+	//	MaxwellSolverType maxwellSolverType = MaxwellSolverType::CG;
+	//} appmParams;
 
 	std::ofstream timeFile;
+
+	void init();
 
 	void debug_checkCellStatus() const;
 
@@ -169,7 +199,7 @@ private:
 
 	Eigen::MatrixXd faceFluxesImExRusanov;
 
-	std::string printSolverParameters() const;
+	//std::string printSolverParameters() const;
 
 	// Isentropic expansion coefficient, aka ratio of heat capacities
 	//const double gamma = 1.4; 
@@ -271,7 +301,7 @@ private:
 	std::vector<Eigen::Matrix3d> rt_piolaMatrix;
 	std::vector<Eigen::Vector3d> rt_piolaVector;
 
-	void readParameters(const std::string & filename);
+	//void readParameters(const std::string & filename);
 
 	const std::string xdmf_GridPrimalEdges(const int iteration) const;
 	const std::string xdmf_GridPrimalFaces(const int iteration) const;
@@ -297,5 +327,7 @@ private:
 
 	const Eigen::VectorXd testcase_001_FluidSourceTerm(const double time, const Cell * cell, const int fluidIdx) const;
 	const Eigen::VectorXd setVoltageBoundaryConditions(const double time) const;
+
+	const Species & getSpecies(const int idx) const;
 };
 

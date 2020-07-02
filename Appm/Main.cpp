@@ -45,7 +45,11 @@ void Main::run()
 	assert(this->meshFilename.size() > 0);
 	primalMeshParams = PrimalMesh::PrimalMeshParams(this->meshFilename);
 
-	AppmSolver appm(primalMeshParams);
+	//AppmSolver appm(primalMeshParams, appmParameters);
+	AppmSolver appm;
+	appm.setSolverParameters(solverParameters);
+	appm.setMeshParameters(primalMeshParams);
+	appm.setSpecies(speciesList);
 	appm.run();	
 }
 
@@ -66,6 +70,7 @@ void Main::readInputFile()
 		std::cout << "File could not be opened: " << inputFilename << std::endl;
 		exit(-1);
 	}
+	const std::string speciesPrefix = "species";
 	const char delim = ':';
 	std::string line;
 	while (std::getline(file, line)) {
@@ -81,8 +86,31 @@ void Main::readInputFile()
 		if (tag == "mesh") {
 			std::istringstream(value) >> this->meshFilename;
 		}
-
+		if (tag == "maxTime") {
+			double maxTime = 0;
+			std::istringstream(value) >> maxTime;
+			this->solverParameters.setMaxTime(maxTime);
+		}
+		if (tag == "maxIterations") {
+			int maxIterations = 0;
+			std::istringstream(value) >> maxIterations;
+			this->solverParameters.setMaxIterations(maxIterations);
+		}
+		if (tag.substr(0,speciesPrefix.size()) == speciesPrefix) {
+			speciesList.push_back(Species(value));
+		}
 	}
+
+	std::cout << solverParameters << std::endl;
+
+	std::cout << "Species: " << std::endl;
+	std::cout << "======================" << std::endl;
+	for (auto species : speciesList) {
+		std::cout << species << std::endl;
+		std::cout << "========" << std::endl;
+	}
+	std::cout << "======================" << std::endl;
+	//exit(-1);
 }
 
 /**

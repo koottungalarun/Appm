@@ -153,6 +153,7 @@
     <ClInclude Include="PhysicsConstants.h" />
     <ClInclude Include="PrimalMesh.h" />
     <ClInclude Include="ScalingParameters.h" />
+    <ClInclude Include="Species.h" />
     <ClInclude Include="TriPrism.h" />
     <ClInclude Include="Vertex.h" />
     <ClInclude Include="XdmfAttribute.h" />
@@ -181,6 +182,7 @@
     <ClCompile Include="PhysicsConstants.cpp" />
     <ClCompile Include="PrimalMesh.cpp" />
     <ClCompile Include="ScalingParameters.cpp" />
+    <ClCompile Include="Species.cpp" />
     <ClCompile Include="TriPrism.cpp" />
     <ClCompile Include="Vertex.cpp" />
     <ClCompile Include="XdmfAttribute.cpp" />

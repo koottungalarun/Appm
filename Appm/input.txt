@@ -27,16 +27,24 @@ mesh: mesh-coarse.txt
 ######################
 ### SOLVER
 ######################
+### Simulation controls
+maxTime: 1
+maxIterations: 0
+#
 ### numerics
 #
 ### coupling
-#
+isFluidEnabled: 1
+isMaxwellEnabled: 0
+
 #
 #
 ######################
 ### SPECIES
 ######################
-#
+# Format: Symbol, name, massRatio, charge
+species: Ar, Argon, 1, 0
+species: e, Electron, 1e-4, -1
 #
 #
 ######################
