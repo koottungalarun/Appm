@@ -32,6 +32,41 @@ class AppmSolver
 {
 
 public:
+
+	enum class MaxwellSolverType {
+		CG, PardisoLU, BiCGStab
+	};
+	friend std::ostream & operator<<(std::ostream & os, const AppmSolver::MaxwellSolverType & obj);
+
+
+	class SolverParameters {
+	public:
+		SolverParameters();
+		~SolverParameters();
+
+		void setMaxIterations(const int n);
+		const int getMaxIterations() const;
+		void setMaxTime(const double tmax);
+		const double getMaxTime() const;
+
+		friend std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters & obj);
+	private:
+		int maxIterations = 0;
+		double maxTime = 0;
+		double timestepSizeMax = 1;
+		bool isEulerMaxwellCouplingEnabled = true;
+	
+		bool isFluidEnabled = false;
+		bool isMassFluxSchemeImplicit = true;
+		bool isFrictionEnabled = true;
+
+		bool isMaxwellEnabled = false;
+		MaxwellSolverType maxwellSolverType = MaxwellSolverType::BiCGStab;
+		
+
+	};
+
+
 	AppmSolver();
 	AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams);
 	~AppmSolver();
@@ -57,10 +92,6 @@ private:
 	};
 	std::vector<ParticleParameters> particleParams;
 
-	enum class MaxwellSolverType {
-		CG, PardisoLU, BiCGStab
-	};
-	friend std::ostream & operator<<(std::ostream & os, const AppmSolver::MaxwellSolverType & obj);
 
 
 	struct AppmParameters {

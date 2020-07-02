@@ -20,5 +20,7 @@ private:
 
 	std::string inputFilename;
 	std::string meshFilename;
+
+	AppmSolver::SolverParameters appmParameters;
 };
 

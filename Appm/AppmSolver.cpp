@@ -3883,3 +3883,50 @@ std::ostream & operator<<(std::ostream & os, const AppmSolver::MaxwellSolverType
 	}
 	return os;
 }
+
+AppmSolver::SolverParameters::SolverParameters()
+{
+}
+
+AppmSolver::SolverParameters::~SolverParameters()
+{
+}
+
+void AppmSolver::SolverParameters::setMaxIterations(const int n)
+{
+	assert(n >= 0);
+	this->maxIterations = n;
+}
+
+const int AppmSolver::SolverParameters::getMaxIterations() const
+{
+	return this->maxIterations;
+}
+
+void AppmSolver::SolverParameters::setMaxTime(const double tmax)
+{
+	assert(tmax >= 0);
+	this->maxTime = tmax;
+}
+
+const double AppmSolver::SolverParameters::getMaxTime() const
+{
+	return this->maxTime;
+}
+
+std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters & obj)
+{
+	os << "APPM Solver Parameters:" << std::endl;
+	os << "=======================" << std::endl;
+	os << "maxIterations: " << obj.maxIterations << std::endl;
+	os << "maxTime: " << obj.maxTime << std::endl;
+	os << "timestepSizeMax: " << obj.timestepSizeMax << std::endl;
+	os << "isEulerMaxwellCouplingEnabled: " << obj.isEulerMaxwellCouplingEnabled << std::endl;
+	os << "isFluidEnabled: " << obj.isFluidEnabled << std::endl;
+	os << "isMassfluxSchemeImplicit: " << obj.isMassFluxSchemeImplicit << std::endl;
+	os << "isFrictionEnabled: " << obj.isFrictionEnabled << std::endl;
+	os << "isMaxwellEnabled: " << obj.isMaxwellEnabled << std::endl;
+	os << "maxwellSolverType: " << obj.maxwellSolverType << std::endl;
+	os << "=======================" << std::endl;
+	return os;
+}

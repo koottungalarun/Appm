@@ -8,6 +8,14 @@
 #
 #
 ######################
+### TESTCASE
+######################
+# Give a short description of this testcase.
+# 
+# Sod Shock tube
+# 
+#
+######################
 ### MESH
 ######################
 mesh: mesh-coarse.txt
@@ -19,6 +27,9 @@ mesh: mesh-coarse.txt
 ######################
 ### SOLVER
 ######################
+### numerics
+#
+### coupling
 #
 #
 #

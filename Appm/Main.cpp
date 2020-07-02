@@ -81,6 +81,7 @@ void Main::readInputFile()
 		if (tag == "mesh") {
 			std::istringstream(value) >> this->meshFilename;
 		}
+
 	}
 }
 
