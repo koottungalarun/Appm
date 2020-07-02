@@ -1,0 +1,19 @@
+# Scaling parameters
+#
+# Note: one parameter must be undefined, indicated by non-positive number
+#
+# p     background gas pressure (Pa), ideal gas
+# T     temperature (K)
+# x     spatial length scale (m)
+# lambdaSq    scaled Debye length
+#
+#
+# Expected format:
+# 
+# <var>=<value>
+#
+# 
+T=58000
+x=1e-3
+p=1e1
+
