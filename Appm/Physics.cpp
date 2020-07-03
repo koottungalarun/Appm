@@ -1,7 +1,7 @@
 #include "Physics.h"
 
 /** Ratio of heat capacities */
-const double Physics::gamma = 1.4;
+const double Physics::gamma = 5./3.;
 
 Physics::Physics()
 {

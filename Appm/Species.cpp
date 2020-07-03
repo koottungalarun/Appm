@@ -35,8 +35,11 @@ Species::Species(const std::string & str)
 	const double massRatio = std::stod(chunks[2]); // string-to-double
 	const int charge = std::stoi(chunks[3]);       // string-to-int
 	
+	assert(symbol.size() > 0);
 	this->symbol = symbol;
+	assert(name.size() > 0);
 	this->name = name;
+	assert(massRatio > 0);
 	this->massRatio = massRatio;
 	this->charge = charge;
 }
@@ -54,6 +57,11 @@ const int Species::getCharge() const
 const double Species::getMassRatio() const
 {
 	return this->massRatio;
+}
+
+const std::string Species::getName() const
+{
+	return this->name;
 }
 
 std::ostream & operator<<(std::ostream & os, const Species & obj)

@@ -275,3 +275,4 @@ __pycache__/
 *.txt
 *.csv
 *.png
+*.mat

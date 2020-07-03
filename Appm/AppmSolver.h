@@ -67,12 +67,16 @@ public:
 		const AppmSolver::MaxwellSolverType getMaxwellSolverType() const;
 		void setEulerMaxwellCouplingEnabled(const bool b);
 		const bool getEulerMaxwellCouplingEnabled() const;
+		void setOutputFrequency(const int n);
+		const int getOutputFrequency() const;
 
 		friend std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters & obj);
 	private:
 		int maxIterations = 0;
 		double maxTime = 0;
 		double timestepSizeMax = 1;
+		int outputFrequency = 1;
+
 		bool isEulerMaxwellCouplingEnabled = false;
 	
 		bool isFluidEnabled = false;
@@ -276,7 +280,9 @@ private:
 	// void test_raviartThomas();
 	const Eigen::Matrix3Xd getPrismReferenceCoords(const int nSamples);
 
+	// Timestamps and iterations at which output data has been written
 	std::vector<double> timeStamps;
+	std::vector<int> outputIterations;
 
 	void init_meshes(const PrimalMesh::PrimalMeshParams & primalParams);
 

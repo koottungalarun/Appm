@@ -3,16 +3,13 @@
 
 
 AppmSolver::AppmSolver() 
-	//: AppmSolver(PrimalMesh::PrimalMeshParams(), 
-	//	AppmSolver::SolverParameters())
 {
 }
 
-//AppmSolver::AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams,
-//	const AppmSolver::SolverParameters & solverParams)
-//{
-//	this->solverParams = solverParams;
-//}
+
+AppmSolver::~AppmSolver()
+{
+}
 
 void AppmSolver::init() 
 {
@@ -100,20 +97,17 @@ void AppmSolver::init()
 
 	// write initial data to file (iteration = 0, time = 0)
 
-	iteration = 0;
-	time = 0;
-	writeOutput(iteration, time);
+	//iteration = 0;
+	//time = 0;
+	//writeOutput(iteration, time);
 
-	J_h_aux.setZero();
-	J_h.setZero();
-	E_h.setZero();
-	E_cc = getEfieldAtCellCenter();
+	//J_h_aux.setZero();
+	//J_h.setZero();
+	//E_h.setZero();
+	//E_cc = getEfieldAtCellCenter();
 }
 
 
-AppmSolver::~AppmSolver()
-{
-}
 
 void AppmSolver::run()
 {
@@ -176,12 +170,35 @@ void AppmSolver::run()
 	*/
 	const int maxIterations = solverParams.getMaxIterations();
 	const double maxTime = solverParams.getMaxTime();
+	const int outputFrequency = solverParams.getOutputFrequency();
+	
 	try {
-		while (iteration < maxIterations && time < maxTime && !isStopFileActive()) {
+		for (; iteration < std::numeric_limits<int>::max(); iteration++) {
 			std::cout << std::endl;
 			std::cout << "*********************************************" << std::endl;
 			std::cout << "* Iteration " << iteration << ",\t time = " << time << std::endl;
 			std::cout << "*********************************************" << std::endl;
+
+			if (outputFrequency > 0) {
+				if (iteration % outputFrequency == 0) {
+					writeOutput(iteration, time);
+				}
+				if ((iteration % (10 * outputFrequency) == 0) || isStopFileActive()) {
+					writeXdmf("appm.xdmf");
+					writeXdmfDualVolume("appm-volume.xdmf");
+				}
+			} else {
+				if (iteration == 0) {
+					writeOutput(iteration, time);
+				}
+			}
+
+			// Stopping iteration loop
+			bool isMaxIters = iteration > maxIterations;
+			bool isMaxTime = time >= maxTime;
+			if (isMaxIters || isMaxTime || isStopFileActive()) {
+				break;
+			}
 
 			dt_previous = dt;
 
@@ -227,17 +244,18 @@ void AppmSolver::run()
 			Msigma = get_Msigma_spd(J_h_aux, dt, time);
 			//std::cout << "Analyze Msigma:" << std::endl;
 			//Eigen::isSymmetricPositiveDefinite(Msigma, true);
-			const int nEdges = primalMesh.getNumberOfEdges();
-			Eigen::SparseMatrix<double> Msigma_inner = Msigma.topLeftCorner(nEdges, nEdges);
-			std::cout << "Analyze Msigma inner:" << std::endl;
-			Eigen::isSymmetricPositiveDefinite(Msigma_inner, true);
-			{
-				std::stringstream ss;
-				ss << "Msigma-" << iteration << ".h5";
-				const std::string filename = ss.str();
-				H5Writer MsigmaWriter(filename);
-				Eigen::sparseMatrixToFile(Msigma_inner, "/MsigmaInner", MsigmaWriter);
-			}
+			//const int nEdges = primalMesh.getNumberOfEdges();
+			//Eigen::SparseMatrix<double> Msigma_inner = Msigma.topLeftCorner(nEdges, nEdges);
+			//std::cout << "Analyze Msigma inner:" << std::endl;
+			//Eigen::isSymmetricPositiveDefinite(Msigma_inner, true);
+			//{
+			//	std::stringstream ss;
+			//	ss << "Msigma-" << iteration << ".h5";
+			//	const std::string filename = ss.str();
+			//	H5Writer MsigmaWriter(filename);
+			//	Eigen::sparseMatrixToFile(Msigma_inner, "/MsigmaInner", MsigmaWriter);
+			//}
+
 			// Maxwell equations
 			if (solverParams.getMaxwellEnabled()) {
 				solveMaxwellSystem(time, dt, dt_previous, Msigma);
@@ -273,7 +291,7 @@ void AppmSolver::run()
 					}
 					// Update energy source terms ...
 					for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-						int q = particleParams[fluidIdx].electricCharge;
+						int q = getSpecies(fluidIdx).getCharge();
 						for (int i = 0; i < nCells; i++) {
 							Eigen::VectorXd state = fluidStates.col(i);
 							Eigen::Vector3d nu = state.segment(5 * fluidIdx + 1, 3); // mass flux in cell i at timestep m; 
@@ -299,14 +317,7 @@ void AppmSolver::run()
 				//debug_checkCellStatus();
 			}
 			std::cout << "dt = " << dt << std::endl;
-			iteration++;
 			time += dt;
-			writeOutput(iteration, time);
-
-			if (iteration % 10 == 0 || isStopFileActive()) {
-				writeXdmf("appm.xdmf");
-				writeXdmfDualVolume("appm-volume.xdmf");
-			}
 		}
 	}
 	catch (const std::exception & e) {
@@ -319,6 +330,8 @@ void AppmSolver::run()
 		std::cout << "**********************************************************" << std::endl;
 		std::cout << "**********************************************************" << std::endl;
 	}
+	writeOutput(iteration, time);
+
 	std::cout << std::endl;
 	std::cout << "Final time:      " << time << std::endl;
 	std::cout << "Final iteration: " << iteration << std::endl;
@@ -399,7 +412,7 @@ void AppmSolver::debug_checkCellStatus() const
 
 const int AppmSolver::getNFluids() const
 {
-	return particleParams.size();
+	return speciesList.size();
 }
 
 //std::string AppmSolver::printSolverParameters() const
@@ -748,7 +761,7 @@ void AppmSolver::init_SodShockTube(const double zRef) {
 
 	for (int k = 0; k < nFluids; k++) {
 		// TODO: edit such that number density is equal among the fluids (= quasi-neutral plasma state), not the mass density.
-		const double epsilon2 = particleParams[k].mass;
+		const double epsilon2 = getSpecies(k).getMassRatio();
 
 		const double pL = 1;
 		const double nL = 1;
@@ -802,7 +815,7 @@ void AppmSolver::init_Uniformly(const double n, const double p, const Eigen::Vec
 	const int fluidStateLength = getFluidStateLength();
 	Eigen::VectorXd state(fluidStateLength);
 	for (int k = 0; k < nFluids; k++) {
-		const double epsilon2 = particleParams[k].mass;
+		const double epsilon2 = getSpecies(k).getMassRatio();
 		Eigen::VectorXd singleFluidState;
 		singleFluidState = Physics::primitive2state(epsilon2, n, p, uvec);
 		//const double e = p / ((Physics::gamma - 1) * epsilon2 * n);
@@ -827,7 +840,7 @@ void AppmSolver::init_Explosion(const Eigen::Vector3d refPos, const double radiu
 	const int nCells = dualMesh.getNumberOfCells();
 	const int nFluids = getNFluids();
 	for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-		const double massRatio = particleParams[fluidIdx].mass;
+		const double massRatio = getSpecies(fluidIdx).getMassRatio();
 		Eigen::VectorXd state_lo = Physics::primitive2state(massRatio, 1, 1, Eigen::Vector3d::Zero());
 		Eigen::VectorXd state_hi = Physics::primitive2state(massRatio, 1, 5, Eigen::Vector3d::Zero());
 		
@@ -851,7 +864,7 @@ void AppmSolver::init_testcase_frictionTerm()
 	const int nFluids = getNFluids();
 	assert(nFluids >= 2);
 	for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-		const double massRatio = particleParams[fluidIdx].mass;
+		const double massRatio = getSpecies(fluidIdx).getMassRatio();
 		const double n = 1;
 		const double p = 1;
 		Eigen::Vector3d uvec;
@@ -885,8 +898,8 @@ void AppmSolver::init_ignitionWire()
 		const Eigen::Vector3d & pos = cell->getCenter();
 		const Eigen::Vector2d pos2d = pos.segment(0, 2);
 		for (int fluidx = 0; fluidx < getNFluids(); fluidx++) {
-			const double massRatio = particleParams[fluidx].mass;
-			const int q = particleParams[fluidx].electricCharge;
+			const double massRatio = getSpecies(fluidx).getMassRatio();
+			const int q = getSpecies(fluidx).getCharge();
 			const Eigen::Vector3d u = Eigen::Vector3d::Zero();
 			double n = 1;
 			double p = 1;
@@ -1113,7 +1126,7 @@ void AppmSolver::setRadiationSource()
 		for (int fluidx = 0; fluidx < nFluids; fluidx++) {
 			const Eigen::VectorXd state = fluidStates.col(i).segment(5 * fluidx, 5);
 			assert(state.size() == 5);
-			const double massRatio = particleParams[fluidx].mass;
+			const double massRatio = getSpecies(fluidx).getMassRatio();
 			double T = 0;
 			T = Physics::getTemperature(state, massRatio);
 			const double Qrad = -pow(T, 4);	// use T^4-law
@@ -1148,7 +1161,7 @@ void AppmSolver::setFrictionSourceTerms()
 			Eigen::Vector3d u_avg = Eigen::Vector3d::Zero(); // bulk velocity (mass-averaged velocity)
 
 			for (int alpha = 0; alpha < nFluids; alpha++) {
-				auto massRatio = particleParams[alpha].mass;
+				auto massRatio = getSpecies(alpha).getMassRatio();
 				auto state = fluidStates.col(i).segment(5 * alpha, 5);
 				assert(state.size() == 5);
 				auto n_u = state.segment(1, 3);
@@ -1219,8 +1232,8 @@ void AppmSolver::setMagneticLorentzForceSourceTerms()
 			assert(nu.allFinite());
 			const Eigen::Vector3d B = B_vertex.col(i);
 			assert(B.allFinite());
-			const int q = particleParams[fluidIdx].electricCharge;
-			const double massRatio = particleParams[fluidIdx].mass;
+			const int q = getSpecies(fluidIdx).getCharge();
+			const double massRatio = getSpecies(fluidIdx).getMassRatio();
 			const Eigen::Vector3d result = q * 1. / massRatio * nu.cross(B);
 			if (!result.allFinite()) {
 				std::cout << "result: " << result.transpose() << std::endl;
@@ -1734,7 +1747,7 @@ Eigen::Vector3d AppmSolver::getSpeciesFaceFlux(const Face * face, const int flui
 	flux.setZero();
 
 	Face::Type faceFluidType = face->getType();
-	const bool isElectronFluid = particleParams[fluidIdx].electricCharge < 0;
+	const bool isElectronFluid = getSpecies(fluidIdx).getCharge() < 0;
 	const bool isCathode = faceFluidType == Face::Type::TERMINAL && face->getCenter()(2) < 0; // TODO
 
 	if (false && isCathode && isElectronFluid) {
@@ -1756,7 +1769,7 @@ const Eigen::Vector3d AppmSolver::getSpeciesFaceFluxAtCathode(const Face * face,
 	const double j_em = Physics::thermionicEmissionCurrentDensity(Ts, workFunction); 
 
 	// Check if face is at cathode terminal and we have an electron fluid
-	const bool isElectronFluid = particleParams[fluidIdx].electricCharge < 0;
+	const bool isElectronFluid = getSpecies(fluidIdx).getCharge() < 0;
 	assert(isElectronFluid);
 	Face::Type faceFluidType = face->getType();
 	assert(faceFluidType == Face::Type::TERMINAL);
@@ -2143,6 +2156,8 @@ void AppmSolver::writeXdmf(const std::string & filename)
 	std::string gridDualEdges;
 	std::string gridDualFaces;
 
+	assert(timeStamps.size() == outputIterations.size());
+
 	std::ofstream file(filename);
 	file << "<?xml version = \"1.0\" ?>" << std::endl;
 	file << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << std::endl;
@@ -2151,13 +2166,14 @@ void AppmSolver::writeXdmf(const std::string & filename)
 	file << "<Grid Name=\"Time Grid\" GridType=\"Collection\" CollectionType=\"Temporal\">" << std::endl;
 	for (int i = 0; i < nTimesteps; i++) {
 		const double time = this->timeStamps[i];
+		const int iteration = outputIterations[i];
 
 		file << "<Grid Name=\"Grid of Grids\" GridType=\"Tree\">" << std::endl;
 		file << "<Time Value=\"" << time << "\" />" << std::endl;
-		file << xdmf_GridPrimalEdges(i) << std::endl;
-		file << xdmf_GridPrimalFaces(i) << std::endl;
-		file << xdmf_GridDualEdges(i) << std::endl;
-		file << xdmf_GridDualFaces(i) << std::endl;
+		file << xdmf_GridPrimalEdges(iteration) << std::endl;
+		file << xdmf_GridPrimalFaces(iteration) << std::endl;
+		file << xdmf_GridDualEdges(iteration) << std::endl;
+		file << xdmf_GridDualFaces(iteration) << std::endl;
 		file << "</Grid>" << std::endl;
 	}
 	file << "</Grid>" << std::endl;
@@ -2187,8 +2203,9 @@ void AppmSolver::writeXdmfDualVolume(const std::string & filename)
 	file << "<Grid Name=\"Time Grid\" GridType=\"Collection\" CollectionType=\"Temporal\">" << std::endl;
 	for (int i = 0; i < nTimesteps; i++) {
 		const double time = this->timeStamps[i];
+		const int iteration = this->outputIterations[i];
 		file << "<Time Value=\"" << time << "\" />" << std::endl;
-		file << xdmf_GridDualCells(i) << std::endl;
+		file << xdmf_GridDualCells(iteration) << std::endl;
 	}
 	file << "</Grid>" << std::endl;
 	file << "</Domain>" << std::endl;
@@ -2225,6 +2242,7 @@ void AppmSolver::writeOutput(const int iteration, const double time)
 	h5writer.writeData(iterVec, "/iteration");
 
 	// Add this time value to list of timesteps
+	outputIterations.push_back(iteration);
 	timeStamps.push_back(time);
 	timeFile << iteration << "," << time << std::endl;
 }
@@ -2236,7 +2254,7 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 	const int nFaces = dualMesh.getNumberOfFaces();
 
 	for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-		const std::string fluidName = particleParams[fluidIdx].name;
+		const std::string fluidName = getSpecies(fluidIdx).getName();
 		const std::string fluidTag = (std::stringstream() << "/" << fluidName << "-").str();
 		const std::string pressureTag = fluidTag + "pressure";
 		const std::string velocityTag = fluidTag + "velocity";
@@ -2271,7 +2289,7 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 		qU.setConstant(std::nan("")); 
 		qE.setConstant(std::nan("")); 
 
-		const double epsilon2 = particleParams[fluidIdx].mass;
+		const double epsilon2 = getSpecies(fluidIdx).getMassRatio();
 		for (int i = 0; i < nCells; i++) {
 			const Cell * cell = dualMesh.getCell(i);
 			if (cell->getType() != Cell::Type::FLUID) { 
@@ -2302,7 +2320,7 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 			//}
 			if (p < 0 || n < 0) {
 				std::cout << "Invalid state " << std::endl;
-				std::cout << "fluid: " << particleParams[fluidIdx].name << std::endl;
+				std::cout << "fluid: " << getSpecies(fluidIdx).getName() << std::endl;
 				std::cout << "cell idx: " << i << std::endl;
 				createStopFile(1);
 				break;
@@ -3180,8 +3198,9 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 
 
 	for (int fidx = 0; fidx < getNFluids(); fidx++) {
-		std::string attributeName = (std::stringstream() << particleParams[fidx].name <<" Face Type").str();
-		std::string dataName = (std::stringstream() << particleParams[fidx].name <<"-faceType").str();
+		const std::string speciesName = getSpecies(fidx).getName();
+		std::string attributeName = (std::stringstream() << speciesName <<" Face Type").str();
+		std::string dataName = (std::stringstream() << speciesName <<"-faceType").str();
 		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 			<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
@@ -3189,35 +3208,35 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
-		attributeName = (std::stringstream() << particleParams[fidx].name << " Face Mass Flux").str();
+		attributeName = (std::stringstream() << speciesName << " Face Mass Flux").str();
 		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << "appm-" << iteration << ".h5:/" << particleParams[fidx].name << "-massFlux" << std::endl;
+		ss << "appm-" << iteration << ".h5:/" << speciesName << "-massFlux" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
-		attributeName = (std::stringstream() << particleParams[fidx].name << " Face Momentum Flux").str();
+		attributeName = (std::stringstream() << speciesName << " Face Momentum Flux").str();
 		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << "appm-" << iteration << ".h5:/" << particleParams[fidx].name << "-momentumFlux" << std::endl;
+		ss << "appm-" << iteration << ".h5:/" << speciesName << "-momentumFlux" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
-		attributeName = (std::stringstream() << particleParams[fidx].name << " Face Energy Flux").str();
+		attributeName = (std::stringstream() << speciesName << " Face Energy Flux").str();
 		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << "appm-" << iteration << ".h5:/" << particleParams[fidx].name << "-energyFlux" << std::endl;
+		ss << "appm-" << iteration << ".h5:/" << speciesName << "-energyFlux" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
-		attributeName = (std::stringstream() << particleParams[fidx].name << " Implicit Mass Flux Term").str();
+		attributeName = (std::stringstream() << speciesName << " Implicit Mass Flux Term").str();
 		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << "appm-" << iteration << ".h5:/" << particleParams[fidx].name << "-massFluxImplicitTerm" << std::endl;
+		ss << "appm-" << iteration << ".h5:/" << speciesName << "-massFluxImplicitTerm" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 	}
@@ -3346,7 +3365,8 @@ const std::string AppmSolver::fluidXdmfOutput(const std::string & datafilename) 
 	const int nFluids = this->getNFluids();
 	const int nCells = dualMesh.getNumberOfCells();
 	for (int k = 0; k < nFluids; k++) {
-		const std::string fluidName = (std::stringstream() << particleParams[k].name).str();
+		const std::string speciesName = getSpecies(k).getName();
+		const std::string fluidName = (std::stringstream() << speciesName).str();
 
 		ss << "<Attribute Name=\"" << fluidName << " density" << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << nCells << "\""
@@ -3760,8 +3780,8 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 				const double numSchemeFactor = (faceType == Face::Type::INTERIOR) ? 0.5 : 1;
 
 				for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-					const int q = particleParams[fluidIdx].electricCharge;
-					const double massRatio = particleParams[fluidIdx].mass;
+					const int q = getSpecies(fluidIdx).getCharge();
+					const double massRatio = getSpecies(fluidIdx).getMassRatio();
 					const Face::Type faceFluidType = getFaceTypeOfFluid(dualFace, fluidIdx);
 
 					// Term due to explicit mass flux. Note that face fluxes are already multiplied with face area Ai
@@ -3977,6 +3997,11 @@ const double AppmSolver::SolverParameters::getMaxTimestepSize() const
 	return this->timestepSizeMax;
 }
 
+void AppmSolver::SolverParameters::setFluidEnabled(const bool b)
+{
+	this->isFluidEnabled = b;
+}
+
 const bool AppmSolver::SolverParameters::getFluidEnabled() const
 {
 	return this->isFluidEnabled;
@@ -3985,6 +4010,11 @@ const bool AppmSolver::SolverParameters::getFluidEnabled() const
 const bool AppmSolver::SolverParameters::getLorentzForceEnabled() const
 {
 	return this->isLorentzForceEnabled;
+}
+
+void AppmSolver::SolverParameters::setMassfluxSchemeImplicit(const bool b)
+{
+	this->isMassFluxSchemeImplicit = b;
 }
 
 const bool AppmSolver::SolverParameters::getMassfluxSchemeImplicit() const
@@ -4012,6 +4042,18 @@ const bool AppmSolver::SolverParameters::getEulerMaxwellCouplingEnabled() const
 	return false;
 }
 
+void AppmSolver::SolverParameters::setOutputFrequency(const int n)
+{
+	assert(n >= 0);
+	this->outputFrequency = n;
+}
+
+const int AppmSolver::SolverParameters::getOutputFrequency() const
+{
+	assert(this->outputFrequency >= 0);
+	return this->outputFrequency;
+}
+
 std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters & obj)
 {
 	os << "APPM Solver Parameters:" << std::endl;
@@ -4019,6 +4061,7 @@ std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters 
 	os << "maxIterations: " << obj.maxIterations << std::endl;
 	os << "maxTime: " << obj.maxTime << std::endl;
 	os << "timestepSizeMax: " << obj.timestepSizeMax << std::endl;
+	os << "outputFrequency: " << obj.outputFrequency << std::endl;
 	os << "isEulerMaxwellCouplingEnabled: " << obj.isEulerMaxwellCouplingEnabled << std::endl;
 	os << "isFluidEnabled: " << obj.isFluidEnabled << std::endl;
 	os << "isMassfluxSchemeImplicit: " << obj.isMassFluxSchemeImplicit << std::endl;

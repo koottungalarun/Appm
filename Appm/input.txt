@@ -29,14 +29,15 @@ mesh: mesh-coarse.txt
 ######################
 ### Simulation controls
 maxTime: 1
-maxIterations: 0
+maxIterations: 500
+outputFrequency: 0
 #
 ### numerics
 #
 ### coupling
 isFluidEnabled: 1
+isMassfluxImplicit: 0
 isMaxwellEnabled: 0
-
 #
 #
 ######################
@@ -44,7 +45,7 @@ isMaxwellEnabled: 0
 ######################
 # Format: Symbol, name, massRatio, charge
 species: Ar, Argon, 1, 0
-species: e, Electron, 1e-4, -1
+#species: e, Electron, 1e-4, -1
 #
 #
 ######################

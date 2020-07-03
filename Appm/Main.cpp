@@ -83,6 +83,8 @@ void Main::readInputFile()
 		const std::string tag = line.substr(0, pos);    // tag
 		const std::string value = line.substr(pos + 1); // value
 		assert(value.size() > 0);
+
+		// Apply tag-value pairs
 		if (tag == "mesh") {
 			std::istringstream(value) >> this->meshFilename;
 		}
@@ -95,6 +97,21 @@ void Main::readInputFile()
 			int maxIterations = 0;
 			std::istringstream(value) >> maxIterations;
 			this->solverParameters.setMaxIterations(maxIterations);
+		}
+		if (tag == "outputFrequency") {
+			int outputFrequency = 1;
+			std::istringstream(value) >> outputFrequency;
+			this->solverParameters.setOutputFrequency(outputFrequency);
+		}
+		if (tag == "isFluidEnabled") {
+			bool b = false;
+			std::istringstream(value) >> b;
+			solverParameters.setFluidEnabled(b);
+		}
+		if (tag == "isMassfluxImplicit") {
+			bool b = false;
+			std::istringstream(value) >> b;
+			solverParameters.setMassfluxSchemeImplicit(b);
 		}
 		if (tag.substr(0,speciesPrefix.size()) == speciesPrefix) {
 			speciesList.push_back(Species(value));

@@ -190,9 +190,6 @@
     <Text Include="AppmSolverParams.txt">
       <Filter>Resource Files</Filter>
     </Text>
-    <Text Include="particleParameters.txt">
-      <Filter>Resource Files</Filter>
-    </Text>
     <Text Include="scales.txt">
       <Filter>Resource Files</Filter>
     </Text>
