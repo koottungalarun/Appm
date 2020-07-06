@@ -124,15 +124,15 @@ void PrimalMesh::refineMesh(const int nRefinements)
 		//std::cout << f2v.transpose() << std::endl;
 		assert((f2v.array() >= 0).all());
 
-		std::ofstream file;
-		std::stringstream ss;
-		ss << "level" << level << "-coords.dat";
-		file = std::ofstream(ss.str());
-		file << vertexCoordinates.transpose() << std::endl;
-		ss = std::stringstream();
-		ss << "level" << level << "-f2v.dat";
-		file = std::ofstream(ss.str());
-		file << f2v.transpose() << std::endl;
+		//std::ofstream file;
+		//std::stringstream ss;
+		//ss << "level" << level << "-coords.dat";
+		//file = std::ofstream(ss.str());
+		//file << vertexCoordinates.transpose() << std::endl;
+		//ss = std::stringstream();
+		//ss << "level" << level << "-f2v.dat";
+		//file = std::ofstream(ss.str());
+		//file << f2v.transpose() << std::endl;
 
 		// Check that z-coordinates are approximately equal
 		const double tol = 16 * std::numeric_limits<double>::epsilon();

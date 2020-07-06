@@ -207,7 +207,7 @@ Eigen::VectorXi DualMesh::associateDualFacesWithPrimalEdges(const PrimalMesh & p
 	data.col(0) = indexMap.cast<double>();
 	data.col(1) = temp;
 	std::cout << "Associate dual faces and primal edges -- DONE" << std::endl;
-	std::ofstream("associateDualFacesPrimalEdges.dat") << indexMap << std::endl;
+	//std::ofstream("associateDualFacesPrimalEdges.dat") << indexMap << std::endl;
 	return indexMap;
 }
 
