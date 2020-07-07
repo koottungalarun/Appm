@@ -113,8 +113,22 @@ void Main::readInputFile()
 			std::istringstream(value) >> b;
 			solverParameters.setMassfluxSchemeImplicit(b);
 		}
+		if (tag == "isLorentzForceEnabled") {
+			bool b = false;
+			std::istringstream(value) >> b;
+			solverParameters.setLorentzForceEnabled(b);
+		}
 		if (tag.substr(0,speciesPrefix.size()) == speciesPrefix) {
 			speciesList.push_back(Species(value));
+		}
+		if (tag == "initFluidState") {
+			solverParameters.setFluidInitType(value);
+		}
+		if (tag == "initEfield") {
+			double x, y, z;
+			std::stringstream ss(value);
+			ss >> x >> y >> z;
+			solverParameters.setInitEfield(Eigen::Vector3d(x, y, z));
 		}
 	}
 

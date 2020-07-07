@@ -171,55 +171,19 @@ void AppmSolver::run()
 	const int maxIterations = solverParams.getMaxIterations();
 	const double maxTime = solverParams.getMaxTime();
 	const int outputFrequency = solverParams.getOutputFrequency();
+
+	writeOutput(iteration, time);
 	
 	try {
-		for (; iteration < std::numeric_limits<int>::max(); iteration++) {
-			std::cout << std::endl;
-			std::cout << "*********************************************" << std::endl;
-			std::cout << "* Iteration " << iteration << ",\t time = " << time << std::endl;
-			std::cout << "*********************************************" << std::endl;
-
-			if (outputFrequency > 0) {
-				if (iteration % outputFrequency == 0) {
-					writeOutput(iteration, time);
-				}
-				if ((iteration % (10 * outputFrequency) == 0) || isStopFileActive()) {
-					writeXdmf("appm.xdmf");
-					writeXdmfDualVolume("appm-volume.xdmf");
-				}
-			} else {
-				if (iteration == 0) {
-					writeOutput(iteration, time);
-				}
-			}
-
-			// Stopping iteration loop
-			bool isMaxIters = iteration > maxIterations;
-			bool isMaxTime = time >= maxTime;
-			if (isMaxIters || isMaxTime || isStopFileActive()) {
-				break;
-			}
-
-			dt_previous = dt;
-
-			//J_h.setZero();
-			//for (int i = 0; i < primalMesh.getNumberOfEdges(); i++) {
-			//	for (int fluidx = 0; fluidx < nFluids; fluidx++) {
-			//		const int q = particleParams[fluidx].electricCharge;
-			//		J_h(i) += q * faceFluxes(5 * fluidx, i);
-			//	}
-			//}
-
-			//fluidFluxes.setZero();
+		while (true) {
+			// Initialize data
 			fluidSources.setZero();
 			faceFluxes.setZero();
-			//faceFluxesImExRusanov.setZero();
 
 			// Determine timestep
+			dt_previous = dt;
 			if (solverParams.getFluidEnabled()) {
 				dt = getNextFluidTimestepSize();
-				// Use maximum timestep
-				//dt = std::min(dt, 1e-2);
 
 				// Limit timestep such that maximum time is reached exactly
 				if (time + dt >= maxTime) {
@@ -227,6 +191,16 @@ void AppmSolver::run()
 					dt = maxTime - time;
 				}
 			}
+
+			iteration++;
+			time += dt;
+			std::cout << std::endl;
+			std::cout << "*********************************************" << std::endl;
+			std::cout << "* Iteration " << iteration;
+			std::cout << ",\t time = " << time;
+			std::cout << ",\t dt = " << dt;
+			std::cout << std::endl;
+			std::cout << "*********************************************" << std::endl;
 
 			// Set explicit fluid source terms
 			setMagneticLorentzForceSourceTerms();
@@ -316,8 +290,30 @@ void AppmSolver::run()
 
 				//debug_checkCellStatus();
 			}
-			std::cout << "dt = " << dt << std::endl;
-			time += dt;
+
+			// Criteria to stop loop iterations
+			const bool isStopFile = isStopFileActive();
+			const bool isMaxIters = iteration > maxIterations;
+			const bool isMaxTime = time >= maxTime;
+			const bool isStop = isStopFile || isMaxIters || isMaxTime;
+
+			if (!isStop) {
+				if (outputFrequency > 0) {
+					if (iteration % outputFrequency == 0) {
+						writeOutput(iteration, time);
+					}
+					if (iteration % (10 * outputFrequency) == 0) {
+						writeXdmf("appm.xdmf");
+						writeXdmfDualVolume("appm-volume.xdmf");
+					}
+				}
+			}
+			else {
+				writeOutput(iteration, time);
+				writeXdmf("appm.xdmf");
+				writeXdmfDualVolume("appm-volume.xdmf");
+				break; // <<<--- stop loop iterations
+			}
 		}
 	}
 	catch (const std::exception & e) {
@@ -329,8 +325,10 @@ void AppmSolver::run()
 		std::cout << "**********************************************************" << std::endl;
 		std::cout << "**********************************************************" << std::endl;
 		std::cout << "**********************************************************" << std::endl;
+		writeOutput(iteration, time);
+		writeXdmf("appm.xdmf");
+		writeXdmfDualVolume("appm-volume.xdmf");
 	}
-	writeOutput(iteration, time);
 
 	std::cout << std::endl;
 	std::cout << "Final time:      " << time << std::endl;
@@ -342,20 +340,14 @@ void AppmSolver::run()
 
 	std::cout << solverParams << std::endl;
 
-	// test_raviartThomas();
-
 	// Use Paraview (version 5.6.0) to visualize.
 	// Light data is given in XDMF files (version 3). 
 	// Heavy data is stored in HDF5 files.
-
 	// Note that polyhedrons have been added to XDMF in version 3; version 2 does not support polyhedrons.
 	// Moreover, Paraview has 3 readers: XDMF Reader, Xdmf3ReaderS, Xdmf3ReaderT.
 	// Xdmf3Reader3: can     read polyhedrons, but not grid-of-grids (i.e., grids with GridType=Tree).
 	// XDMF Reader:  can not read polyhedrons, but     grid-of-grids.
 	// Therefore, the mesh data for vertices, edges, and faces, are separated from the volume data.
-	writeXdmf("appm.xdmf");
-	writeXdmfDualVolume("appm-volume.xdmf");
-	//writeXdmfDualFaceFluxes();
 }
 
 void AppmSolver::setSolverParameters(const AppmSolver::SolverParameters & solverParams)
@@ -537,6 +529,17 @@ void AppmSolver::init_maxwellStates()
 	J_h_aux_mm1 = Eigen::VectorXd(nFaces);
 	J_h_aux_mm1.setZero();
 
+	// Initialize electric field 
+	const Eigen::Vector3d initEfield = solverParams.getInitEfield();
+	assert(initEfield.allFinite());
+	const int nEdges = primalMesh.getNumberOfEdges();
+	for (int i = 0; i < nEdges; i++) {
+		const Edge * edge = primalMesh.getEdge(i);
+		const Eigen::Vector3d edgeDir = edge->getDirection();
+		E_h(i) = edgeDir.dot(initEfield);
+	}
+	E_cc = getEfieldAtCellCenter();
+
 }
 
 Eigen::SparseMatrix<double> AppmSolver::getBoundaryGradientInnerInclusionOperator()
@@ -691,16 +694,17 @@ void AppmSolver::init_multiFluid(const std::string & filename)
 		}
 	}
 
-	applyFluidInitializationType(initType);
+	applyFluidInitializationType();
 }
 
 /**
 * Define initial state of fluid.
 */
-void AppmSolver::applyFluidInitializationType(const int initType)
+void AppmSolver::applyFluidInitializationType()
 {
+	const FluidInitType initType = solverParams.getFluidInitType();
 	switch (initType) {
-	case 1:
+	case FluidInitType::SHOCKTUBE:
 	{
 		std::cout << "Initialize fluid states: " << "Shock tube" << std::endl;
 		const double zRef = 0.;
@@ -708,7 +712,7 @@ void AppmSolver::applyFluidInitializationType(const int initType)
 	}
 	break;
 
-	case 2:
+	case FluidInitType::UNIFORM:
 	{
 		std::cout << "Initialize fluid states: " << "Uniform" << std::endl;
 		double p = 1.0;
@@ -718,26 +722,26 @@ void AppmSolver::applyFluidInitializationType(const int initType)
 	}
 	break;
 
-	case 3:
-	{
-		std::cout << "Initialize fluid states: " << "Explosion" << std::endl;
-		const Eigen::Vector3d refPos = Eigen::Vector3d(0, 0, 0);
-		const double radius = 0.2;
-		init_Explosion(refPos, radius);
-	}
-	break;
+	//case FluidInitType::DEFAULT:
+	//{
+	//	std::cout << "Initialize fluid states: " << "Explosion" << std::endl;
+	//	const Eigen::Vector3d refPos = Eigen::Vector3d(0, 0, 0);
+	//	const double radius = 0.2;
+	//	init_Explosion(refPos, radius);
+	//}
+	//break;
 
-	case 4:
-	{
-		init_testcase_frictionTerm();
-	}
-	break;
+	//case 4:
+	//{
+	//	init_testcase_frictionTerm();
+	//}
+	//break;
 
-	case 5:
-	{
-		init_ignitionWire();
-	}
-	break;
+	//case 5:
+	//{
+	//	init_ignitionWire();
+	//}
+	//break;
 
 	default:
 		std::cout << "InitType unknown: " << initType << std::endl;
@@ -4007,6 +4011,11 @@ const bool AppmSolver::SolverParameters::getFluidEnabled() const
 	return this->isFluidEnabled;
 }
 
+void AppmSolver::SolverParameters::setLorentzForceEnabled(const bool b)
+{
+	this->isLorentzForceEnabled = b;
+}
+
 const bool AppmSolver::SolverParameters::getLorentzForceEnabled() const
 {
 	return this->isLorentzForceEnabled;
@@ -4054,6 +4063,40 @@ const int AppmSolver::SolverParameters::getOutputFrequency() const
 	return this->outputFrequency;
 }
 
+void AppmSolver::SolverParameters::setFluidInitType(const std::string & s)
+{
+	assert(s.size() > 0);
+	const std::string trimmed = trim(s);
+	this->fluidInitType = FluidInitType::DEFAULT;
+	if (trimmed == "SHOCKTUBE") {
+		this->fluidInitType = FluidInitType::SHOCKTUBE;
+	}
+	if (trimmed == "UNIFORM") {
+		this->fluidInitType = FluidInitType::UNIFORM;
+	}
+	if (this->fluidInitType == FluidInitType::DEFAULT) {
+		std::cout << "Warning: it may be that the FluidInitType is not correctly read." << std::endl;
+		std::cout << "Value read from imput file: " << trimmed << std::endl;
+		std::cout << "Value in solver parameters: " << this->fluidInitType << std::endl;
+	}
+}
+
+const AppmSolver::FluidInitType AppmSolver::SolverParameters::getFluidInitType() const
+{
+	return this->fluidInitType;
+}
+
+void AppmSolver::SolverParameters::setInitEfield(const Eigen::Vector3d & efield)
+{
+	assert(efield.allFinite());
+	this->initEfield = efield;
+}
+
+const Eigen::Vector3d AppmSolver::SolverParameters::getInitEfield() const
+{
+	return this->initEfield;
+}
+
 std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters & obj)
 {
 	os << "APPM Solver Parameters:" << std::endl;
@@ -4064,10 +4107,34 @@ std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters 
 	os << "outputFrequency: " << obj.outputFrequency << std::endl;
 	os << "isEulerMaxwellCouplingEnabled: " << obj.isEulerMaxwellCouplingEnabled << std::endl;
 	os << "isFluidEnabled: " << obj.isFluidEnabled << std::endl;
+	os << "fluidInitType: " << obj.fluidInitType << std::endl;
+	os << "initEfield: " << obj.initEfield.transpose() << std::endl;
 	os << "isMassfluxSchemeImplicit: " << obj.isMassFluxSchemeImplicit << std::endl;
 	os << "isFrictionEnabled: " << obj.isFrictionEnabled << std::endl;
 	os << "isMaxwellEnabled: " << obj.isMaxwellEnabled << std::endl;
 	os << "maxwellSolverType: " << obj.maxwellSolverType << std::endl;
 	os << "=======================" << std::endl;
+	return os;
+}
+
+std::ostream & operator<<(std::ostream & os, const AppmSolver::FluidInitType & obj)
+{
+	switch (obj) {
+	case AppmSolver::FluidInitType::DEFAULT:
+		os << "DEFAULT";
+		break;
+
+	case AppmSolver::FluidInitType::UNIFORM:
+		os << "UNIFORM";
+		break;
+
+	case AppmSolver::FluidInitType::SHOCKTUBE:
+		os << "SHOCKTUBE";
+		break;
+
+	default:
+		os << "unknown";
+		assert(false);
+	}
 	return os;
 }

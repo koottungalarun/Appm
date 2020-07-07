@@ -196,7 +196,7 @@
     <ClCompile Include="XmlElement.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <Text Include="AppmSolverParams.txt" />
+    <Text Include="toDelete-AppmSolverParams.txt" />
     <Text Include="input.txt" />
     <Text Include="mesh-coarse.txt" />
     <Text Include="primalMeshParams.txt" />

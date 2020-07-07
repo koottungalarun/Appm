@@ -187,9 +187,6 @@
     <Text Include="primalMeshParams.txt">
       <Filter>Resource Files</Filter>
     </Text>
-    <Text Include="AppmSolverParams.txt">
-      <Filter>Resource Files</Filter>
-    </Text>
     <Text Include="scales.txt">
       <Filter>Resource Files</Filter>
     </Text>
@@ -197,6 +194,9 @@
       <Filter>Resource Files</Filter>
     </Text>
     <Text Include="mesh-coarse.txt">
+      <Filter>Resource Files</Filter>
+    </Text>
+    <Text Include="toDelete-AppmSolverParams.txt">
       <Filter>Resource Files</Filter>
     </Text>
   </ItemGroup>

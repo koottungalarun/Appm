@@ -7,6 +7,7 @@
 #include <iostream>
 #include <iomanip>
 #include <exception>
+#include <string>
 
 #include "PrimalMesh.h"
 #include "DualMesh.h"
@@ -39,6 +40,10 @@ public:
 	};
 	friend std::ostream & operator<<(std::ostream & os, const AppmSolver::MaxwellSolverType & obj);
 
+	enum class FluidInitType {
+		DEFAULT, UNIFORM, SHOCKTUBE
+	};
+	friend std::ostream & operator<<(std::ostream & os, const AppmSolver::FluidInitType & obj);
 
 	class SolverParameters {
 	public:
@@ -69,6 +74,10 @@ public:
 		const bool getEulerMaxwellCouplingEnabled() const;
 		void setOutputFrequency(const int n);
 		const int getOutputFrequency() const;
+		void setFluidInitType(const std::string & s);
+		const AppmSolver::FluidInitType getFluidInitType() const;
+		void setInitEfield(const Eigen::Vector3d & efield);
+		const Eigen::Vector3d getInitEfield() const;
 
 		friend std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters & obj);
 	private:
@@ -85,9 +94,10 @@ public:
 		bool isLorentzForceEnabled = false;
 
 		bool isMaxwellEnabled = false;
-		MaxwellSolverType maxwellSolverType = MaxwellSolverType::BiCGStab;
-		
+		MaxwellSolverType maxwellSolverType = MaxwellSolverType::BiCGStab;		
+		AppmSolver::FluidInitType fluidInitType = AppmSolver::FluidInitType::UNIFORM;
 
+		Eigen::Vector3d initEfield = Eigen::Vector3d::Zero();
 	};
 
 
@@ -154,7 +164,7 @@ private:
 
 
 	double lambdaSquare = 1.0;
-	int initType = 1;
+	//int initType = 1;
 	//bool isElectricLorentzForceActive = false;
 	//bool isMagneticLorentzForceActive = false;
 	bool isMomentumFluxActive = false;
@@ -218,7 +228,7 @@ private:
 	Eigen::SparseMatrix<double> getMagneticPermeabilityOperator();
 
 	void init_multiFluid(const std::string & filename);
-	void applyFluidInitializationType(const int initType);
+	void applyFluidInitializationType();
 
 	void init_SodShockTube(const double zRef);
 	void init_Uniformly(const double n, const double p, const Eigen::Vector3d u);
@@ -335,5 +345,16 @@ private:
 	const Eigen::VectorXd setVoltageBoundaryConditions(const double time) const;
 
 	const Species & getSpecies(const int idx) const;
+
 };
+
+/**
+* Trim white space of a string.
+* @see https://stackoverflow.com/a/17976541
+*/
+inline std::string trim(const std::string &s)
+{
+	auto  wsfront = std::find_if_not(s.begin(), s.end(), [](int c) {return std::isspace(c); });
+	return std::string(wsfront, std::find_if_not(s.rbegin(), std::string::const_reverse_iterator(wsfront), [](int c) {return std::isspace(c); }).base());
+}
 
