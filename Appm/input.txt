@@ -28,11 +28,11 @@ mesh: mesh-coarse.txt
 ### SOLVER
 ######################
 ### Initial conditions
-initFluidState: UNIFORM
-initEfield: 0 0 1
+initFluidState: TEST_FRICTION
+initEfield: 0 0 0
 #
 ### Simulation controls
-maxTime: 5
+maxTime: 1
 maxIterations: 100
 outputFrequency: 1
 #
@@ -51,7 +51,7 @@ isMaxwellEnabled: 0
 # Format: Symbol, name, massRatio, charge
 species: Ar, Argon, 1, 0
 species: Ar+, positive Ion, 1, 1
-species: Ar-, negative Ion, 1, -1
+species: Ar-, negative Ion, 2, -1
 #species: e, Electron, 1e-4, -1
 #
 #

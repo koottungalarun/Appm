@@ -16,6 +16,7 @@
 #include "Physics.h"
 #include "ScalingParameters.h"
 #include "Species.h"
+#include "FrictionModel.h"
 
 #include <Eigen/SparseLU>
 #include <Eigen/IterativeLinearSolvers> 	
@@ -41,7 +42,7 @@ public:
 	friend std::ostream & operator<<(std::ostream & os, const AppmSolver::MaxwellSolverType & obj);
 
 	enum class FluidInitType {
-		DEFAULT, UNIFORM, SHOCKTUBE
+		DEFAULT, UNIFORM, SHOCKTUBE, TEST_FRICTION
 	};
 	friend std::ostream & operator<<(std::ostream & os, const AppmSolver::FluidInitType & obj);
 
@@ -227,7 +228,7 @@ private:
 	Eigen::SparseMatrix<double> getElectricPermittivityOperator();
 	Eigen::SparseMatrix<double> getMagneticPermeabilityOperator();
 
-	void init_multiFluid(const std::string & filename);
+	void init_multiFluid();
 	void applyFluidInitializationType();
 
 	void init_SodShockTube(const double zRef);
@@ -345,6 +346,9 @@ private:
 	const Eigen::VectorXd setVoltageBoundaryConditions(const double time) const;
 
 	const Species & getSpecies(const int idx) const;
+
+	const double getCollisionFrequency(const int alpha, const int beta, const int cellIdx);
+	const double getReducedMass(const int alpha, const int beta);
 
 };
 

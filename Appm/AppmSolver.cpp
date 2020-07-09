@@ -43,7 +43,7 @@ void AppmSolver::init()
 		std::cout << "Number of dual cells is not equal to primal vertices" << std::endl;
 	}
 
-	init_multiFluid("particleParameters.txt");
+	init_multiFluid();
 
 	
 	const int nFluids = this->getNFluids();
@@ -618,7 +618,7 @@ Eigen::SparseMatrix<double> AppmSolver::getMagneticPermeabilityOperator()
 	return Mnu;
 }
 
-void AppmSolver::init_multiFluid(const std::string & filename)
+void AppmSolver::init_multiFluid()
 {
 	// Read parameter file
 	//assert(filename.size() > 4);
@@ -1193,10 +1193,13 @@ void AppmSolver::setFrictionSourceTerms()
 						continue; // skip if indices are equal, since they contribute nothing
 					}
 					// species interaction term
-					auto z_ab = 1; // assume a constant value for testing purpose
+					//auto z_ab = 1; // assume a constant value for testing purpose
+					// R_a -= n_a * n_b * (u_a - u_b) * z_ab;
 
 					// ... get friction force due to interaction of species Alpha and Beta
-					R_a -= n_a * n_b * (u_a - u_b) * z_ab;
+					auto m_ab = getReducedMass(alpha, beta);
+					auto nu_ab = getCollisionFrequency(alpha, beta, i);
+					R_a -= n_a * m_ab * nu_ab * (u_a - u_b);
 				} // end for each species B
 				auto w_a = u_a - u_avg; // Diffusion velocity w_a 
 				auto Q_a = u_a.dot(R_a); // Source term for energy equation due to friction
@@ -3940,6 +3943,51 @@ const Species & AppmSolver::getSpecies(const int idx) const
 	return speciesList[idx];
 }
 
+const double AppmSolver::getCollisionFrequency(const int alpha, const int beta, const int cellIdx)
+{
+	auto nFluids = getNFluids();
+	assert(alpha >= 0 && alpha < nFluids);
+	assert(beta >= 0 && beta < nFluids);
+	assert(cellIdx >= 0);
+
+	const Eigen::VectorXd stateA = fluidStates.col(cellIdx).segment(5 * alpha, 5);
+	const Eigen::VectorXd stateB = fluidStates.col(cellIdx).segment(5 * beta, 5);
+	const double n_b = stateB(0);
+
+	auto m_a = getSpecies(alpha).getMassRatio();
+	auto m_b = getSpecies(beta).getMassRatio();
+	auto m_ab = m_a * m_b / (m_a + m_b); // reduced mass
+	auto T_a = Physics::getTemperature(stateA, m_a); // local temperature of species A 
+	auto T_b = Physics::getTemperature(stateB, m_b); // local temperature of species B
+	auto T_ab = (m_a * T_b + m_b * T_a) / (m_a + m_b); // reduced temperature
+	auto u_therm_ab = std::sqrt(8 / M_PI * T_ab / m_ab); // thermal velocity associated to reduced temperature
+	
+	double nu_ab = 0;
+	if () {
+		nu_ab = n_b;
+	}
+	else {
+		auto Q_ab = 1; // average momentum transfer collision cross-section
+		nu_ab = 4. / 3. * n_b * u_therm_ab * Q_ab; // collision frequency
+	}
+
+	return nu_ab;
+}
+
+/** 
+* @return Get reduced mass of the interaction between fluid A and B.
+*/
+const double AppmSolver::getReducedMass(const int alpha, const int beta)
+{
+	auto nFluids = getNFluids();
+	assert(alpha >= 0 && alpha < nFluids);
+	assert(beta >= 0 && beta < nFluids);
+	auto m_a = getSpecies(alpha).getMassRatio();
+	auto m_b = getSpecies(beta).getMassRatio();
+	auto m_ab = m_a * m_b / (m_a + m_b);
+	return m_ab;
+}
+
 std::ostream & operator<<(std::ostream & os, const AppmSolver::MaxwellSolverType & obj)
 {
 	switch (obj) {
@@ -4074,6 +4122,9 @@ void AppmSolver::SolverParameters::setFluidInitType(const std::string & s)
 	if (trimmed == "UNIFORM") {
 		this->fluidInitType = FluidInitType::UNIFORM;
 	}
+	if (trimmed == "TEST_FRICTION") {
+		this->fluidInitType = FluidInitType::TEST_FRICTION;
+	}
 	if (this->fluidInitType == FluidInitType::DEFAULT) {
 		std::cout << "Warning: it may be that the FluidInitType is not correctly read." << std::endl;
 		std::cout << "Value read from imput file: " << trimmed << std::endl;
@@ -4131,6 +4182,9 @@ std::ostream & operator<<(std::ostream & os, const AppmSolver::FluidInitType & o
 	case AppmSolver::FluidInitType::SHOCKTUBE:
 		os << "SHOCKTUBE";
 		break;
+
+	case AppmSolver::FluidInitType::TEST_FRICTION:
+		os << "TEST_FRICTION";
 
 	default:
 		os << "unknown";
