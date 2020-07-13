@@ -33,7 +33,7 @@ initEfield: 0 0 0
 #
 ### Simulation controls
 maxTime: 1
-maxIterations: 100
+maxIterations: 2
 outputFrequency: 1
 #
 ### numerics
@@ -49,14 +49,19 @@ isMaxwellEnabled: 0
 ### SPECIES
 ######################
 # Format: Symbol, name, massRatio, charge
+species: e, Electron, 1e-4, -1
 species: Ar, Argon, 1, 0
-species: Ar+, positive Ion, 1, 1
-species: Ar-, negative Ion, 2, -1
-#species: e, Electron, 1e-4, -1
+species: Ar+, Ion, 1, 1
 #
 #
 ######################
 ### REACTIONS
 ######################
+collision: Ar-Ar+
+# reaction.C12
+# reaction.C13
+# reaction.C23
+# reaction.R12
+# reaction.R13
 
 

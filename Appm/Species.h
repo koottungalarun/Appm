@@ -19,6 +19,7 @@ public:
 	const int getCharge() const;
 	const double getMassRatio() const;
 	const std::string getName() const;
+	const std::string getSymbol() const;
 
 private:
 	std::string symbol;

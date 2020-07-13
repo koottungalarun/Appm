@@ -99,10 +99,16 @@
     <ClInclude Include="Species.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="FrictionModel.h">
+    <ClInclude Include="InterpolationTable.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="InterpolationTable.h">
+    <ClInclude Include="ElasticCollision.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Ionization.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Recombination.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -188,10 +194,16 @@
     <ClCompile Include="Species.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="FrictionModel.cpp">
+    <ClCompile Include="InterpolationTable.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="InterpolationTable.cpp">
+    <ClCompile Include="ElasticCollision.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Ionization.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Recombination.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

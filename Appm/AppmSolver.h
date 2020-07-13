@@ -16,15 +16,15 @@
 #include "Physics.h"
 #include "ScalingParameters.h"
 #include "Species.h"
-#include "FrictionModel.h"
 
 #include <Eigen/SparseLU>
 #include <Eigen/IterativeLinearSolvers> 	
 #include <Eigen/PardisoSupport>
 
 #include <chrono>
-
 #include <stdexcept>
+
+#include "ElasticCollision.h"
 
 
 #define _RT_ONECELL 
@@ -79,9 +79,12 @@ public:
 		const AppmSolver::FluidInitType getFluidInitType() const;
 		void setInitEfield(const Eigen::Vector3d & efield);
 		const Eigen::Vector3d getInitEfield() const;
+		void setApParameter(const double lambdaSquare);
+		const double getApParameter() const;
 
 		friend std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters & obj);
 	private:
+		double lambdaSq = 1;
 		int maxIterations = 0;
 		double maxTime = 0;
 		double timestepSizeMax = 1;
@@ -112,7 +115,7 @@ public:
 	void setSolverParameters(const AppmSolver::SolverParameters & solverParams);
 	void setMeshParameters(const PrimalMesh::PrimalMeshParams & meshParams);
 	void setSpecies(const std::vector<Species> & speciesList);
-
+	void setElasticCollisions(const std::vector<ElasticCollision> & list);
 
 protected:
 	PrimalMesh primalMesh;
@@ -128,14 +131,18 @@ private:
 	std::vector<Species> speciesList;
 	ScalingParameters scalingParameters;
 
-	struct ParticleParameters {
-		std::string name = "neutral";
-		double mass = 1.0;
-		int electricCharge = 0;
-	};
+	//struct ParticleParameters {
+	//	std::string name = "neutral";
+	//	double mass = 1.0;
+	//	int electricCharge = 0;
+	//};
 	//std::vector<ParticleParameters> particleParams;
 
-
+	// List of elastic collisions
+	std::vector<ElasticCollision> elasticCollisions;
+	Eigen::MatrixXd elCollMomSourceTerm;
+	Eigen::VectorXd elCollEnergySourceTerm;
+	void setElasticCollisionSourceTerms();
 
 	//struct AppmParameters {
 	//	int maxIterations = 0;
@@ -161,10 +168,13 @@ private:
 	/** Get number of fluids. */
 	const int getNFluids() const;
 
+	/** */
+	const Eigen::VectorXd getState(const int cIdx, const int fluidx) const;
+
 	bool isStateWrittenToOutput = false;
 
 
-	double lambdaSquare = 1.0;
+	//double lambdaSquare = 1.0;
 	//int initType = 1;
 	//bool isElectricLorentzForceActive = false;
 	//bool isMagneticLorentzForceActive = false;
@@ -236,6 +246,8 @@ private:
 	void init_Explosion(const Eigen::Vector3d refPos, const double radius);
 	void init_testcase_frictionTerm();
 	void init_ignitionWire();
+	void init_fluid_frictonTest();
+
 	
 	void set_Efield_uniform(const Eigen::Vector3d direction);
 	void set_Bfield_azimuthal();

@@ -6,6 +6,7 @@
 
 class InterpolationTable
 {
+public:
 	InterpolationTable();
 	InterpolationTable(const std::vector<double> x, const std::vector<double> y);
 	~InterpolationTable();

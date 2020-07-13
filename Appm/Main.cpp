@@ -50,6 +50,7 @@ void Main::run()
 	appm.setSolverParameters(solverParameters);
 	appm.setMeshParameters(primalMeshParams);
 	appm.setSpecies(speciesList);
+	appm.setElasticCollisions(elasticCollisions);
 	appm.run();	
 }
 
@@ -62,6 +63,24 @@ void Main::setInputFilename(const std::string & filename)
 	this->inputFilename = filename;
 }
 
+std::vector<ElasticCollision> Main::setCollisionList(const std::vector<std::string> & inputList)
+{
+	std::vector<ElasticCollision> list = std::vector<ElasticCollision>();
+	for (auto tag : inputList) {
+		int pos = tag.find('-');
+		const std::string tagA = tag.substr(0, pos);
+		const std::string tagB = tag.substr(pos + 1);
+		int idxA = findSpeciesIndex(tagA);
+		int idxB = findSpeciesIndex(tagB);
+
+		std::stringstream ss;
+		ss << "collisions/elastic/" << tag << ".dat";
+		const std::string filename = ss.str();
+		list.push_back(ElasticCollision(filename, idxA, idxB));
+	}
+	return list;
+}
+
 void Main::readInputFile()
 {
 	assert(inputFilename.size() > 0);
@@ -71,6 +90,9 @@ void Main::readInputFile()
 		exit(-1);
 	}
 	const std::string speciesPrefix = "species";
+	const std::string collisionPrefix = "collision";
+	std::vector<std::string> collisionInputList;
+
 	const char delim = ':';
 	std::string line;
 	while (std::getline(file, line)) {
@@ -80,6 +102,11 @@ void Main::readInputFile()
 		if (line.front() == '#') { continue; }
 
 		const int pos = line.find(delim); // position of delimiter
+		if (pos == std::string::npos) {
+			std::cout << "delimiter (" << delim << ") not found in text line: " << std::endl;
+			std::cout << line << std::endl;
+			exit(-1);
+		}
 		const std::string tag = line.substr(0, pos);    // tag
 		const std::string value = line.substr(pos + 1); // value
 		assert(value.size() > 0);
@@ -121,6 +148,9 @@ void Main::readInputFile()
 		if (tag.substr(0,speciesPrefix.size()) == speciesPrefix) {
 			speciesList.push_back(Species(value));
 		}
+		if (tag.substr(0, collisionPrefix.size()) == collisionPrefix) {
+			collisionInputList.push_back(trim(value));
+		}
 		if (tag == "initFluidState") {
 			solverParameters.setFluidInitType(value);
 		}
@@ -131,6 +161,7 @@ void Main::readInputFile()
 			solverParameters.setInitEfield(Eigen::Vector3d(x, y, z));
 		}
 	}
+	elasticCollisions = setCollisionList(collisionInputList);
 
 	std::cout << solverParameters << std::endl;
 
@@ -165,4 +196,17 @@ std::string Main::showVersionInfo()
 	// Version of HDF5 library
 	ss << H5_VERS_INFO;
 	return ss.str();
+}
+
+const int Main::findSpeciesIndex(const std::string & tag)
+{
+	int result = -1;
+	for (int i = 0; i < speciesList.size(); i++) {
+		Species & species = speciesList[i];
+		if (species.getSymbol() == tag) {
+			result = i;
+		}
+	}
+	assert(result >= 0);
+	return result;
 }

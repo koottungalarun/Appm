@@ -64,6 +64,12 @@ const std::string Species::getName() const
 	return this->name;
 }
 
+const std::string Species::getSymbol() const
+{
+	assert(this->symbol.size() > 0);
+	return this->symbol;
+}
+
 std::ostream & operator<<(std::ostream & os, const Species & obj)
 {
 	os << "name:       " << obj.name <<  std::endl;

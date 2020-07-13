@@ -11,7 +11,8 @@ AppmSolver::~AppmSolver()
 {
 }
 
-void AppmSolver::init() 
+
+void AppmSolver::init()
 {
 	// Show solver parameters
 	std::cout << solverParams << std::endl;
@@ -205,6 +206,8 @@ void AppmSolver::run()
 			// Set explicit fluid source terms
 			setMagneticLorentzForceSourceTerms();
 			setFrictionSourceTerms();
+			//setElasticCollisionSourceTerms();
+			//setInelasticCollisionSourceTerms();
 			//setRadiationSource(); // <<<----  TODO
 
 			// Set explicit face fluxes
@@ -350,6 +353,119 @@ void AppmSolver::run()
 	// Therefore, the mesh data for vertices, edges, and faces, are separated from the volume data.
 }
 
+
+void AppmSolver::setElasticCollisionSourceTerms()
+{
+	if (!solverParams.getFluidEnabled()) {
+		return;
+	}
+	// Number of elastic collisions
+	auto nElColls = elasticCollisions.size();
+	if (nElColls <= 0) {
+		return;
+	}
+	// Number of dual cells
+	auto nCells = dualMesh.getNumberOfCells();
+	assert(elCollMomSourceTerm.rows() == nCells);
+	assert(elCollMomSourceTerm.cols() == getNFluids());
+	assert(elCollMomSourceTerm.size() == elCollEnergySourceTerm.size());
+	elCollMomSourceTerm.setZero();
+	elCollEnergySourceTerm.setZero();
+
+	// Reduced temperature for each collision and each fluid cell
+	Eigen::MatrixXd Tab(nElColls, nCells);
+	Tab.setZero();
+
+	// Get reduced temperature for each fluid cell
+	for (int i = 0; i < nCells; i++) {
+		const Cell * cell = dualMesh.getCell(i);
+		if (cell->getType() != Cell::Type::FLUID) {
+			// skip non-fluid cells
+			continue;
+		}
+		// get reduced temperature for each collision
+		for (int collisionIdx = 0; collisionIdx < nElColls; collisionIdx++) {
+			ElasticCollision & coll = elasticCollisions[collisionIdx];
+			const int idxA = coll.getFluidIdxA();
+			const int idxB = coll.getFluidIdxB();
+			const Eigen::VectorXd stateA = getState(i, idxA);
+			const Eigen::VectorXd stateB = getState(i, idxB);
+
+			const double ma = getSpecies(idxA).getMassRatio();
+			const double mb = getSpecies(idxB).getMassRatio();
+			const double Ta = Physics::getTemperature(stateA, ma);
+			const double Tb = Physics::getTemperature(stateB, mb);
+
+			const double Treduced = (ma * Tb + mb * Ta) / (ma + mb);
+			Tab(collisionIdx, i) = Treduced;
+		}
+	}
+
+	//Eigen::MatrixXd Qbar11(nElColls, nCells);
+	Eigen::VectorXd Qbar11;
+	Eigen::VectorXd reducedMass(nElColls);
+	for (int collIdx = 0; collIdx < nElColls; collIdx++) {
+		ElasticCollision & coll = elasticCollisions[collIdx];
+		Qbar11 = coll.getAvgMomCrossSection(Tab.row(collIdx));
+
+		// get reduced mass of this collision
+		const int idxA = coll.getFluidIdxA();
+		const int idxB = coll.getFluidIdxB();
+		const double ma = getSpecies(idxA).getMassRatio();
+		const double mb = getSpecies(idxB).getMassRatio();
+		const double mab = ma * mb / (ma + mb);
+		reducedMass(collIdx) = mab;
+
+		// number densities of fluid A and B
+		Eigen::VectorXd na = fluidStates.row(5 * idxA);
+		Eigen::VectorXd nb = fluidStates.row(5 * idxB);
+
+		// velocity of fluid A and B
+		Eigen::MatrixXd ua = fluidStates.block(5 * idxA + 1, 0, 3, nCells);
+		Eigen::MatrixXd ub = fluidStates.block(5 * idxB + 1, 0, 3, nCells);
+
+		// factor in source term
+		Eigen::VectorXd reducedVelocity;
+		reducedVelocity = (1. / M_PI * 8. / mab * Tab.row(collIdx).array()).sqrt();
+
+		// Momentum rate of change due to elastic collisions
+		Eigen::VectorXd temp_ab(na.size());
+		temp_ab = -na.array() * nb.array();
+		temp_ab *= reducedMass(collIdx) * 4. / 3. * reducedVelocity;
+		temp_ab *= Qbar11;
+
+
+		assert(temp_ab.cols() == 1);
+		assert(temp_ab.size() == nCells);
+
+		// for each fluid cell ...
+		for (int i = 0; i < nCells; i++) {
+			if (dualMesh.getCell(i)->getType() == Cell::Type::FLUID) {
+				const Eigen::Vector3d R_local = temp_ab(i) * (ua.col(i) - ub.col(i));
+
+				// ... apply source term to fluid A
+				elCollMomSourceTerm.col(i).segment(3 * idxA, 3) -= R_local;
+				elCollEnergySourceTerm(idxA, i) -= ua.col(i).dot(R_local);
+
+				// ... apply source term to fluid B
+				elCollMomSourceTerm.col(i).segment(3 * idxB, 3) += R_local;
+				elCollEnergySourceTerm(idxA, i) += ub.col(i).dot(R_local);
+			}
+		}
+	}
+
+	// Apply elastic collision sources to fluid source term
+	assert(elCollMomSourceTerm.cols() == getNFluids());
+	assert(elCollMomSourceTerm.rows() == 3);
+	for (int i = 0; i < nCells; i++) {
+		for (int fluidx = 0; fluidx < fluidx; fluidx++) {
+			fluidSources.col(i).segment(5 * fluidx + 1, 3) += elCollMomSourceTerm.col(i).segment(3 * fluidx + 1, 3);
+			fluidSources(5 * fluidx + 4, i) = elCollEnergySourceTerm(fluidx, i);
+		}
+	}
+}
+
+
 void AppmSolver::setSolverParameters(const AppmSolver::SolverParameters & solverParams)
 {
 	this->solverParams = solverParams;
@@ -367,6 +483,11 @@ void AppmSolver::setSpecies(const std::vector<Species>& speciesList)
 	//	this->speciesList.
 	//}
 	this->speciesList = speciesList;
+}
+
+void AppmSolver::setElasticCollisions(const std::vector<ElasticCollision>& list)
+{
+	this->elasticCollisions = list;
 }
 
 void AppmSolver::debug_checkCellStatus() const
@@ -405,6 +526,13 @@ void AppmSolver::debug_checkCellStatus() const
 const int AppmSolver::getNFluids() const
 {
 	return speciesList.size();
+}
+
+const Eigen::VectorXd AppmSolver::getState(const int cIdx, const int fluidx) const
+{
+	assert(cIdx >= 0 && cIdx < dualMesh.getNumberOfCells());
+	assert(fluidx >= 0 && fluidx < getNFluids());
+	return fluidStates.col(cIdx).segment(5 * fluidx, 5);
 }
 
 //std::string AppmSolver::printSolverParameters() const
@@ -496,7 +624,8 @@ void AppmSolver::init_maxwellStates()
 	//Eigen::sparseMatrixToFile(P, "P.dat");
 	Eigen::sparseMatrixToFile(P, "/P", h5writer);
 
-	M1 = lambdaSquare * Q.transpose() * Meps * Q;
+	const double lambdaSq = solverParams.getApParameter();
+	M1 = lambdaSq * Q.transpose() * Meps * Q;
 	M1.makeCompressed();
 
 	const Eigen::SparseMatrix<double> Mnu_inner = Mnu.topLeftCorner(nPfi, nPfi);
@@ -722,6 +851,13 @@ void AppmSolver::applyFluidInitializationType()
 	}
 	break;
 
+	case FluidInitType::TEST_FRICTION:
+	{
+		std::cout << "Initialize fluid states: " << "Test Friction" << std::endl;
+		init_fluid_frictonTest();
+	}
+	break;
+
 	//case FluidInitType::DEFAULT:
 	//{
 	//	std::cout << "Initialize fluid states: " << "Explosion" << std::endl;
@@ -744,7 +880,7 @@ void AppmSolver::applyFluidInitializationType()
 	//break;
 
 	default:
-		std::cout << "InitType unknown: " << initType << std::endl;
+		std::cout << "FluidInitType not implemented: " << initType << std::endl;
 		exit(-1);
 	}
 }
@@ -927,11 +1063,53 @@ void AppmSolver::init_ignitionWire()
 		}
 	}
 }
+
+/**
+* Initialize all fluids with zero velocity, but the first charge-neutral fluid with velocity u = 1.
+*/
+void AppmSolver::init_fluid_frictonTest()
+{
+	const int nCells = dualMesh.getNumberOfCells();
+	const int nFluids = getNFluids();
+
+	// index of first fluid that is charge-neutral
+	int idxN = -1;
+	for (int fluidx = 0; fluidx < nFluids; fluidx++) {
+		if (getSpecies(fluidx).getCharge() == 0) {
+			idxN = fluidx;
+			break;
+		}
+	}
+	assert(idxN >= 0);
+	std::cout << "Fluid with nonzero velocity: " << getSpecies(idxN).getName() << std::endl;
+
+	const double n = 1;
+	const double p = 1;
+	const Eigen::Vector3d uZero = Eigen::Vector3d::Zero();
+	const Eigen::Vector3d uNonZero = Eigen::Vector3d::UnitZ();
+
+	for (int fluidx = 0; fluidx < nFluids; fluidx++) {
+		const double massRatio = getSpecies(fluidx).getMassRatio();
+		Eigen::VectorXd stateZero = Physics::primitive2state(massRatio, n, p, uZero);
+		Eigen::VectorXd stateNonZero = Physics::primitive2state(massRatio, n, p, uNonZero);
+
+		for (int i = 0; i < nCells; i++) {
+			if (fluidx == idxN) {
+				fluidStates.col(i).segment(5 * fluidx, 5) = stateNonZero;
+			}
+			else {
+				fluidStates.col(i).segment(5 * fluidx, 5) = stateZero;
+			}
+		}
+	}
+
+	std::cout << "Number of elastic collisions: " << elasticCollisions.size() << std::endl;
+}
+
 /**
 * For Testing purposes. 
 * Set E_h uniform in a given direction. 
 */
-
 void AppmSolver::set_Efield_uniform(const Eigen::Vector3d direction)
 {
 	E_h.setZero();
@@ -3963,13 +4141,14 @@ const double AppmSolver::getCollisionFrequency(const int alpha, const int beta, 
 	auto u_therm_ab = std::sqrt(8 / M_PI * T_ab / m_ab); // thermal velocity associated to reduced temperature
 	
 	double nu_ab = 0;
-	if () {
-		nu_ab = n_b;
-	}
-	else {
-		auto Q_ab = 1; // average momentum transfer collision cross-section
-		nu_ab = 4. / 3. * n_b * u_therm_ab * Q_ab; // collision frequency
-	}
+	// TODO
+	//if () {
+	//	nu_ab = n_b;
+	//}
+	//else {
+	//	auto Q_ab = 1; // average momentum transfer collision cross-section
+	//	nu_ab = 4. / 3. * n_b * u_therm_ab * Q_ab; // collision frequency
+	//}
 
 	return nu_ab;
 }
@@ -4148,6 +4327,18 @@ const Eigen::Vector3d AppmSolver::SolverParameters::getInitEfield() const
 	return this->initEfield;
 }
 
+void AppmSolver::SolverParameters::setApParameter(const double lambdaSquare)
+{
+	assert(lambdaSquare > 0);
+	assert(lambdaSquare <= 1.0);
+	this->lambdaSq = lambdaSquare;
+}
+
+const double AppmSolver::SolverParameters::getApParameter() const
+{
+	return this->lambdaSq;
+}
+
 std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters & obj)
 {
 	os << "APPM Solver Parameters:" << std::endl;
@@ -4158,12 +4349,13 @@ std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters 
 	os << "outputFrequency: " << obj.outputFrequency << std::endl;
 	os << "isEulerMaxwellCouplingEnabled: " << obj.isEulerMaxwellCouplingEnabled << std::endl;
 	os << "isFluidEnabled: " << obj.isFluidEnabled << std::endl;
-	os << "fluidInitType: " << obj.fluidInitType << std::endl;
+	os << "fluidInitState: " << obj.fluidInitType << std::endl;
 	os << "initEfield: " << obj.initEfield.transpose() << std::endl;
 	os << "isMassfluxSchemeImplicit: " << obj.isMassFluxSchemeImplicit << std::endl;
 	os << "isFrictionEnabled: " << obj.isFrictionEnabled << std::endl;
 	os << "isMaxwellEnabled: " << obj.isMaxwellEnabled << std::endl;
 	os << "maxwellSolverType: " << obj.maxwellSolverType << std::endl;
+	os << "AP parameter: " << obj.lambdaSq << std::endl;
 	os << "=======================" << std::endl;
 	return os;
 }
@@ -4185,6 +4377,7 @@ std::ostream & operator<<(std::ostream & os, const AppmSolver::FluidInitType & o
 
 	case AppmSolver::FluidInitType::TEST_FRICTION:
 		os << "TEST_FRICTION";
+		break;
 
 	default:
 		os << "unknown";
