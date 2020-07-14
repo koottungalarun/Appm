@@ -11,6 +11,7 @@ class ElasticCollision
 public:
 	ElasticCollision();
 	ElasticCollision(const std::string & filename, const int idxA, const int idxB);
+	ElasticCollision(const std::string & filename, const int idxA, const int idxB, const double Tscale, const double crossSecScale);
 	~ElasticCollision();
 
 	const int getFluidIdxA() const;
@@ -23,8 +24,7 @@ public:
 private:
 	int fluidxA = -1;
 	int fluidxB = -1;
-	InterpolationTable table;
+	InterpolationTable * table = nullptr;
 
-	void readFile(const std::string & filename);
 };
 

@@ -8,6 +8,31 @@ int main() {
 	std::cout << "*    APPM             *" << std::endl;
 	std::cout << "***********************" << std::endl;
 
+	//int N = 10;
+	//Eigen::VectorXd x(N), y(N);
+	//const double dx = 1. / (N - 1);
+	//for (int i = 0; i < N; i++) {
+	//	x(i) = i * dx;
+	//}
+	//y = x.array().pow(2);
+
+	//InterpolationTable table(x, y);
+	//Eigen::VectorXd sites(N);
+	//sites = Eigen::VectorXd::LinSpaced(N, 0.0, 1.0);
+	//Eigen::VectorXd result;
+	//Eigen::MatrixXd data(sites.rows(), 2);
+
+	//result = table.interpolate(sites);
+	//data.col(0) = y;
+	//data.col(1) = result;
+	//std::cout << data << std::endl;
+
+	//result = table.interpolate(sites);
+	//data.col(0) = y;
+	//data.col(1) = result;
+	//std::cout << data << std::endl;
+	//return EXIT_SUCCESS;
+
 	const std::string inputFilename = "input.txt";
 
 	Main main;
@@ -39,6 +64,8 @@ Main::~Main()
 void Main::run()
 {
 	readInputFile();
+	//ElasticCollision & coll = elasticCollisions.front();
+	//coll.getAvgMomCrossSection(T);
 
 	PrimalMesh::PrimalMeshParams primalMeshParams;
 	//primalMeshParams = PrimalMesh::PrimalMeshParams("primalMeshParams.txt");
@@ -50,7 +77,7 @@ void Main::run()
 	appm.setSolverParameters(solverParameters);
 	appm.setMeshParameters(primalMeshParams);
 	appm.setSpecies(speciesList);
-	appm.setElasticCollisions(elasticCollisions);
+	appm.setElasticCollisions(elasticCollisionList);
 	appm.run();	
 }
 
@@ -61,24 +88,6 @@ void Main::setInputFilename(const std::string & filename)
 		exit(-1);
 	}
 	this->inputFilename = filename;
-}
-
-std::vector<ElasticCollision> Main::setCollisionList(const std::vector<std::string> & inputList)
-{
-	std::vector<ElasticCollision> list = std::vector<ElasticCollision>();
-	for (auto tag : inputList) {
-		int pos = tag.find('-');
-		const std::string tagA = tag.substr(0, pos);
-		const std::string tagB = tag.substr(pos + 1);
-		int idxA = findSpeciesIndex(tagA);
-		int idxB = findSpeciesIndex(tagB);
-
-		std::stringstream ss;
-		ss << "collisions/elastic/" << tag << ".dat";
-		const std::string filename = ss.str();
-		list.push_back(ElasticCollision(filename, idxA, idxB));
-	}
-	return list;
 }
 
 void Main::readInputFile()
@@ -161,7 +170,7 @@ void Main::readInputFile()
 			solverParameters.setInitEfield(Eigen::Vector3d(x, y, z));
 		}
 	}
-	elasticCollisions = setCollisionList(collisionInputList);
+	this->elasticCollisionList = collisionInputList;
 
 	std::cout << solverParameters << std::endl;
 
@@ -198,15 +207,3 @@ std::string Main::showVersionInfo()
 	return ss.str();
 }
 
-const int Main::findSpeciesIndex(const std::string & tag)
-{
-	int result = -1;
-	for (int i = 0; i < speciesList.size(); i++) {
-		Species & species = speciesList[i];
-		if (species.getSymbol() == tag) {
-			result = i;
-		}
-	}
-	assert(result >= 0);
-	return result;
-}

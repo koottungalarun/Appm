@@ -1,5 +1,8 @@
 #pragma once
 
+#define _USE_MATH_DEFINES
+#include <cmath>
+
 #include <iostream>
 #include <vector>
 #include <string>
@@ -17,7 +20,6 @@ public:
 	void run();
 
 	void setInputFilename(const std::string & filename);
-	std::vector<ElasticCollision> setCollisionList(const std::vector<std::string> & inputList);
 	void readInputFile();
 
 private:
@@ -27,12 +29,10 @@ private:
 	std::string meshFilename;
 
 	std::vector<Species> speciesList;
-	std::vector<ElasticCollision> elasticCollisions;
+	//std::vector<ElasticCollision> elasticCollisions;
+	std::vector<std::string> elasticCollisionList;
 
 	AppmSolver::SolverParameters solverParameters;
-
-
-	const int findSpeciesIndex(const std::string & tag);
 
 	/**
 	* Trim white space of a string.

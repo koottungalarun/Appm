@@ -115,7 +115,7 @@ public:
 	void setSolverParameters(const AppmSolver::SolverParameters & solverParams);
 	void setMeshParameters(const PrimalMesh::PrimalMeshParams & meshParams);
 	void setSpecies(const std::vector<Species> & speciesList);
-	void setElasticCollisions(const std::vector<ElasticCollision> & list);
+	void setElasticCollisions(const std::vector<std::string> & list);
 
 protected:
 	PrimalMesh primalMesh;
@@ -139,9 +139,7 @@ private:
 	//std::vector<ParticleParameters> particleParams;
 
 	// List of elastic collisions
-	std::vector<ElasticCollision> elasticCollisions;
-	Eigen::MatrixXd elCollMomSourceTerm;
-	Eigen::VectorXd elCollEnergySourceTerm;
+	std::vector<ElasticCollision*> elasticCollisions;
 	void setElasticCollisionSourceTerms();
 
 	//struct AppmParameters {
@@ -358,6 +356,7 @@ private:
 	const Eigen::VectorXd setVoltageBoundaryConditions(const double time) const;
 
 	const Species & getSpecies(const int idx) const;
+	const int getSpeciesIndex(const std::string & tag);
 
 	const double getCollisionFrequency(const int alpha, const int beta, const int cellIdx);
 	const double getReducedMass(const int alpha, const int beta);

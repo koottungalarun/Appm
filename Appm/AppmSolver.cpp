@@ -9,11 +9,19 @@ AppmSolver::AppmSolver()
 
 AppmSolver::~AppmSolver()
 {
+	for (int i = elasticCollisions.size() - 1; i >= 0; i--) {
+		delete elasticCollisions[i];
+		elasticCollisions[i] = nullptr;
+	}
 }
 
 
 void AppmSolver::init()
 {
+	// Read file with scaling parameters
+	scalingParameters = ScalingParameters("scales.txt");
+
+
 	// Show solver parameters
 	std::cout << solverParams << std::endl;
 
@@ -30,7 +38,6 @@ void AppmSolver::init()
 	this->timeFile = std::ofstream("timesteps.dat");
 
 	isStateWrittenToOutput = true;
-	scalingParameters = ScalingParameters("scales.txt");
 	//readParameters("AppmSolverParams.txt");
 	init_meshes(this->primalMeshParams);  // Initialize primal and dual meshes
 	if (primalMesh.getNumberOfCells() == 0) {
@@ -205,8 +212,8 @@ void AppmSolver::run()
 
 			// Set explicit fluid source terms
 			setMagneticLorentzForceSourceTerms();
-			setFrictionSourceTerms();
-			//setElasticCollisionSourceTerms();
+			//setFrictionSourceTerms();
+			setElasticCollisionSourceTerms();
 			//setInelasticCollisionSourceTerms();
 			//setRadiationSource(); // <<<----  TODO
 
@@ -364,30 +371,33 @@ void AppmSolver::setElasticCollisionSourceTerms()
 	if (nElColls <= 0) {
 		return;
 	}
+	
 	// Number of dual cells
 	auto nCells = dualMesh.getNumberOfCells();
-	assert(elCollMomSourceTerm.rows() == nCells);
-	assert(elCollMomSourceTerm.cols() == getNFluids());
-	assert(elCollMomSourceTerm.size() == elCollEnergySourceTerm.size());
+
+	// Check size and reset source terms
+	const int nFluids = getNFluids();
+	Eigen::MatrixXd elCollMomSourceTerm(3*nFluids, nCells);
 	elCollMomSourceTerm.setZero();
+	Eigen::MatrixXd elCollEnergySourceTerm(nFluids, nCells);
 	elCollEnergySourceTerm.setZero();
 
 	// Reduced temperature for each collision and each fluid cell
 	Eigen::MatrixXd Tab(nElColls, nCells);
 	Tab.setZero();
 
-	// Get reduced temperature for each fluid cell
+	// Get reduced temperature for each fluid cell ...
 	for (int i = 0; i < nCells; i++) {
 		const Cell * cell = dualMesh.getCell(i);
 		if (cell->getType() != Cell::Type::FLUID) {
 			// skip non-fluid cells
 			continue;
 		}
-		// get reduced temperature for each collision
+		// ... and each collision
 		for (int collisionIdx = 0; collisionIdx < nElColls; collisionIdx++) {
-			ElasticCollision & coll = elasticCollisions[collisionIdx];
-			const int idxA = coll.getFluidIdxA();
-			const int idxB = coll.getFluidIdxB();
+			ElasticCollision * coll = elasticCollisions[collisionIdx];
+			const int idxA = coll->getFluidIdxA();
+			const int idxB = coll->getFluidIdxB();
 			const Eigen::VectorXd stateA = getState(i, idxA);
 			const Eigen::VectorXd stateB = getState(i, idxB);
 
@@ -401,20 +411,27 @@ void AppmSolver::setElasticCollisionSourceTerms()
 		}
 	}
 
-	//Eigen::MatrixXd Qbar11(nElColls, nCells);
-	Eigen::VectorXd Qbar11;
-	Eigen::VectorXd reducedMass(nElColls);
+	// Compute rate of change in momentum and energy due to collisions 
 	for (int collIdx = 0; collIdx < nElColls; collIdx++) {
-		ElasticCollision & coll = elasticCollisions[collIdx];
-		Qbar11 = coll.getAvgMomCrossSection(Tab.row(collIdx));
+		ElasticCollision * coll = elasticCollisions[collIdx];
+		Eigen::VectorXd T = Tab.row(collIdx);
+		//std::cout << "T size:    " << T.rows() << " x " << T.cols() << std::endl;
+		Eigen::VectorXd Qbar11 = coll->getAvgMomCrossSection(T);
+		//assert(nElColls == 1);
+		//std::ofstream file("Qbar11.dat");
+		//Eigen::MatrixXd outputMat(Qbar11.rows(), 2);
+		//std::cout << "Tab size:    " << Tab.rows() << " x " << Tab.cols() << std::endl;
+		//std::cout << "Qbar11 size: " << Qbar11.rows() << " x " << Qbar11.cols() << std::endl;
+		//outputMat.col(0) = T;
+		//outputMat.col(1) = Qbar11;
+		//file << outputMat << std::endl;
 
 		// get reduced mass of this collision
-		const int idxA = coll.getFluidIdxA();
-		const int idxB = coll.getFluidIdxB();
+		const int idxA = coll->getFluidIdxA();
+		const int idxB = coll->getFluidIdxB();
 		const double ma = getSpecies(idxA).getMassRatio();
 		const double mb = getSpecies(idxB).getMassRatio();
 		const double mab = ma * mb / (ma + mb);
-		reducedMass(collIdx) = mab;
 
 		// number densities of fluid A and B
 		Eigen::VectorXd na = fluidStates.row(5 * idxA);
@@ -426,15 +443,17 @@ void AppmSolver::setElasticCollisionSourceTerms()
 
 		// factor in source term
 		Eigen::VectorXd reducedVelocity;
-		reducedVelocity = (1. / M_PI * 8. / mab * Tab.row(collIdx).array()).sqrt();
+		reducedVelocity = (1. / M_PI * 8. / mab * T.array()).sqrt();
 
-		// Momentum rate of change due to elastic collisions
+		// Momentum rate of change due to elastic collisions;
+		// temp_ab = na * mab * tau_ab^-1
 		Eigen::VectorXd temp_ab(na.size());
 		temp_ab = -na.array() * nb.array();
-		temp_ab *= reducedMass(collIdx) * 4. / 3. * reducedVelocity;
-		temp_ab *= Qbar11;
+		//std::cout << "temp_ab size:    " << temp_ab.rows() << " x " << temp_ab.cols() << std::endl;
+		//std::cout << "reducedVel size:    " << reducedVelocity.rows() << " x " << reducedVelocity.cols() << std::endl;
+		temp_ab = temp_ab.array() * (mab * 4. / 3. * reducedVelocity.array() * Qbar11.array());
 
-
+		// check data size
 		assert(temp_ab.cols() == 1);
 		assert(temp_ab.size() == nCells);
 
@@ -455,12 +474,10 @@ void AppmSolver::setElasticCollisionSourceTerms()
 	}
 
 	// Apply elastic collision sources to fluid source term
-	assert(elCollMomSourceTerm.cols() == getNFluids());
-	assert(elCollMomSourceTerm.rows() == 3);
 	for (int i = 0; i < nCells; i++) {
 		for (int fluidx = 0; fluidx < fluidx; fluidx++) {
-			fluidSources.col(i).segment(5 * fluidx + 1, 3) += elCollMomSourceTerm.col(i).segment(3 * fluidx + 1, 3);
-			fluidSources(5 * fluidx + 4, i) = elCollEnergySourceTerm(fluidx, i);
+			fluidSources.col(i).segment(5 * fluidx + 1, 3) += elCollMomSourceTerm.col(i).segment(3 * fluidx, 3);
+			fluidSources(5 * fluidx + 4, i) += elCollEnergySourceTerm(fluidx, i);
 		}
 	}
 }
@@ -478,16 +495,33 @@ void AppmSolver::setMeshParameters(const PrimalMesh::PrimalMeshParams & meshPara
 
 void AppmSolver::setSpecies(const std::vector<Species>& speciesList)
 {
-	//this->speciesList = std::vector<Species>();
-	//for (auto species : speciesList) {
-	//	this->speciesList.
-	//}
 	this->speciesList = speciesList;
 }
 
-void AppmSolver::setElasticCollisions(const std::vector<ElasticCollision>& list)
+void AppmSolver::setElasticCollisions(const std::vector<std::string> & list)
 {
-	this->elasticCollisions = list;
+	const double Tscale = scalingParameters.getTemperatureScale();
+	const double nScale = scalingParameters.getNumberDensityScale();
+	const double xScale = scalingParameters.getLengthScale();
+	assert(nScale > 0);
+	assert(xScale > 0);
+	const double crossSectionScale = 1. / (nScale * xScale);
+	assert(crossSectionScale > 0);
+
+	this->elasticCollisions = std::vector<ElasticCollision*>();
+	for (auto tag : list) {
+		int pos = tag.find('-');
+		const std::string tagA = tag.substr(0, pos);
+		const std::string tagB = tag.substr(pos + 1);
+		int idxA = getSpeciesIndex(tagA);
+		int idxB = getSpeciesIndex(tagB);
+
+		std::stringstream ss;
+		ss << "collisions/elastic/" << tag << ".dat";
+		const std::string filename = ss.str();
+
+		elasticCollisions.push_back(new ElasticCollision(filename, idxA, idxB, Tscale, crossSectionScale));
+	}
 }
 
 void AppmSolver::debug_checkCellStatus() const
@@ -749,58 +783,10 @@ Eigen::SparseMatrix<double> AppmSolver::getMagneticPermeabilityOperator()
 
 void AppmSolver::init_multiFluid()
 {
-	// Read parameter file
-	//assert(filename.size() > 4);
-	//std::ifstream file(filename);
-	//if (!file.is_open()) {
-	//	std::cout << "File not opened: " << filename << std::endl;
-	//	exit(-1);
-	//}
-	//std::string line;
-	//while (std::getline(file, line)) {
-	//	if (line.empty() || line.substr(0, 1) == "#") {
-	//		continue;
-	//	}
-	//	std::string fluidName;
-	//	double mass;
-	//	int charge;
-	//	char delimiter;
-	//	std::stringstream ss(line);
-	//	ss >> fluidName;
-	//	ss >> mass >> delimiter;
-	//	ss >> charge;
-
-	//	ParticleParameters params;
-	//	params.name = fluidName.substr(0, fluidName.size() - 1);
-	//	params.mass = mass;
-	//	params.electricCharge = charge;
-
-	//	particleParams.push_back(params);
-	//}
-
-	//const int nFluids = particleParams.size();
-
-	//// Print parameters to output
-
-	//std::cout << std::endl;
-	//std::cout << "Fluid parameters: " << std::endl;
-	//std::cout << "Fluid #: Name,\tMass,\tCharge" << std::endl;
-	//std::cout << "=====================" << std::endl;
-	//for (int i = 0; i < nFluids; i++) {
-	//	std::cout << "Fluid " << i << ": "
-	//		<< particleParams[i].name << "\t"
-	//		<< particleParams[i].mass << "\t"
-	//		<< particleParams[i].electricCharge << std::endl;
-	//}
-	//std::cout << std::endl;
-
 	assert(speciesList.size() > 0);
 	const int nFluids = speciesList.size();
 
-
-
 	// Initialize data
-
 	const int nCells = dualMesh.getNumberOfCells();
 	const int nFaces = dualMesh.getNumberOfFaces();
 	const int fluidStateLength = getFluidStateLength();
@@ -4119,6 +4105,19 @@ const Species & AppmSolver::getSpecies(const int idx) const
 	assert(idx >= 0);
 	assert(idx < speciesList.size());
 	return speciesList[idx];
+}
+
+const int AppmSolver::getSpeciesIndex(const std::string & tag)
+{
+	int result = -1;
+	for (int i = 0; i < speciesList.size(); i++) {
+		Species & species = speciesList[i];
+		if (species.getSymbol() == tag) {
+			result = i;
+		}
+	}
+	assert(result >= 0);
+	return result;
 }
 
 const double AppmSolver::getCollisionFrequency(const int alpha, const int beta, const int cellIdx)
