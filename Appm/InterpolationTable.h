@@ -15,6 +15,10 @@ public:
 
 	const Eigen::VectorXd interpolate(const Eigen::VectorXd & sites);
 
+	const Eigen::VectorXd getXdata() const;
+	const Eigen::VectorXd getYdata() const;
+
+
 private:
 	DFTaskPtr task = nullptr;
 	MKL_INT s_order = DF_PP_CUBIC;   // spline order

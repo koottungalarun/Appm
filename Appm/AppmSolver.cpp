@@ -18,10 +18,6 @@ AppmSolver::~AppmSolver()
 
 void AppmSolver::init()
 {
-	// Read file with scaling parameters
-	scalingParameters = ScalingParameters("scales.txt");
-
-
 	// Show solver parameters
 	std::cout << solverParams << std::endl;
 
@@ -210,6 +206,12 @@ void AppmSolver::run()
 			std::cout << std::endl;
 			std::cout << "*********************************************" << std::endl;
 
+			// Add this time value to list of timesteps
+			outputIterations.push_back(iteration);
+			timeStamps.push_back(time);
+			timeFile << iteration << ", " << time << ", " << dt << std::endl;
+
+
 			// Set explicit fluid source terms
 			setMagneticLorentzForceSourceTerms();
 			//setFrictionSourceTerms();
@@ -363,6 +365,7 @@ void AppmSolver::run()
 
 void AppmSolver::setElasticCollisionSourceTerms()
 {
+	std::cout << "Elastic collisions " << std::endl;
 	if (!solverParams.getFluidEnabled()) {
 		return;
 	}
@@ -384,7 +387,8 @@ void AppmSolver::setElasticCollisionSourceTerms()
 
 	// Reduced temperature for each collision and each fluid cell
 	Eigen::MatrixXd Tab(nElColls, nCells);
-	Tab.setZero();
+	//Tab.setZero();
+	Tab.setConstant(std::nan(""));
 
 	// Get reduced temperature for each fluid cell ...
 	for (int i = 0; i < nCells; i++) {
@@ -415,16 +419,7 @@ void AppmSolver::setElasticCollisionSourceTerms()
 	for (int collIdx = 0; collIdx < nElColls; collIdx++) {
 		ElasticCollision * coll = elasticCollisions[collIdx];
 		Eigen::VectorXd T = Tab.row(collIdx);
-		//std::cout << "T size:    " << T.rows() << " x " << T.cols() << std::endl;
 		Eigen::VectorXd Qbar11 = coll->getAvgMomCrossSection(T);
-		//assert(nElColls == 1);
-		//std::ofstream file("Qbar11.dat");
-		//Eigen::MatrixXd outputMat(Qbar11.rows(), 2);
-		//std::cout << "Tab size:    " << Tab.rows() << " x " << Tab.cols() << std::endl;
-		//std::cout << "Qbar11 size: " << Qbar11.rows() << " x " << Qbar11.cols() << std::endl;
-		//outputMat.col(0) = T;
-		//outputMat.col(1) = Qbar11;
-		//file << outputMat << std::endl;
 
 		// get reduced mass of this collision
 		const int idxA = coll->getFluidIdxA();
@@ -441,45 +436,56 @@ void AppmSolver::setElasticCollisionSourceTerms()
 		Eigen::MatrixXd ua = fluidStates.block(5 * idxA + 1, 0, 3, nCells);
 		Eigen::MatrixXd ub = fluidStates.block(5 * idxB + 1, 0, 3, nCells);
 
-		// factor in source term
-		Eigen::VectorXd reducedVelocity;
-		reducedVelocity = (1. / M_PI * 8. / mab * T.array()).sqrt();
 
+		// factor in source term
+		Eigen::VectorXd meanRelVelocity;
+		meanRelVelocity = (1. / M_PI * 8. / mab * T.array()).sqrt();
+		
 		// Momentum rate of change due to elastic collisions;
 		// temp_ab = na * mab * tau_ab^-1
-		Eigen::VectorXd temp_ab(na.size());
-		temp_ab = -na.array() * nb.array();
-		//std::cout << "temp_ab size:    " << temp_ab.rows() << " x " << temp_ab.cols() << std::endl;
-		//std::cout << "reducedVel size:    " << reducedVelocity.rows() << " x " << reducedVelocity.cols() << std::endl;
-		temp_ab = temp_ab.array() * (mab * 4. / 3. * reducedVelocity.array() * Qbar11.array());
+		Eigen::VectorXd temp_ab;
+		temp_ab = na.array() * nb.array() * (mab * 4. / 3. * meanRelVelocity.array() * Qbar11.array());
 
 		// check data size
 		assert(temp_ab.cols() == 1);
 		assert(temp_ab.size() == nCells);
 
+		std::cout << "Set default value: 1" << std::endl;
+		temp_ab.setOnes(); // <<<----------------------------------------  TODO: default value! ---------------
+
 		// for each fluid cell ...
 		for (int i = 0; i < nCells; i++) {
 			if (dualMesh.getCell(i)->getType() == Cell::Type::FLUID) {
-				const Eigen::Vector3d R_local = temp_ab(i) * (ua.col(i) - ub.col(i));
+				const Eigen::VectorXd stateA = getState(i, idxA);
+				const Eigen::VectorXd stateB = getState(i, idxB);
 
-				// ... apply source term to fluid A
-				elCollMomSourceTerm.col(i).segment(3 * idxA, 3) -= R_local;
-				elCollEnergySourceTerm(idxA, i) -= ua.col(i).dot(R_local);
+				// temperature of fluid A and B
+				double Ta = Physics::getTemperature(stateA, ma);
+				double Tb = Physics::getTemperature(stateB, mb);
 
-				// ... apply source term to fluid B
-				elCollMomSourceTerm.col(i).segment(3 * idxB, 3) += R_local;
-				elCollEnergySourceTerm(idxA, i) += ub.col(i).dot(R_local);
+				// ... apply momentum source term
+				const Eigen::Vector3d R_local = (-1) * temp_ab(i) * (ua.col(i) - ub.col(i));
+				elCollMomSourceTerm.col(i).segment(3 * idxA, 3) += R_local;
+				elCollMomSourceTerm.col(i).segment(3 * idxB, 3) -= R_local;
+
+				// ... apply energy source term 
+				const double Q_local = (-1) * 3. / (ma + mb) * temp_ab(i) * (Ta - Tb);
+				elCollEnergySourceTerm(idxA, i) += Q_local;
+				elCollEnergySourceTerm(idxB, i) -= Q_local;
 			}
 		}
 	}
 
 	// Apply elastic collision sources to fluid source term
 	for (int i = 0; i < nCells; i++) {
-		for (int fluidx = 0; fluidx < fluidx; fluidx++) {
+		for (int fluidx = 0; fluidx < nFluids; fluidx++) {
 			fluidSources.col(i).segment(5 * fluidx + 1, 3) += elCollMomSourceTerm.col(i).segment(3 * fluidx, 3);
 			fluidSources(5 * fluidx + 4, i) += elCollEnergySourceTerm(fluidx, i);
 		}
 	}
+	std::cout << "max elastic momentum source term: " << elCollMomSourceTerm.array().abs().maxCoeff() << std::endl;
+	std::cout << "max elastic energy   source term: " << elCollEnergySourceTerm.array().abs().maxCoeff() << std::endl;
+	std::cout << "Elastic collisions DONE" << std::endl;
 }
 
 
@@ -507,6 +513,13 @@ void AppmSolver::setElasticCollisions(const std::vector<std::string> & list)
 	assert(xScale > 0);
 	const double crossSectionScale = 1. / (nScale * xScale);
 	assert(crossSectionScale > 0);
+	std::cout << "Set elastic collisions" << std::endl;
+	std::cout << "Scaling variables:" << std::endl;
+	std::cout << "  Tscale: " << Tscale << std::endl;
+	std::cout << "  nScale: " << nScale << std::endl;
+	std::cout << "  xScale: " << xScale << std::endl;
+	std::cout << "  Qscale: " << crossSectionScale << std::endl;
+
 
 	this->elasticCollisions = std::vector<ElasticCollision*>();
 	for (auto tag : list) {
@@ -520,8 +533,25 @@ void AppmSolver::setElasticCollisions(const std::vector<std::string> & list)
 		ss << "collisions/elastic/" << tag << ".dat";
 		const std::string filename = ss.str();
 
-		elasticCollisions.push_back(new ElasticCollision(filename, idxA, idxB, Tscale, crossSectionScale));
+		ElasticCollision * elasticCollision = new ElasticCollision(filename, idxA, idxB, Tscale, crossSectionScale);
+		{
+			std::stringstream ss;
+			ss << tag << ".dat";
+			std::string filename = ss.str();
+			Eigen::MatrixXd data = elasticCollision->getData();
+			std::ofstream file(filename);
+			file << data << std::endl;
+		}
+		elasticCollisions.push_back(elasticCollision);
 	}
+
+
+}
+
+void AppmSolver::setScalingParameters(const std::string & filename)
+{
+	// Read file with scaling parameters
+	scalingParameters = ScalingParameters(filename);
 }
 
 void AppmSolver::debug_checkCellStatus() const
@@ -2411,11 +2441,6 @@ void AppmSolver::writeOutput(const int iteration, const double time)
 	Eigen::VectorXi iterVec(1);
 	iterVec(0) = iteration;
 	h5writer.writeData(iterVec, "/iteration");
-
-	// Add this time value to list of timesteps
-	outputIterations.push_back(iteration);
-	timeStamps.push_back(time);
-	timeFile << iteration << "," << time << std::endl;
 }
 
 void AppmSolver::writeFluidStates(H5Writer & writer)
@@ -2443,6 +2468,8 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 		Eigen::VectorXd speciesFrictionEnergySource = frictionEnergySourceTerm.row(fluidIdx);
 		Eigen::Matrix3Xd speciesDiffusionVelocity = diffusionVelocity.block(3 * fluidIdx, 0, 3, nCells);
 		Eigen::VectorXd fluidMassFluxImplicitTerm = massFluxImplicitTerm.row(fluidIdx);
+		Eigen::Matrix3Xd speciesMomentumSource = fluidSources.block(5 * fluidIdx + 1, 0, 3, nCells);
+		Eigen::VectorXd speciesEnergySource = fluidSources.row(5 * fluidIdx + 4);
 
 		const std::string stateN = fluidTag + "stateN";
 		const std::string stateU = fluidTag + "stateU";
@@ -2515,6 +2542,8 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 		writer.writeData(speciesDiffusionVelocity, (std::stringstream() << fluidTag << "diffusionVelocity").str());
 		writer.writeData(speciesFrictionEnergySource, (std::stringstream() << fluidTag << "frictionEnergySource").str());
 		writer.writeData(fluidMassFluxImplicitTerm, (std::stringstream() << fluidTag << "massFluxImplicitTerm").str());
+		writer.writeData(speciesEnergySource, (std::stringstream() << fluidTag << "energySource").str());
+		writer.writeData(speciesMomentumSource, (std::stringstream() << fluidTag << "momentumSource").str());
 
 		Eigen::Matrix3Xd el_source = LorentzForce_electric.block(3 * fluidIdx, 0, 3, nCells);
 		writer.writeData(el_source, fluidTag + "LorentzForceEl");
@@ -3627,6 +3656,20 @@ const std::string AppmSolver::fluidXdmfOutput(const std::string & datafilename) 
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << "\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
 		ss << datafilename << ":/" << fluidName << "-frictionEnergySource" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+
+		ss << "<Attribute Name=\"" << fluidName << " Momentum Source" << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << " 3\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << datafilename << ":/" << fluidName << "-momentumSource" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+
+		ss << "<Attribute Name=\"" << fluidName << " Energy Source Term" << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << "\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << datafilename << ":/" << fluidName << "-energySource" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 

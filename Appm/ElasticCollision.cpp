@@ -20,6 +20,9 @@ ElasticCollision::ElasticCollision(const std::string & filename, const int idxA,
 	this->fluidxA = idxA;
 	this->fluidxB = idxB;
 
+	std::cout << "Collisions: " << filename << std::endl;
+	std::cout << "fluid idx A, B: " << idxA << ", " << idxB << std::endl;
+
 	std::ifstream file(filename);
 	if (!file.is_open()) {
 		std::cout << "File is not open: " << filename << std::endl;
@@ -86,6 +89,16 @@ const Eigen::VectorXd ElasticCollision::getAvgMomCrossSection(const Eigen::Vecto
 	const int N = T.size();
 	Eigen::VectorXd result = table->interpolate(T);
 	assert(result.size() == N);
-	assert((result.array() > 0).all());
+	//assert((result.array() > 0).all());
 	return result;
+}
+
+const Eigen::MatrixXd ElasticCollision::getData() const
+{
+	Eigen::VectorXd x = table->getXdata();
+	Eigen::VectorXd y = table->getYdata();
+	Eigen::MatrixXd data(x.size(), 2);
+	data.col(0) = x;
+	data.col(1) = y;
+	return data;
 }

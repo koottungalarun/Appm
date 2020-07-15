@@ -21,6 +21,8 @@ public:
 
 	const Eigen::VectorXd getAvgMomCrossSection(const Eigen::VectorXd & T);
 
+	const Eigen::MatrixXd getData() const;
+
 private:
 	int fluidxA = -1;
 	int fluidxB = -1;

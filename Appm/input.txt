@@ -32,8 +32,8 @@ initFluidState: TEST_FRICTION
 initEfield: 0 0 0
 #
 ### Simulation controls
-maxTime: 1
-maxIterations: 3
+maxTime: 5
+maxIterations: 500
 outputFrequency: 1
 #
 ### numerics
@@ -49,7 +49,7 @@ isMaxwellEnabled: 0
 ### SPECIES
 ######################
 # Format: Symbol, name, massRatio, charge
-species: e, Electron, 1e-4, -1
+# species: e, Electron, 1e-4, -1
 species: Ar, Argon, 1, 0
 species: Ar+, Ion, 1, 1
 #

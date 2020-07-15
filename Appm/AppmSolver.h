@@ -116,6 +116,7 @@ public:
 	void setMeshParameters(const PrimalMesh::PrimalMeshParams & meshParams);
 	void setSpecies(const std::vector<Species> & speciesList);
 	void setElasticCollisions(const std::vector<std::string> & list);
+	void setScalingParameters(const std::string & filename);
 
 protected:
 	PrimalMesh primalMesh;

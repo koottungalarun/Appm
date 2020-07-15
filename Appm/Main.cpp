@@ -19,6 +19,7 @@ int main() {
 	//InterpolationTable table(x, y);
 	//Eigen::VectorXd sites(N);
 	//sites = Eigen::VectorXd::LinSpaced(N, 0.0, 1.0);
+	//sites(0) = std::nanf("");
 	//Eigen::VectorXd result;
 	//Eigen::MatrixXd data(sites.rows(), 2);
 
@@ -74,6 +75,7 @@ void Main::run()
 
 	//AppmSolver appm(primalMeshParams, appmParameters);
 	AppmSolver appm;
+	appm.setScalingParameters("scales.txt");
 	appm.setSolverParameters(solverParameters);
 	appm.setMeshParameters(primalMeshParams);
 	appm.setSpecies(speciesList);

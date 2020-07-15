@@ -46,10 +46,30 @@ const Eigen::VectorXd InterpolationTable::interpolate(const Eigen::VectorXd & si
 	result = Eigen::VectorXd(N);
 	result.setZero();
 
+	const double sitesMax = sites.array().maxCoeff();
+	const double sitesMin = sites.array().minCoeff();
+	const double xMax = x.array().maxCoeff();
+	const double xMin = x.array().minCoeff();
+	if (sitesMax > xMax || sitesMin < xMin) {
+		std::cout << "Warning: interpolation table range exceeded." << std::endl;
+		std::cout << "sites min,max: " << sitesMin << ",\t" << sitesMax << std::endl;
+		std::cout << "xdata min,max: " << xMin << ",\t" << xMax << std::endl;
+	}
+
 	int status;
 	status = dfdInterpolate1D(task, DF_INTERP, DF_METHOD_PP, N, sites.data(), sitehint, ndorder, &dorder, datahint, result.data(), rhint, cell);
 	assert(errorCheck(status));
 	return result;
+}
+
+const Eigen::VectorXd InterpolationTable::getXdata() const
+{
+	return this->x;
+}
+
+const Eigen::VectorXd InterpolationTable::getYdata() const
+{
+	return this->y;
 }
 
 void InterpolationTable::init()
