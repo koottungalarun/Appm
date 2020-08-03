@@ -511,7 +511,7 @@ void AppmSolver::setElasticCollisions(const std::vector<std::string> & list)
 	const double xScale = scalingParameters.getLengthScale();
 	assert(nScale > 0);
 	assert(xScale > 0);
-	const double crossSectionScale = 1. / (nScale * xScale);
+	const double crossSectionScale = scalingParameters.getCrossSectionsScale();
 	assert(crossSectionScale > 0);
 	std::cout << "Set elastic collisions" << std::endl;
 	std::cout << "Scaling variables:" << std::endl;
@@ -536,16 +536,74 @@ void AppmSolver::setElasticCollisions(const std::vector<std::string> & list)
 		ElasticCollision * elasticCollision = new ElasticCollision(filename, idxA, idxB, Tscale, crossSectionScale);
 		{
 			std::stringstream ss;
-			ss << tag << ".dat";
+			ss << "elastic-" << tag << ".dat";
 			std::string filename = ss.str();
 			Eigen::MatrixXd data = elasticCollision->getData();
 			std::ofstream file(filename);
+			std::cout << "Write data file: " << filename << std::endl;
 			file << data << std::endl;
 		}
 		elasticCollisions.push_back(elasticCollision);
 	}
 
 
+}
+
+/**
+* Set list of inelastic collisions.
+*
+* Inelastic collision are restricted to ionization (and its reverse, recombination) reaction. 
+* The parameter file is identified by the name of electron and atom, e.g., e-Ar.dat
+* The electron must be in first place. We assume positive ions.
+*
+* The file has two columns: electron temperature (Te) and ionization rate (ki).
+* 
+*/
+void AppmSolver::setInelasticCollisions(const std::vector<std::string>& list)
+{
+	const double Tscale = scalingParameters.getTemperatureScale();
+	const double nScale = scalingParameters.getNumberDensityScale();
+	const double xScale = scalingParameters.getLengthScale();
+	assert(nScale > 0);
+	assert(xScale > 0);
+	assert(crossSectionScale > 0);
+	std::cout << "Set inelastic collisions" << std::endl;
+	std::cout << "Scaling variables:" << std::endl;
+	std::cout << "  Tscale: " << Tscale << std::endl;
+	std::cout << "  nScale: " << nScale << std::endl;
+	std::cout << "  xScale: " << xScale << std::endl;
+
+	this->inelasticCollisions = std::vector<InelasticCollision*>();
+	for (auto tag : list) {
+		int pos = tag.find('-');
+		const std::string tagElectron = tag.substr(0, pos);
+		const std::string tagAtom = tag.substr(pos + 1);
+		const std::string tagIon = tagAtom + "+";
+		assert(tagElectron == "e");
+		std::cout << "Inelastic collision: " << tagElectron << ", " << tagAtom << ", " << tagIon << std::endl;
+
+		const int idxEl = getSpeciesIndex(tagElectron);
+		const int idxAtom = getSpeciesIndex(tagAtom);
+		const int idxIon = getSpeciesIndex(tagIon);
+
+		std::stringstream ss;
+		ss << "collisions/inelastic/" << tag << ".dat";
+
+		const std::string filename = ss.str();
+
+		//InelasticCollision * inelasticCollision = new InelasticCollision(filename, idxA, idxB, Tscale, crossSectionScale);
+		InelasticCollision * inelasticCollision = new InelasticCollision(filename);
+		{
+			std::stringstream ss;
+			ss << "inelastic-" << tag << ".dat";
+			std::string filename = ss.str();
+			Eigen::MatrixXd data = inelasticCollision->getData();
+			std::ofstream file(filename);
+			std::cout << "Write data file: " << filename << std::endl;
+			file << data << std::endl;
+		}
+		inelasticCollisions.push_back(inelasticCollision);
+	}
 }
 
 void AppmSolver::setScalingParameters(const std::string & filename)
@@ -4157,6 +4215,14 @@ const int AppmSolver::getSpeciesIndex(const std::string & tag)
 		Species & species = speciesList[i];
 		if (species.getSymbol() == tag) {
 			result = i;
+		}
+	}
+	if (result < 0) {
+		std::cout << std::endl << std::endl;
+		std::cout << "Species index not found; tag = " << tag << std::endl;
+		std::cout << "Defined species: " << std::endl;
+		for (auto species : speciesList) {
+			std::cout << species.getSymbol() << std::endl;
 		}
 	}
 	assert(result >= 0);

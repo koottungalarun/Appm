@@ -147,6 +147,7 @@
     <ClInclude Include="GeometryItem.h" />
     <ClInclude Include="H5Reader.h" />
     <ClInclude Include="H5Writer.h" />
+    <ClInclude Include="InelasticCollision.h" />
     <ClInclude Include="Ionization.h" />
     <ClInclude Include="Main.h" />
     <ClInclude Include="Mesh.h" />
@@ -180,6 +181,7 @@
     <ClCompile Include="GeometryItem.cpp" />
     <ClCompile Include="H5Reader.cpp" />
     <ClCompile Include="H5Writer.cpp" />
+    <ClCompile Include="InelasticCollision.cpp" />
     <ClCompile Include="Ionization.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Mesh.cpp" />

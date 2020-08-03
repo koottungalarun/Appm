@@ -65,8 +65,6 @@ Main::~Main()
 void Main::run()
 {
 	readInputFile();
-	//ElasticCollision & coll = elasticCollisions.front();
-	//coll.getAvgMomCrossSection(T);
 
 	PrimalMesh::PrimalMeshParams primalMeshParams;
 	//primalMeshParams = PrimalMesh::PrimalMeshParams("primalMeshParams.txt");
@@ -80,7 +78,9 @@ void Main::run()
 	appm.setMeshParameters(primalMeshParams);
 	appm.setSpecies(speciesList);
 	appm.setElasticCollisions(elasticCollisionList);
-	appm.run();	
+	appm.setInelasticCollisions(inelasticCollisionList);
+
+	//appm.run();	
 }
 
 void Main::setInputFilename(const std::string & filename)
@@ -101,7 +101,8 @@ void Main::readInputFile()
 		exit(-1);
 	}
 	const std::string speciesPrefix = "species";
-	const std::string collisionPrefix = "collision";
+	const std::string elasticCollisionPrefix = "elastic-collision";
+	const std::string inelasticCollisionPrefix = "inelastic-collision";
 	std::vector<std::string> collisionInputList;
 
 	const char delim = ':';
@@ -159,8 +160,11 @@ void Main::readInputFile()
 		if (tag.substr(0,speciesPrefix.size()) == speciesPrefix) {
 			speciesList.push_back(Species(value));
 		}
-		if (tag.substr(0, collisionPrefix.size()) == collisionPrefix) {
-			collisionInputList.push_back(trim(value));
+		if (tag.substr(0, elasticCollisionPrefix.size()) == elasticCollisionPrefix) {
+			this->elasticCollisionList.push_back(trim(value));
+		}
+		if (tag.substr(0, inelasticCollisionPrefix.size()) == inelasticCollisionPrefix) {
+			this->inelasticCollisionList.push_back(trim(value));
 		}
 		if (tag == "initFluidState") {
 			solverParameters.setFluidInitType(value);
@@ -172,7 +176,6 @@ void Main::readInputFile()
 			solverParameters.setInitEfield(Eigen::Vector3d(x, y, z));
 		}
 	}
-	this->elasticCollisionList = collisionInputList;
 
 	std::cout << solverParameters << std::endl;
 
@@ -183,6 +186,25 @@ void Main::readInputFile()
 		std::cout << "========" << std::endl;
 	}
 	std::cout << "======================" << std::endl;
+
+	std::cout << std::endl;
+	std::cout << "Elastic collisions: " << std::endl;
+	std::cout << "======================" << std::endl;
+	for (auto item : elasticCollisionList) {
+		std::cout << item << std::endl;
+		std::cout << "========" << std::endl;
+	}
+	std::cout << "======================" << std::endl;
+
+	std::cout << std::endl;
+	std::cout << "Inelastic collisions: " << std::endl;
+	std::cout << "======================" << std::endl;
+	for (auto item : inelasticCollisionList) {
+		std::cout << item << std::endl;
+		std::cout << "========" << std::endl;
+	}
+	std::cout << "======================" << std::endl;
+
 	//exit(-1);
 }
 

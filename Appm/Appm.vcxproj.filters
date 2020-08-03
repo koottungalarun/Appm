@@ -111,6 +111,9 @@
     <ClInclude Include="Recombination.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="InelasticCollision.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -204,6 +207,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Recombination.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="InelasticCollision.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

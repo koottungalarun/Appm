@@ -156,24 +156,29 @@ void ScalingParameters::setPressureScale(const double p)
 	this->p0 = p;
 }
 
-double ScalingParameters::getTemperatureScale()
+double ScalingParameters::getTemperatureScale() const
 {
 	return T0;
 }
 
-double ScalingParameters::getLengthScale()
+double ScalingParameters::getLengthScale() const
 {
 	return x0;
 }
 
-double ScalingParameters::getNumberDensityScale()
+double ScalingParameters::getNumberDensityScale() const
 {
 	return n0;
 }
 
-double ScalingParameters::getScaledDebyeLengthSquared()
+double ScalingParameters::getScaledDebyeLengthSquared() const
 {
 	return lambdaSq;
+}
+
+double ScalingParameters::getCrossSectionsScale() const
+{
+	return  1. / (getNumberDensityScale() * getLengthScale());
 }
 
 std::ostream & operator<<(std::ostream & os, const ScalingParameters & obj)

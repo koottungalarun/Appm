@@ -49,7 +49,7 @@ isMaxwellEnabled: 0
 ### SPECIES
 ######################
 # Format: Symbol, name, massRatio, charge
-# species: e, Electron, 1e-4, -1
+species: e, Electron, 1e-4, -1
 species: Ar, Argon, 1, 0
 species: Ar+, Ion, 1, 1
 #
@@ -57,11 +57,9 @@ species: Ar+, Ion, 1, 1
 ######################
 ### REACTIONS
 ######################
-collision: Ar-Ar+
-# reaction.C12
-# reaction.C13
-# reaction.C23
-# reaction.R12
-# reaction.R13
+elastic-collision: Ar-Ar+
+# elastic-collision: e-Ar
+# elastic-collision: e-Ar+
+inelastic-collision: e-Ar
 
 

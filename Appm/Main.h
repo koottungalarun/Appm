@@ -31,6 +31,8 @@ private:
 	std::vector<Species> speciesList;
 	//std::vector<ElasticCollision> elasticCollisions;
 	std::vector<std::string> elasticCollisionList;
+	std::vector<std::string> inelasticCollisionList;
+	
 
 	AppmSolver::SolverParameters solverParameters;
 

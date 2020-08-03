@@ -49,10 +49,11 @@ public:
 	void setScaledDebyeLength(const double lambdasq);
 	void setPressureScale(const double p);
 
-	double getTemperatureScale();
-	double getLengthScale();
-	double getNumberDensityScale();
-	double getScaledDebyeLengthSquared();
+	double getTemperatureScale() const;
+	double getLengthScale() const;
+	double getNumberDensityScale() const;
+	double getScaledDebyeLengthSquared() const;
+	double getCrossSectionsScale() const;
 
 	friend std::ostream & operator<<(std::ostream & os, const ScalingParameters & obj);
 

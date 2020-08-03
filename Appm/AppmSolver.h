@@ -25,7 +25,7 @@
 #include <stdexcept>
 
 #include "ElasticCollision.h"
-
+#include "InelasticCollision.h"
 
 #define _RT_ONECELL 
 #undef _RT_ONECELL
@@ -116,6 +116,7 @@ public:
 	void setMeshParameters(const PrimalMesh::PrimalMeshParams & meshParams);
 	void setSpecies(const std::vector<Species> & speciesList);
 	void setElasticCollisions(const std::vector<std::string> & list);
+	void setInelasticCollisions(const std::vector<std::string> & list);
 	void setScalingParameters(const std::string & filename);
 
 protected:
@@ -142,6 +143,8 @@ private:
 	// List of elastic collisions
 	std::vector<ElasticCollision*> elasticCollisions;
 	void setElasticCollisionSourceTerms();
+
+	std::vector<InelasticCollision*> inelasticCollisions;
 
 	//struct AppmParameters {
 	//	int maxIterations = 0;
