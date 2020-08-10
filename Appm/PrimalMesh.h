@@ -57,7 +57,7 @@ private:
 	void test_quadFace();
 
 
-	void sortVertices(const double electrodeRadius);
+	void sortVertices(const double electrodeRadius, const double fluidRadius);
 	void sortEdges();
 	void sortFaces();
 	void sortCells();

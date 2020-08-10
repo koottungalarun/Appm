@@ -50,7 +50,8 @@ void PrimalMesh::init()
 
 	assert(Mesh::validate());
 
-	sortVertices(params.getElectrodeRadius());
+	const double fluidRadius = 1;
+	sortVertices(params.getElectrodeRadius(), fluidRadius);
 	sortEdges();
 	sortFaces();
 	sortCells();
@@ -813,11 +814,17 @@ void PrimalMesh::test_quadFace()
 
 /**
  * Sort vertices such that they have the sequence: inner vertices, boundary vertices.
+ * 
+ * @param electrodeRadius    radius of electrode, determines the vertices located on electrical potential boundary
+ * @param fluidRadius        radius of fluid cylinder
+ * 
 */
-void PrimalMesh::sortVertices(const double electrodeRadius)
+void PrimalMesh::sortVertices(const double electrodeRadius, const double fluidRadius)
 {
 	std::vector<Vertex*> boundaryVertices;
-	std::vector<Vertex*> innerVertices;
+	//std::vector<Vertex*> innerVertices;
+	std::vector<Vertex*> innerFluidVertices;
+	std::vector<Vertex*> innerSolidVertices;
 	std::vector<Vertex*> terminalVertices;
 
 	const int nV = getNumberOfVertices();
@@ -832,9 +839,9 @@ void PrimalMesh::sortVertices(const double electrodeRadius)
 	std::cout << "zmin, zmax: " << zmin << ", " << zmax << std::endl;
 
 	for (auto vertex : vertexList) {
+		const Eigen::Vector3d pos = vertex->getPosition();
+		const Eigen::Vector2d pos_2d(pos.segment(0, 2));
 		if (vertex->isBoundary()) {
-			const Eigen::Vector3d pos = vertex->getPosition();
-			const Eigen::Vector2d pos_2d(pos.segment(0, 2));
 
 			bool is_zmax = std::abs(pos(2) - zmax) < 100 * std::numeric_limits<double>::epsilon();
 			bool is_zmin = std::abs(pos(2) - zmin) < 100 * std::numeric_limits<double>::epsilon();
@@ -850,16 +857,24 @@ void PrimalMesh::sortVertices(const double electrodeRadius)
 			}
 		}
 		else {
-			innerVertices.push_back(vertex);
 			vertex->setType(Vertex::Type::Inner);
+			if (pos_2d.norm() < (1 + 100 * std::numeric_limits<double>::epsilon())) {
+				innerFluidVertices.push_back(vertex);
+			}
+			else {
+				innerSolidVertices.push_back(vertex);
+			}
 		}
 	}
 
 	// Define new list of vertices
 	std::vector<Vertex*> sortedVertexList(getNumberOfVertices());
 	int offset = 0;
-	for (int i = 0; i < innerVertices.size(); i++) {
-		sortedVertexList[offset++] = innerVertices[i];
+	for (int i = 0; i < innerFluidVertices.size(); i++) {
+		sortedVertexList[offset++] = innerFluidVertices[i];
+	}
+	for (int i = 0; i < innerSolidVertices.size(); i++) {
+		sortedVertexList[offset++] = innerSolidVertices[i];
 	}
 	for (int i = 0; i < boundaryVertices.size(); i++) {
 		sortedVertexList[offset++] = boundaryVertices[i];
