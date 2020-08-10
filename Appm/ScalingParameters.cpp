@@ -181,6 +181,21 @@ double ScalingParameters::getCrossSectionsScale() const
 	return  1. / (getNumberDensityScale() * getLengthScale());
 }
 
+double ScalingParameters::getTimeScale() const
+{
+	PhysicsConstants & pc = PhysicsConstants::instance();
+	const double c0 = pc.c0();
+	const double xbar = getLengthScale();
+	const double lambda = sqrt(getScaledDebyeLengthSquared());
+	return xbar / lambda * 1. / c0;
+}
+
+double ScalingParameters::getMassScale() const
+{
+	assert(false);
+	return 0;
+}
+
 std::ostream & operator<<(std::ostream & os, const ScalingParameters & obj)
 {
 	os << "Scaling parameters: " << std::endl;

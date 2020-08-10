@@ -564,14 +564,14 @@ void AppmSolver::setInelasticCollisions(const std::vector<std::string>& list)
 	const double Tscale = scalingParameters.getTemperatureScale();
 	const double nScale = scalingParameters.getNumberDensityScale();
 	const double xScale = scalingParameters.getLengthScale();
+	const double tScale = scalingParameters.getTimeScale();
+	const double kScale = 1. / (nScale * tScale);
+
 	assert(nScale > 0);
 	assert(xScale > 0);
-	assert(crossSectionScale > 0);
+	assert(tScale > 0);
+	assert(kScale > 0);
 	std::cout << "Set inelastic collisions" << std::endl;
-	std::cout << "Scaling variables:" << std::endl;
-	std::cout << "  Tscale: " << Tscale << std::endl;
-	std::cout << "  nScale: " << nScale << std::endl;
-	std::cout << "  xScale: " << xScale << std::endl;
 
 	this->inelasticCollisions = std::vector<InelasticCollision*>();
 	for (auto tag : list) {
@@ -590,9 +590,11 @@ void AppmSolver::setInelasticCollisions(const std::vector<std::string>& list)
 		ss << "collisions/inelastic/" << tag << ".dat";
 
 		const std::string filename = ss.str();
+		InelasticCollision * inelasticCollision = new InelasticCollision(filename, kScale, Tscale);
+		inelasticCollision->setElectronFluidx(idxEl);
+		inelasticCollision->setAtomFluidx(idxAtom);
+		inelasticCollision->setIonFluidx(idxIon);
 
-		//InelasticCollision * inelasticCollision = new InelasticCollision(filename, idxA, idxB, Tscale, crossSectionScale);
-		InelasticCollision * inelasticCollision = new InelasticCollision(filename);
 		{
 			std::stringstream ss;
 			ss << "inelastic-" << tag << ".dat";

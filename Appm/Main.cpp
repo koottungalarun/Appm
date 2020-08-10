@@ -80,7 +80,7 @@ void Main::run()
 	appm.setElasticCollisions(elasticCollisionList);
 	appm.setInelasticCollisions(inelasticCollisionList);
 
-	//appm.run();	
+	appm.run();	
 }
 
 void Main::setInputFilename(const std::string & filename)

@@ -28,12 +28,12 @@ mesh: mesh-coarse.txt
 ### SOLVER
 ######################
 ### Initial conditions
-initFluidState: TEST_FRICTION
+initFluidState: SHOCKTUBE
 initEfield: 0 0 0
 #
 ### Simulation controls
-maxTime: 5
-maxIterations: 500
+maxTime: 1
+maxIterations: 10
 outputFrequency: 1
 #
 ### numerics
@@ -49,17 +49,17 @@ isMaxwellEnabled: 0
 ### SPECIES
 ######################
 # Format: Symbol, name, massRatio, charge
-species: e, Electron, 1e-4, -1
+# species: e, Electron, 1e-4, -1
 species: Ar, Argon, 1, 0
-species: Ar+, Ion, 1, 1
+# species: Ar+, Ion, 1, 1
 #
 #
 ######################
 ### REACTIONS
 ######################
-elastic-collision: Ar-Ar+
+# elastic-collision: Ar-Ar+
 # elastic-collision: e-Ar
 # elastic-collision: e-Ar+
-inelastic-collision: e-Ar
+# inelastic-collision: e-Ar
 
 

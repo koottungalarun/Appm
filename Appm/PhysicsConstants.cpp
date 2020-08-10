@@ -27,3 +27,18 @@ const double PhysicsConstants::q()
 {
 	return _q;
 }
+
+const double PhysicsConstants::c0()
+{
+	return _c0;
+}
+
+const double PhysicsConstants::planckConstant()
+{
+	return _h;
+}
+
+const double PhysicsConstants::pi()
+{
+	return M_PI;
+}

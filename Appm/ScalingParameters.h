@@ -54,6 +54,8 @@ public:
 	double getNumberDensityScale() const;
 	double getScaledDebyeLengthSquared() const;
 	double getCrossSectionsScale() const;
+	double getTimeScale() const;
+	double getMassScale() const;
 
 	friend std::ostream & operator<<(std::ostream & os, const ScalingParameters & obj);
 
