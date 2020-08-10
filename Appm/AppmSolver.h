@@ -295,7 +295,7 @@ private:
 	//void setFluidSourceTerm();
 	void setSumOfFaceFluxes();
 	void setImplicitMassFluxTerms(const double dt);
-	void updateFluidStates(const double dt);
+	void updateFluidStates(const double dt, const bool isImplicitSources);
 
 	void solveMaxwellSystem(const double time, const double dt, const double dt_previous, const Eigen::SparseMatrix<double> & Msigma);
 	
