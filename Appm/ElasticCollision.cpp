@@ -84,7 +84,7 @@ void ElasticCollision::setFluidIdxB(const int idxB)
 	this->fluidxB = idxB;
 }
 
-const Eigen::VectorXd ElasticCollision::getAvgMomCrossSection(const Eigen::VectorXd & T)
+const Eigen::VectorXd ElasticCollision::getAvgMomCrossSection(const Eigen::VectorXd & T) const 
 {
 	const int N = T.size();
 	Eigen::VectorXd result = table->interpolate(T);

@@ -19,7 +19,7 @@ public:
 	const int getFluidIdxB() const;
 	void setFluidIdxB(const int idxB);
 
-	const Eigen::VectorXd getAvgMomCrossSection(const Eigen::VectorXd & T);
+	const Eigen::VectorXd getAvgMomCrossSection(const Eigen::VectorXd & T) const;
 
 	const Eigen::MatrixXd getData() const;
 
