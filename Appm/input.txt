@@ -57,7 +57,7 @@ species: Ar+, Ion, 1, 1
 ######################
 ### REACTIONS
 ######################
-# elastic-collision: Ar-Ar+
+elastic-collision: Ar-Ar+
 # elastic-collision: e-Ar
 # elastic-collision: e-Ar+
 # inelastic-collision: e-Ar

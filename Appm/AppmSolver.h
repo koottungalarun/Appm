@@ -366,6 +366,7 @@ private:
 
 	const double getCollisionFrequency(const int alpha, const int beta, const int cellIdx);
 	const double getReducedMass(const int alpha, const int beta);
+	const Eigen::MatrixXd getStates(const int fidx, const int nCols);
 
 };
 
