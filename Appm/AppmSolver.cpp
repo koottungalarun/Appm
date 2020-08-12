@@ -2091,82 +2091,95 @@ void AppmSolver::updateFluidStates(const double dt, const bool isImplicitSources
 	const bool isEulerSourceImplicit = isImplicitSources;
 	const int nCells = dualMesh.getNumberOfCells();
 	if (!isEulerSourceImplicit) {
-		// Euler source terms are all explicit
-		for (int k = 0; k < nCells; k++) {
-			fluidStates.col(k) += -dt * sumOfFaceFluxes.col(k) + dt * fluidSources.col(k);
-		}
+		updateFluidStatesExplicit(dt);
 	}
 	else {
-		std::cout << "Solve Euler equations with implicit sources" << std::endl;
-		// Euler source terms are all implicit, i.e., 
-		// U^(m+1) - U^(m) = -dt * fluxes^(m) + dt * sources^(m+1), with sources = s(U)
-		// and yields to the system of equations
-		// (I - dt * S_J^m) * U^(m+1) = U^(m) - dt * fluxes^(m)
-		// where S_J^m is the Jacobian (linearization) of implicit sources: sources^(m+1) = S_J^m * U^(m+1).
-		// We write the system of equations as
-		// A*x = rhs
-		// with x = U^(m+1).
-
-		const int rows = fluidStates.rows();
-		const int cols = fluidStates.cols();
-		
-		int nFluidCells = 0;
-		for (int k = 0; k < nCells; k++) {
-			if (dualMesh.getCell(k)->getType() == Cell::Type::FLUID) {
-				nFluidCells++;
-			}
-			else {
-				break;
-			}		
-		}
-		std::cout << "nFluidCells = " << nFluidCells << " of total " << cols << std::endl;
-
-		// Copy fluid states from main storage into a column vector
-		Eigen::MatrixXd tempStates = fluidStates.leftCols(nFluidCells);
-		Eigen::Map<Eigen::VectorXd> states(tempStates.data(), tempStates.size());
-		
-		// Copy sum of face fluxes into a column vector
-		Eigen::MatrixXd tempSumFaceFluxes = sumOfFaceFluxes.leftCols(nFluidCells);
-		Eigen::Map<Eigen::VectorXd> fluxes(tempSumFaceFluxes.data(), tempSumFaceFluxes.size());
-
-		// Define right-hand-side vector for linear system
-		Eigen::VectorXd rhs = states - dt * fluxes;
-
-		// Size of linear system
-		const int n = states.size();
-
-		// Jacobian matrix of Euler source terms
-		Eigen::SparseMatrix<double> S_J(n, n);
-		S_J.setZero();
-
-		// Linear system matrix: A = I - dt*S_J
-		Eigen::SparseMatrix<double> A(n, n);
-		A.setIdentity();
-		A -= dt * S_J;
-
-		// Solve A*x = rhs
-		Eigen::VectorXd x(rhs.size());
-		Eigen::BiCGSTAB<Eigen::SparseMatrix<double>> solver;
-		solver.compute(A);
-		x = solver.solve(rhs);	
-
-		// Show output statistics of linear solver
-		const int iters = solver.iterations();
-		const double err = solver.error();
-		const bool isConverged = solver.info() == Eigen::ComputationInfo::Success;
-		std::cout << "Linear solver converged: " << isConverged << std::endl;
-		std::cout << "iterations: " << iters << std::endl;
-		std::cout << "error:      " << err << std::endl;
-		assert(isConverged);
-
-		// Copy new fluid states to storage
-		Eigen::Map<Eigen::MatrixXd> xMapped(x.data(), rows, nFluidCells);
-		fluidStates.leftCols(nFluidCells) = xMapped;
-
-		assert(fluidStates.rows() == rows);
-		assert(fluidStates.cols() == cols);
+		updateFluidStatesImplicit(dt);
 	}
 }
+
+void AppmSolver::updateFluidStatesExplicit(const double dt)
+{
+	const int nCells = dualMesh.getNumberOfCells();
+	for (int k = 0; k < nCells; k++) {
+		fluidStates.col(k) += -dt * sumOfFaceFluxes.col(k) + dt * fluidSources.col(k);
+	}
+}
+
+
+void AppmSolver::updateFluidStatesImplicit(const double dt)
+{
+	std::cout << "Solve Euler equations with implicit sources" << std::endl;
+	// Euler source terms are all implicit, i.e., 
+	// U^(m+1) - U^(m) = -dt * fluxes^(m) + dt * sources^(m+1), with sources = s(U)
+	// and yields to the system of equations
+	// (I - dt * S_J^m) * U^(m+1) = U^(m) - dt * fluxes^(m)
+	// where S_J^m is the Jacobian (linearization) of implicit sources: sources^(m+1) = S_J^m * U^(m+1).
+	// We write the system of equations as
+	// A*x = rhs
+	// with x = U^(m+1).
+
+	const int nCells = dualMesh.getNumberOfCells(); 
+	const int rows = fluidStates.rows();
+	const int cols = fluidStates.cols();
+
+	int nFluidCells = 0;
+	for (int k = 0; k < nCells; k++) {
+		if (dualMesh.getCell(k)->getType() == Cell::Type::FLUID) {
+			nFluidCells++;
+		}
+		else {
+			break;
+		}
+	}
+	std::cout << "nFluidCells = " << nFluidCells << " of total " << cols << std::endl;
+
+	// Copy fluid states from main storage into a column vector
+	Eigen::MatrixXd tempStates = fluidStates.leftCols(nFluidCells);
+	Eigen::Map<Eigen::VectorXd> states(tempStates.data(), tempStates.size());
+
+	// Copy sum of face fluxes into a column vector
+	Eigen::MatrixXd tempSumFaceFluxes = sumOfFaceFluxes.leftCols(nFluidCells);
+	Eigen::Map<Eigen::VectorXd> fluxes(tempSumFaceFluxes.data(), tempSumFaceFluxes.size());
+
+	// Define right-hand-side vector for linear system
+	Eigen::VectorXd rhs = states - dt * fluxes;
+
+	// Size of linear system
+	const int n = states.size();
+
+	// Jacobian matrix of Euler source terms
+	Eigen::SparseMatrix<double> S_J(n, n);
+	S_J.setZero();
+
+	// Linear system matrix: A = I - dt*S_J
+	Eigen::SparseMatrix<double> A(n, n);
+	A.setIdentity();
+	A -= dt * S_J;
+
+	// Solve A*x = rhs
+	Eigen::VectorXd x(rhs.size());
+	Eigen::BiCGSTAB<Eigen::SparseMatrix<double>> solver;
+	solver.compute(A);
+	x = solver.solve(rhs);
+
+	// Show output statistics of linear solver
+	const int iters = solver.iterations();
+	const double err = solver.error();
+	const bool isConverged = solver.info() == Eigen::ComputationInfo::Success;
+	std::cout << "Linear solver converged: " << isConverged << std::endl;
+	std::cout << "iterations: " << iters << std::endl;
+	std::cout << "error:      " << err << std::endl;
+	assert(isConverged);
+
+	// Copy new fluid states to storage
+	Eigen::Map<Eigen::MatrixXd> xMapped(x.data(), rows, nFluidCells);
+	fluidStates.leftCols(nFluidCells) = xMapped;
+
+	assert(fluidStates.rows() == rows);
+	assert(fluidStates.cols() == cols);
+}
+
 
 void AppmSolver::solveMaxwellSystem(const double time, const double dt, const double dt_previous, const Eigen::SparseMatrix<double> & Msigma)
 {

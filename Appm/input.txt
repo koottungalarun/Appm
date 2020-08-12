@@ -51,7 +51,7 @@ isMaxwellEnabled: 0
 # Format: Symbol, name, massRatio, charge
 # species: e, Electron, 1e-4, -1
 species: Ar, Argon, 1, 0
-# species: Ar+, Ion, 1, 1
+species: Ar+, Ion, 1, 1
 #
 #
 ######################
