@@ -60,7 +60,7 @@ Eigen::VectorXd Physics::getTemperature(const Eigen::MatrixXd & states, const do
 {
 	assert(massRatio > 0);
 	const int n = states.cols();
-	Eigen::VectorXd T = Eigen::MatrixXd::Zero(n);
+	Eigen::VectorXd T = Eigen::VectorXd::Zero(n);
 	for (int i = 0; i < n; i++) {
 		const Eigen::VectorXd & state = states.col(i);
 		T(i) = Physics::getTemperature(state, massRatio);
