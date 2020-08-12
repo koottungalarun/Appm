@@ -56,6 +56,18 @@ double Physics::getTemperature(const Eigen::VectorXd & state, const double massR
 	return T;
 }
 
+Eigen::VectorXd Physics::getTemperature(const Eigen::MatrixXd & states, const double massRatio)
+{
+	assert(massRatio > 0);
+	const int n = states.cols();
+	Eigen::VectorXd T = Eigen::MatrixXd::Zero(n);
+	for (int i = 0; i < n; i++) {
+		const Eigen::VectorXd & state = states.col(i);
+		T(i) = Physics::getTemperature(state, massRatio);
+	}
+	return T;
+}
+
 const Eigen::Vector3d Physics::getFluidFluxFromState(const Eigen::Vector3d & q)
 {
 	assert(q.norm() > 0);

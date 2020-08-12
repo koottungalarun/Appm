@@ -19,7 +19,13 @@ public:
 	
 	static const double getMaxWavespeed(const Eigen::Vector3d & qL, const Eigen::Vector3d & qR);
 	static double getMaxWavespeed(const Eigen::Vector3d & state);
+
+	/** Get temperature from fluid state in a single cell. */
 	static double getTemperature(const Eigen::VectorXd & state, const double massRatio);
+
+	/** Get temperature from fluid states in a list of cells. */
+	static Eigen::VectorXd getTemperature(const Eigen::MatrixXd & states, const double massRatio);
+
 
 	static const Eigen::Vector3d getFluidFluxFromState(const Eigen::Vector3d & q);
 
