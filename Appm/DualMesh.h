@@ -15,6 +15,8 @@ public:
 	void init_dualMesh(const PrimalMesh & primal, const double terminalRadius);
 	const int getAssociatedPrimalEdgeIndex(const int dualFaceIndex) const;
 
+	const int getNumberFluidCells() const;
+
 protected:
 
 	XdmfGrid getXdmfSurfaceGrid() const;
