@@ -297,7 +297,7 @@ private:
 	void setSumOfFaceFluxes();
 	void setImplicitMassFluxTerms(const double dt);
 	void updateFluidStates(const double dt, const bool isImplicitSources);
-	Eigen::SparseMatrix<double> getEulerSourceJacobian() const;
+	Eigen::SparseMatrix<double> getJacobianEulerSourceElasticCollisions() const;
 	void updateFluidStatesExplicitWithJacobian(const double dt);
 	void updateFluidStatesExplicit(const double dt);
 	void updateFluidStatesImplicit(const double dt);
@@ -368,8 +368,8 @@ private:
 	const int getSpeciesIndex(const std::string & tag);
 
 	const double getCollisionFrequency(const int alpha, const int beta, const int cellIdx);
-	const double getReducedMass(const int alpha, const int beta);
-	const Eigen::MatrixXd getStates(const int fidx, const int nCols);
+	const double getReducedMass(const int alpha, const int beta) const;
+	const Eigen::MatrixXd getStates(const int fidx, const int nCols) const;
 
 };
 

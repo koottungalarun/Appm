@@ -2171,39 +2171,28 @@ void AppmSolver::updateFluidStates(const double dt, const bool isImplicitSources
 	}
 }
 
-Eigen::SparseMatrix<double> AppmSolver::getEulerSourceJacobian() const
+/**
+* @return Jacobian matrix of Euler source terms due to elastic collisions.
+*/
+Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceElasticCollisions() const
 {
-	const int n = 1;
-	Eigen::SparseMatrix<double> M(n, n);
-	return M;
-}
+	const bool isShowDebugMessage = false;
+	const int nFluidCells = dualMesh.getNumberFluidCells();
+	const int nFluids = getNFluids();
 
-void AppmSolver::updateFluidStatesExplicitWithJacobian(const double dt)
-{
-	const bool showDebugMessage = false;
-	fluidSources.setZero();
+	const double gamma = Physics::gamma; 	// heat capacity ratio
+	assert(gamma > 1);
 
-	std::cout << "Update Euler sources with Jacobian and explicit" << std::endl;
-	const int nCells = dualMesh.getNumberOfCells();
-	int nFluidCells = 0;
-	for (int k = 0; k < nCells; k++) {
-		if (dualMesh.getCell(k)->getType() == Cell::Type::FLUID) {
-			nFluidCells++;
-		}
-		else {
-			break;
-		}
-	}
-
-	// Sparse matrix data
+	// Triplets for creating Jacobian matrix
 	typedef Eigen::Triplet<double> T;
 	std::vector<T> triplets;
-	const int nFluids = getNFluids();
-	const int n = 5 * nFluidCells * nFluids;
-	Eigen::SparseMatrix<double> S_J(n,n);
 
 	const int nElasticCollisions = elasticCollisions.size();
-	std::cout << "Number of elastic collisions: " << nElasticCollisions << std::endl;
+	if (isShowDebugMessage) {
+		std::cout << "Number of elastic collisions: " << nElasticCollisions << std::endl;
+	}
+
+	// For all elastic collisions ... 
 	for (int collIdx = 0; collIdx < nElasticCollisions; collIdx++) {
 		const ElasticCollision * collision = elasticCollisions[collIdx];
 		// get fluid indices of species A and B
@@ -2212,26 +2201,19 @@ void AppmSolver::updateFluidStatesExplicitWithJacobian(const double dt)
 		assert(fidxA >= 0 && fidxA < getNFluids());
 		assert(fidxB >= 0 && fidxB < getNFluids());
 
-		// get reduced mass ratio m_ab = m_a * m_b / (m_a + m_b)
-		const double ma = getSpecies(fidxA).getMassRatio();
-		const double mb = getSpecies(fidxB).getMassRatio();
-		const double mab = getReducedMass(fidxA, fidxB);
-
-		if (showDebugMessage) {
-			std::cout << "mab: " << mab << std::endl;
-		}
-
 		// get states of fluid A and fluid B
 		const Eigen::MatrixXd & statesA = getStates(fidxA, nFluidCells);
 		const Eigen::MatrixXd & statesB = getStates(fidxB, nFluidCells);
 
-		// get number densities
-		const Eigen::VectorXd & na = statesA.row(0);
-		const Eigen::VectorXd & nb = statesB.row(0);
-		assert(na.size() == statesA.cols() && na.size() > 0);
-		assert(nb.size() == statesB.cols() && nb.size() > 0);
+		// get reduced mass ratio m_ab = m_a * m_b / (m_a + m_b)
+		const double ma = getSpecies(fidxA).getMassRatio();
+		const double mb = getSpecies(fidxB).getMassRatio();
+		const double mab = getReducedMass(fidxA, fidxB);
+		if (isShowDebugMessage) {
+			std::cout << "mab: " << mab << std::endl;
+		}
 
-		// get reduced temperature T_ab
+		// get reduced temperature T_ab = (ma * Tb + mb * Ta) / (ma + mb)
 		const Eigen::VectorXd Ta = Physics::getTemperature(statesA, ma);
 		const Eigen::VectorXd Tb = Physics::getTemperature(statesB, mb);
 		const Eigen::VectorXd Tab = (1. / (ma + mb)) * (ma * Tb + mb * Ta);
@@ -2250,18 +2232,34 @@ void AppmSolver::updateFluidStatesExplicitWithJacobian(const double dt)
 			v_th.setOnes();
 		}
 
+		// get number densities
+		const Eigen::VectorXd & na = statesA.row(0);
+		const Eigen::VectorXd & nb = statesB.row(0);
+		assert(na.size() == statesA.cols() && na.size() > 0);
+		assert(nb.size() == statesB.cols() && nb.size() > 0);
+
 		// Define source terms in Jacobian
-		// momentum source
 		int i, j;
 		for (int k = 0; k < nFluidCells; k++) {
+			// Gas velocity
+			const Eigen::Vector3d ua = statesA.col(k).segment(1, 3) / na(k);
+			const Eigen::Vector3d ub = statesB.col(k).segment(1, 3) / nb(k);
+
+			// Factor for momentum and energy source
+			const double factor_m = -4. / 3. * mab * v_th(k) * Qab(k);
+			const double factor_e = factor_m / (ma + mb);
+
+			// Index of fluid states of cell k in state vector
 			const int idxA = 5 * (nFluids * k + fidxA);
 			const int idxB = 5 * (nFluids * k + fidxB);
 
-			const double factor = -4. / 3. * mab * v_th(k) * Qab(k);
-			const double faa = +factor / ma * nb(k);
-			const double fab = -factor / ma * na(k);
-			const double fba = -factor / mb * nb(k);
-			const double fbb = +factor / mb * na(k);
+			/*
+			* Momentum source
+			*/
+			const double faa = +factor_m / ma * nb(k);
+			const double fab = -factor_m / ma * na(k);
+			const double fba = -factor_m / mb * nb(k);
+			const double fbb = +factor_m / mb * na(k);
 
 			i = idxA;
 			j = idxA;
@@ -2286,34 +2284,15 @@ void AppmSolver::updateFluidStatesExplicitWithJacobian(const double dt)
 			triplets.push_back(T(i + 1, j + 1, fbb));
 			triplets.push_back(T(i + 2, j + 2, fbb));
 			triplets.push_back(T(i + 3, j + 3, fbb));
-		}
 
-
-		// energy source
-		const double gamma = Physics::gamma;
-		assert(gamma > 1);
-		for (int k = 0; k < nFluidCells; k++) {
-			const int idxA = 5 * (nFluids * k + fidxA);
-			const int idxB = 5 * (nFluids * k + fidxB);
-
-			const double factor = -4. / 3. * mab / (ma + mb) * v_th(k) * Qab(k);
-			const Eigen::Vector3d ua = statesA.col(k).segment(1, 3) / na(k);
-			const Eigen::Vector3d ub = statesB.col(k).segment(1, 3) / nb(k);
-
-			if (showDebugMessage) {
-				if (k == 0) {
-					std::cout << "factor = " << factor << std::endl;
-					std::cout << "ua: " << ua.transpose() << std::endl;
-					std::cout << "ub: " << ub.transpose() << std::endl;
-				}
-			}
-
-			// Kinetic energy 
+			/*
+			* Kinetic energy source
+			*/
 			const Eigen::Vector3d uColl = ma * ua + mb * ub;
-			const Eigen::Vector3d qMaa = +factor / ma * nb(k) * uColl;
-			const Eigen::Vector3d qMab = -factor / ma * na(k) * uColl;
-			const Eigen::Vector3d qMba = -factor / mb * nb(k) * uColl;
-			const Eigen::Vector3d qMbb = +factor / mb * na(k) * uColl;
+			const Eigen::Vector3d qMaa = +factor_e / ma * nb(k) * uColl;
+			const Eigen::Vector3d qMab = -factor_e / ma * na(k) * uColl;
+			const Eigen::Vector3d qMba = -factor_e / mb * nb(k) * uColl;
+			const Eigen::Vector3d qMbb = +factor_e / mb * na(k) * uColl;
 
 			i = idxA;
 			j = idxA;
@@ -2339,11 +2318,13 @@ void AppmSolver::updateFluidStatesExplicitWithJacobian(const double dt)
 			triplets.push_back(T(i + 4, j + 2, qMbb(1)));
 			triplets.push_back(T(i + 4, j + 3, qMbb(2)));
 
-			// thermal energy source
-			const double qTaa = +factor / ma * 3 * (gamma - 1) * ma * nb(k);
-			const double qTab = -factor / ma * 3 * (gamma - 1) * mb * na(k);
-			const double qTba = -factor / mb * 3 * (gamma - 1) * ma * nb(k);
-			const double qTbb = +factor / mb * 3 * (gamma - 1) * mb * na(k);
+			/* 
+			* Thermal energy source
+			*/
+			const double qTaa = +factor_e / ma * 3 * (gamma - 1) * ma * nb(k);
+			const double qTab = -factor_e / ma * 3 * (gamma - 1) * mb * na(k);
+			const double qTba = -factor_e / mb * 3 * (gamma - 1) * ma * nb(k);
+			const double qTbb = +factor_e / mb * 3 * (gamma - 1) * mb * na(k);
 
 			i = idxA;
 			j = idxA;
@@ -2374,23 +2355,32 @@ void AppmSolver::updateFluidStatesExplicitWithJacobian(const double dt)
 			triplets.push_back(T(i + 4, j + 4, qTbb));
 		}
 	}
-	S_J.setFromTriplets(triplets.begin(), triplets.end());
-	S_J.makeCompressed();
 
-	if (showDebugMessage) {
-		std::cout << "Jacobian: " << std::endl;
-		std::cout << S_J.topLeftCorner(5 * nFluids, 5 * nFluids).toDense() << std::endl;
-	}
+	// Create Jacobian matrix from triplets
+	const int n = 5 * nFluidCells * nFluids;
+	Eigen::SparseMatrix<double> M(n, n);
+	M.setFromTriplets(triplets.begin(), triplets.end());
+	M.makeCompressed();
+	return M;
+}
+
+void AppmSolver::updateFluidStatesExplicitWithJacobian(const double dt)
+{
+	Eigen::SparseMatrix<double> S_J;
+	S_J = this->getJacobianEulerSourceElasticCollisions();
+
+
+	fluidSources.setZero();
+
+	std::cout << "Update Euler sources with Jacobian and explicit" << std::endl;
+	const int nFluidCells = dualMesh.getNumberFluidCells();
+	const int nFluids = getNFluids();
 
 	Eigen::MatrixXd tempStates = fluidStates.leftCols(nFluidCells);
 	Eigen::Map<Eigen::VectorXd> states(tempStates.data(), tempStates.size());
 	assert(S_J.cols() == states.size());
 	assert(states.allFinite());
 
-	if (showDebugMessage) {
-		std::cout << "states in vector format: " << std::endl;
-		std::cout << states.topRows(5 * nFluids) << std::endl;
-	}
 	Eigen::VectorXd src = S_J * states;
 	assert(src.allFinite());
 
@@ -4887,7 +4877,7 @@ const double AppmSolver::getCollisionFrequency(const int alpha, const int beta, 
 /** 
 * @return Get reduced mass of the interaction between fluid A and B.
 */
-const double AppmSolver::getReducedMass(const int alpha, const int beta)
+const double AppmSolver::getReducedMass(const int alpha, const int beta) const
 {
 	auto nFluids = getNFluids();
 	assert(alpha >= 0 && alpha < nFluids);
@@ -4905,7 +4895,7 @@ const double AppmSolver::getReducedMass(const int alpha, const int beta)
 * @param nCols    number of columns (i.e., cells with index 0 to nCols-1)
 * @return fluid states of fluid with index fidx.
 */
-const Eigen::MatrixXd AppmSolver::getStates(const int fidx, const int nCols)
+const Eigen::MatrixXd AppmSolver::getStates(const int fidx, const int nCols) const
 {
 	const int nFluids = getNFluids();
 	assert(fidx >= 0);
