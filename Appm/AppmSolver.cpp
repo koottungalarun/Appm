@@ -298,7 +298,7 @@ void AppmSolver::run()
 				}
 
 				setSumOfFaceFluxes();
-				const bool isImplicitSources = true;
+				const bool isImplicitSources = false;
 				updateFluidStates(dt, isImplicitSources);
 
 				//debug_checkCellStatus();
@@ -935,6 +935,13 @@ void AppmSolver::applyFluidInitializationType()
 	}
 	break;
 
+	case FluidInitType::TEST_FRICTION_TEMPERATURE:
+	{
+		std::cout << "Initialize fluid states: " << initType << std::endl;
+		init_fluid_frictionTest_temperature();
+	}
+	break;
+
 	//case FluidInitType::DEFAULT:
 	//{
 	//	std::cout << "Initialize fluid states: " << "Explosion" << std::endl;
@@ -1181,6 +1188,42 @@ void AppmSolver::init_fluid_frictonTest()
 	}
 
 	std::cout << "Number of elastic collisions: " << elasticCollisions.size() << std::endl;
+}
+
+void AppmSolver::init_fluid_frictionTest_temperature()
+{
+	const int nCells = dualMesh.getNumberOfCells();
+	const int nFluids = getNFluids();
+
+	// index of first fluid that is charge-neutral
+	int idxN = -1;
+	for (int fluidx = 0; fluidx < nFluids; fluidx++) {
+		if (getSpecies(fluidx).getCharge() == 0) {
+			idxN = fluidx;
+			break;
+		}
+	}
+	assert(idxN >= 0);
+
+	const Eigen::Vector3d uZero = Eigen::Vector3d::Zero();
+	const double n = 1;
+	const double p0 = 1;
+	const double p1 = 2;
+
+	for (int fluidx = 0; fluidx < nFluids; fluidx++) {
+		const double massRatio = getSpecies(fluidx).getMassRatio();
+		Eigen::VectorXd stateZero = Physics::primitive2state(massRatio, n, p0, uZero);
+		Eigen::VectorXd stateNonZero = Physics::primitive2state(massRatio, n, p1, uZero);
+
+		for (int i = 0; i < nCells; i++) {
+			if (fluidx == idxN) {
+				fluidStates.col(i).segment(5 * fluidx, 5) = stateNonZero;
+			}
+			else {
+				fluidStates.col(i).segment(5 * fluidx, 5) = stateZero;
+			}
+		}
+	}
 }
 
 /**
@@ -2104,6 +2147,84 @@ void AppmSolver::updateFluidStates(const double dt, const bool isImplicitSources
 void AppmSolver::updateFluidStatesExplicit(const double dt)
 {
 	const int nCells = dualMesh.getNumberOfCells();
+	int nFluidCells = 0;
+	for (int k = 0; k < nCells; k++) {
+		if (dualMesh.getCell(k)->getType() == Cell::Type::FLUID) {
+			nFluidCells++;
+		}
+		else {
+			break;
+		}
+	}
+
+	fluidSources.setZero();
+
+	const int nElasticCollisions = elasticCollisions.size();
+	std::cout << "Number of elastic collisions: " << nElasticCollisions << std::endl;
+	for (int collIdx = 0; collIdx < nElasticCollisions; collIdx++) {
+		const ElasticCollision * collision = elasticCollisions[collIdx];
+		// get fluid indices of species A and B
+		const int fidxA = collision->getFluidIdxA();
+		const int fidxB = collision->getFluidIdxB();
+		assert(fidxA >= 0 && fidxA < getNFluids());
+		assert(fidxB >= 0 && fidxB < getNFluids());
+
+		// get reduced mass ratio m_ab = m_a * m_b / (m_a + m_b)
+		const double ma = getSpecies(fidxA).getMassRatio();
+		const double mb = getSpecies(fidxB).getMassRatio();
+		const double mab = getReducedMass(fidxA, fidxB);
+
+		// get states of fluid A and fluid B
+		const Eigen::MatrixXd & statesA = getStates(fidxA, nFluidCells);
+		const Eigen::MatrixXd & statesB = getStates(fidxB, nFluidCells);
+
+		// get number densities
+		const Eigen::VectorXd & na = statesA.row(0);
+		const Eigen::VectorXd & nb = statesB.row(0);
+		assert(na.size() == statesA.cols() && na.size() > 0);
+		assert(nb.size() == statesB.cols() && nb.size() > 0);
+
+		// get reduced temperature T_ab
+		const Eigen::VectorXd Ta = Physics::getTemperature(statesA, ma);
+		const Eigen::VectorXd Tb = Physics::getTemperature(statesB, mb);
+		const Eigen::VectorXd Tab = (1. / (ma + mb)) * (ma * Tb + mb * Ta);
+
+		// get avg collision cross section Q_ab
+		Eigen::VectorXd Qab = collision->getAvgMomCrossSection(Tab);
+
+		// get thermal velocity v_th = sqrt(8/pi * T_ab / m_ab)
+		const double sqrt_8_pi = M_2_SQRTPI * M_SQRT2; // sqrt(8/pi) = 2/sqrt(pi) * sqrt(2)
+		Eigen::VectorXd v_th = (sqrt_8_pi / sqrt(mab)) * Tab.array().sqrt();
+
+		const bool isDefaultDataUsed = true;
+		if (isDefaultDataUsed) {
+			std::cout << "Warning: use default data for elastic collisions" << std::endl;
+			Qab.setConstant(1);
+			v_th.setOnes();
+		}
+
+		// Apply source terms 
+		for (int k = 0; k < nFluidCells; k++) {
+			const double prefactor = -4. / 3. * na(k) * nb(k) * mab * v_th(k) * Qab(k);
+			assert(isfinite(prefactor) && prefactor < 0);
+
+			const Eigen::Vector3d ua = statesA.col(k).segment(1, 3) / na(k);
+			const Eigen::Vector3d ub = statesB.col(k).segment(1, 3) / nb(k);
+
+			// Momentum source
+			const Eigen::Vector3d Ra = prefactor * (ua - ub);
+			fluidSources.col(k).segment(5 * fidxA + 1, 3) += 1 / ma * Ra; // fluid A
+			fluidSources.col(k).segment(5 * fidxB + 1, 3) -= 1 / mb * Ra; // fluid B
+
+			
+			// Energy source
+			const double Qa = prefactor / (ma + mb) * (3 * (Ta(k) - Tb(k)) + (ua - ub).dot(ma * ua + mb * ub));
+			fluidSources(5 * fidxA + 4, k) += 1 / ma * Qa; // fluid A
+			fluidSources(5 * fidxB + 4, k) -= 1 / mb * Qa; // fluid B
+		}
+	}
+
+
 	for (int k = 0; k < nCells; k++) {
 		fluidStates.col(k) += -dt * sumOfFaceFluxes.col(k) + dt * fluidSources.col(k);
 	}
@@ -2160,6 +2281,8 @@ void AppmSolver::updateFluidStatesImplicit(const double dt)
 	typedef Eigen::Triplet<double> T;
 	std::vector<T> triplets;
 
+
+
 	// For each elastic collision of species A and B
 	const int nElasticCollisions = elasticCollisions.size();
 	std::cout << "Number of elastic collisions: " << nElasticCollisions << std::endl;
@@ -2196,9 +2319,21 @@ void AppmSolver::updateFluidStatesImplicit(const double dt)
 		const double sqrt_8_pi = M_2_SQRTPI * M_SQRT2; // sqrt(8/pi) = 2/sqrt(pi) * sqrt(2)
 		Eigen::VectorXd v_th = (sqrt_8_pi / sqrt(mab)) * Tab.array().sqrt();
 
-		std::cout << "Warning: use default data for elastic collisions" << std::endl;
-		Qab.setOnes(); 
-		v_th.setOnes(); 
+		const bool isDefaultDataUsed = true;
+		if (isDefaultDataUsed) {
+			std::cout << "Warning: use default data for elastic collisions" << std::endl;
+			Qab.setConstant(1);
+			v_th.setOnes();
+		}
+		else {
+			const double Qab_max = std::max(Qab_max, Qab.array().abs().maxCoeff());
+			const double vth_max = std::max(vth_max, v_th.array().abs().maxCoeff());
+			std::cout << "max(|Qab|):  " << Qab_max << std::endl;
+			std::cout << "max(|v_th|): " << vth_max << std::endl;
+
+			const double temp = Qab_max * vth_max;
+			std::cout << "temp: " << temp << std::endl;
+		}
 
 		// For each fluid cell
 		for (int k = 0; k < nFluidCells; k++) {
@@ -2244,8 +2379,8 @@ void AppmSolver::updateFluidStatesImplicit(const double dt)
 			// add terms for energy source ...
 			assert(na(k) > 0);
 			assert(nb(k) > 0);
-			const Eigen::Vector3d ua = statesA.col(k) / na(k);
-			const Eigen::Vector3d ub = statesB.col(k) / nb(k);
+			const Eigen::Vector3d ua = statesA.col(k).segment(1, 3).array() / na(k);
+			const Eigen::Vector3d ub = statesB.col(k).segment(1, 3).array() / nb(k);
 
 			// coefficients in energy equation due to kinetic energy (friction)
 			const Eigen::Vector3d quaa = +1. / ma * prefactor * nb(k) * (ma * ua + mb * ub);
@@ -4659,6 +4794,9 @@ void AppmSolver::SolverParameters::setFluidInitType(const std::string & s)
 	if (trimmed == "TEST_FRICTION") {
 		this->fluidInitType = FluidInitType::TEST_FRICTION;
 	}
+	if (trimmed == "TEST_FRICTION_TEMPERATURE") {
+		this->fluidInitType = FluidInitType::TEST_FRICTION_TEMPERATURE;
+	}
 	if (this->fluidInitType == FluidInitType::DEFAULT) {
 		std::cout << "Warning: it may be that the FluidInitType is not correctly read." << std::endl;
 		std::cout << "Value read from imput file: " << trimmed << std::endl;
@@ -4732,6 +4870,10 @@ std::ostream & operator<<(std::ostream & os, const AppmSolver::FluidInitType & o
 
 	case AppmSolver::FluidInitType::TEST_FRICTION:
 		os << "TEST_FRICTION";
+		break;
+
+	case AppmSolver::FluidInitType::TEST_FRICTION_TEMPERATURE:
+		os << "TEST_FRICTION_TEMPERATURE";
 		break;
 
 	default:

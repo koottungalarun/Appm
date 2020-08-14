@@ -42,7 +42,7 @@ public:
 	friend std::ostream & operator<<(std::ostream & os, const AppmSolver::MaxwellSolverType & obj);
 
 	enum class FluidInitType {
-		DEFAULT, UNIFORM, SHOCKTUBE, TEST_FRICTION
+		DEFAULT, UNIFORM, SHOCKTUBE, TEST_FRICTION, TEST_FRICTION_TEMPERATURE
 	};
 	friend std::ostream & operator<<(std::ostream & os, const AppmSolver::FluidInitType & obj);
 
@@ -249,7 +249,7 @@ private:
 	void init_testcase_frictionTerm();
 	void init_ignitionWire();
 	void init_fluid_frictonTest();
-
+	void init_fluid_frictionTest_temperature();
 	
 	void set_Efield_uniform(const Eigen::Vector3d direction);
 	void set_Bfield_azimuthal();

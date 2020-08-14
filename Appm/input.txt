@@ -18,7 +18,7 @@
 ######################
 ### MESH
 ######################
-mesh: mesh-coarse.txt
+mesh: mesh-coarse-test.txt
 # mesh: mesh-medium.txt
 # mesh: mesh-fine.txt
 #
@@ -28,12 +28,13 @@ mesh: mesh-coarse.txt
 ### SOLVER
 ######################
 ### Initial conditions
-initFluidState: SHOCKTUBE
+#initFluidState: TEST_FRICTION_TEMPERATURE
+initFluidState: TEST_FRICTION
 initEfield: 0 0 0
 #
 ### Simulation controls
-maxTime: 1
-maxIterations: 10
+maxTime: 5
+maxIterations: 500
 outputFrequency: 1
 #
 ### numerics
