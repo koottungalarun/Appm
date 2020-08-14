@@ -175,6 +175,11 @@ void Main::readInputFile()
 			ss >> x >> y >> z;
 			solverParameters.setInitEfield(Eigen::Vector3d(x, y, z));
 		}
+		if (tag == "isEulerSourcesImplicit") {
+			bool b = false;
+			std::istringstream(value) >> b;
+			solverParameters.setEulerSourcesImplicit(b);
+		}
 	}
 
 	std::cout << solverParameters << std::endl;

@@ -81,6 +81,8 @@ public:
 		const Eigen::Vector3d getInitEfield() const;
 		void setApParameter(const double lambdaSquare);
 		const double getApParameter() const;
+		void setEulerSourcesImplicit(const bool b);
+		const bool getEulerSourcesImplicit() const;
 
 		friend std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters & obj);
 	private:
@@ -96,6 +98,7 @@ public:
 		bool isMassFluxSchemeImplicit = true;
 		bool isFrictionEnabled = false;
 		bool isLorentzForceEnabled = false;
+		bool isEulerSourcesImplicit = false;
 
 		bool isMaxwellEnabled = false;
 		MaxwellSolverType maxwellSolverType = MaxwellSolverType::BiCGStab;		
@@ -164,6 +167,7 @@ private:
 	std::ofstream timeFile;
 
 	void init();
+	std::string getIterationHeader(const int iter, const double time, const double dt) const;
 
 	void debug_checkCellStatus() const;
 
@@ -286,9 +290,6 @@ private:
 	void createStopFile(const int value);
 	bool isStopFileActive();
 
-
-
-
 	void setFluidFaceFluxes();
 	Eigen::Vector3d getSpeciesFaceFlux(const Face * face, const int fluidIdx);
 	const Eigen::Vector3d getSpeciesFaceFluxAtCathode(const Face * face, const int fluidIdx);
@@ -296,6 +297,8 @@ private:
 	void setSumOfFaceFluxes();
 	void setImplicitMassFluxTerms(const double dt);
 	void updateFluidStates(const double dt, const bool isImplicitSources);
+	Eigen::SparseMatrix<double> getEulerSourceJacobian() const;
+	void updateFluidStatesExplicitWithJacobian(const double dt);
 	void updateFluidStatesExplicit(const double dt);
 	void updateFluidStatesImplicit(const double dt);
 

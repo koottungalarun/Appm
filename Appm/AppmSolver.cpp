@@ -111,6 +111,18 @@ void AppmSolver::init()
 	//E_cc = getEfieldAtCellCenter();
 }
 
+std::string AppmSolver::getIterationHeader(const int iter, const double time, const double dt) const
+{
+	std::stringstream ss;
+	ss << "*********************************************" << std::endl;
+	ss << "* Iteration " << iter;
+	ss << ",\t time = " << time;
+	ss << ",\t dt = " << dt;
+	ss << std::endl;
+	ss << "*********************************************";
+	return ss.str();
+}
+
 
 
 void AppmSolver::run()
@@ -175,6 +187,7 @@ void AppmSolver::run()
 	const int maxIterations = solverParams.getMaxIterations();
 	const double maxTime = solverParams.getMaxTime();
 	const int outputFrequency = solverParams.getOutputFrequency();
+	std::cout << getIterationHeader(iteration, time, dt) << std::endl;
 
 	writeOutput(iteration, time);
 	
@@ -188,7 +201,6 @@ void AppmSolver::run()
 			dt_previous = dt;
 			if (solverParams.getFluidEnabled()) {
 				dt = getNextFluidTimestepSize();
-
 				// Limit timestep such that maximum time is reached exactly
 				if (time + dt >= maxTime) {
 					std::cout << "timestep limited to reach maximum time; value before limiter is applied: dt = " << dt << std::endl;
@@ -196,21 +208,11 @@ void AppmSolver::run()
 				}
 			}
 
-			iteration++;
 			time += dt;
-			std::cout << std::endl;
-			std::cout << "*********************************************" << std::endl;
-			std::cout << "* Iteration " << iteration;
-			std::cout << ",\t time = " << time;
-			std::cout << ",\t dt = " << dt;
-			std::cout << std::endl;
-			std::cout << "*********************************************" << std::endl;
+			iteration += 1;
 
-			// Add this time value to list of timesteps
-			outputIterations.push_back(iteration);
-			timeStamps.push_back(time);
-			timeFile << iteration << ", " << time << ", " << dt << std::endl;
-
+			std::cout << std::endl;
+			std::cout << getIterationHeader(iteration, time, dt) << std::endl;
 
 			// Set explicit fluid source terms
 			setMagneticLorentzForceSourceTerms();
@@ -298,15 +300,19 @@ void AppmSolver::run()
 				}
 
 				setSumOfFaceFluxes();
-				const bool isImplicitSources = false;
+				const bool isImplicitSources = solverParams.getEulerSourcesImplicit();
 				updateFluidStates(dt, isImplicitSources);
 
 				//debug_checkCellStatus();
 			}
 
+			// Add this time value to list of timesteps
+			timeFile << iteration << ", " << time << ", " << dt << std::endl;
+
+
 			// Criteria to stop loop iterations
 			const bool isStopFile = isStopFileActive();
-			const bool isMaxIters = iteration > maxIterations;
+			const bool isMaxIters = iteration >= maxIterations;
 			const bool isMaxTime = time >= maxTime;
 			const bool isStop = isStopFile || isMaxIters || isMaxTime;
 
@@ -2131,21 +2137,53 @@ const Eigen::Vector3d AppmSolver::getSpeciesFaceFluxAtCathode(const Face * face,
 */
 void AppmSolver::updateFluidStates(const double dt, const bool isImplicitSources)
 {
+	const bool showDebugMessage = false;
 	const bool isEulerSourceImplicit = isImplicitSources;
 	const int nCells = dualMesh.getNumberOfCells();
+	const int nFluids = getNFluids();
+
 	if (!isEulerSourceImplicit) {
-		updateFluidStatesExplicit(dt);
+		const int cellIdx = 0;
+		if (showDebugMessage) {
+			std::cout << "Cell idx = " << cellIdx << std::endl;
+			std::cout << "state: " << std::endl;
+			std::cout << Eigen::Map<Eigen::MatrixXd>(fluidStates.col(cellIdx).data(), 5, nFluids) << std::endl;
+		}
+
+		updateFluidStatesExplicitWithJacobian(dt);
+		if (showDebugMessage) {
+			std::cout << "src: explicit with Jacobian" << std::endl;
+			std::cout << Eigen::Map<Eigen::MatrixXd>(fluidSources.col(cellIdx).data(), 5, nFluids) << std::endl;
+		}
+
+		//updateFluidStatesExplicit(dt);
+		if (showDebugMessage) {
+			std::cout << "src: explicit" << std::endl;
+			std::cout << Eigen::Map<Eigen::MatrixXd>(fluidSources.col(cellIdx).data(), 5, nFluids) << std::endl;
+		}
+
+		for (int k = 0; k < nCells; k++) {
+			fluidStates.col(k) += -dt * sumOfFaceFluxes.col(k) + dt * fluidSources.col(k);
+		}
 	}
 	else {
 		updateFluidStatesImplicit(dt);
 	}
 }
 
-/**
-* Update Euler fluids with explicit scheme.
-*/
-void AppmSolver::updateFluidStatesExplicit(const double dt)
+Eigen::SparseMatrix<double> AppmSolver::getEulerSourceJacobian() const
 {
+	const int n = 1;
+	Eigen::SparseMatrix<double> M(n, n);
+	return M;
+}
+
+void AppmSolver::updateFluidStatesExplicitWithJacobian(const double dt)
+{
+	const bool showDebugMessage = false;
+	fluidSources.setZero();
+
+	std::cout << "Update Euler sources with Jacobian and explicit" << std::endl;
 	const int nCells = dualMesh.getNumberOfCells();
 	int nFluidCells = 0;
 	for (int k = 0; k < nCells; k++) {
@@ -2157,7 +2195,227 @@ void AppmSolver::updateFluidStatesExplicit(const double dt)
 		}
 	}
 
+	// Sparse matrix data
+	typedef Eigen::Triplet<double> T;
+	std::vector<T> triplets;
+	const int nFluids = getNFluids();
+	const int n = 5 * nFluidCells * nFluids;
+	Eigen::SparseMatrix<double> S_J(n,n);
+
+	const int nElasticCollisions = elasticCollisions.size();
+	std::cout << "Number of elastic collisions: " << nElasticCollisions << std::endl;
+	for (int collIdx = 0; collIdx < nElasticCollisions; collIdx++) {
+		const ElasticCollision * collision = elasticCollisions[collIdx];
+		// get fluid indices of species A and B
+		const int fidxA = collision->getFluidIdxA();
+		const int fidxB = collision->getFluidIdxB();
+		assert(fidxA >= 0 && fidxA < getNFluids());
+		assert(fidxB >= 0 && fidxB < getNFluids());
+
+		// get reduced mass ratio m_ab = m_a * m_b / (m_a + m_b)
+		const double ma = getSpecies(fidxA).getMassRatio();
+		const double mb = getSpecies(fidxB).getMassRatio();
+		const double mab = getReducedMass(fidxA, fidxB);
+
+		if (showDebugMessage) {
+			std::cout << "mab: " << mab << std::endl;
+		}
+
+		// get states of fluid A and fluid B
+		const Eigen::MatrixXd & statesA = getStates(fidxA, nFluidCells);
+		const Eigen::MatrixXd & statesB = getStates(fidxB, nFluidCells);
+
+		// get number densities
+		const Eigen::VectorXd & na = statesA.row(0);
+		const Eigen::VectorXd & nb = statesB.row(0);
+		assert(na.size() == statesA.cols() && na.size() > 0);
+		assert(nb.size() == statesB.cols() && nb.size() > 0);
+
+		// get reduced temperature T_ab
+		const Eigen::VectorXd Ta = Physics::getTemperature(statesA, ma);
+		const Eigen::VectorXd Tb = Physics::getTemperature(statesB, mb);
+		const Eigen::VectorXd Tab = (1. / (ma + mb)) * (ma * Tb + mb * Ta);
+
+		// get avg collision cross section Q_ab
+		Eigen::VectorXd Qab = collision->getAvgMomCrossSection(Tab);
+
+		// get thermal velocity v_th = sqrt(8/pi * T_ab / m_ab)
+		const double sqrt_8_pi = M_2_SQRTPI * M_SQRT2; // sqrt(8/pi) = 2/sqrt(pi) * sqrt(2)
+		Eigen::VectorXd v_th = (sqrt_8_pi / sqrt(mab)) * Tab.array().sqrt();
+
+		const bool isDefaultDataUsed = true;
+		if (isDefaultDataUsed) {
+			std::cout << "Warning: use default data for elastic collisions" << std::endl;
+			Qab.setConstant(1);
+			v_th.setOnes();
+		}
+
+		// Define source terms in Jacobian
+		// momentum source
+		int i, j;
+		for (int k = 0; k < nFluidCells; k++) {
+			const int idxA = 5 * (nFluids * k + fidxA);
+			const int idxB = 5 * (nFluids * k + fidxB);
+
+			const double factor = -4. / 3. * mab * v_th(k) * Qab(k);
+			const double faa = +factor / ma * nb(k);
+			const double fab = -factor / ma * na(k);
+			const double fba = -factor / mb * nb(k);
+			const double fbb = +factor / mb * na(k);
+
+			i = idxA;
+			j = idxA;
+			triplets.push_back(T(i + 1, j + 1, faa));
+			triplets.push_back(T(i + 2, j + 2, faa));
+			triplets.push_back(T(i + 3, j + 3, faa));
+
+			i = idxA;
+			j = idxB;
+			triplets.push_back(T(i + 1, j + 1, fab));
+			triplets.push_back(T(i + 2, j + 2, fab));
+			triplets.push_back(T(i + 3, j + 3, fab));
+
+			i = idxB;
+			j = idxA;
+			triplets.push_back(T(i + 1, j + 1, fba));
+			triplets.push_back(T(i + 2, j + 2, fba));
+			triplets.push_back(T(i + 3, j + 3, fba));
+
+			i = idxB;
+			j = idxB;
+			triplets.push_back(T(i + 1, j + 1, fbb));
+			triplets.push_back(T(i + 2, j + 2, fbb));
+			triplets.push_back(T(i + 3, j + 3, fbb));
+		}
+
+
+		// energy source
+		const double gamma = Physics::gamma;
+		assert(gamma > 1);
+		for (int k = 0; k < nFluidCells; k++) {
+			const int idxA = 5 * (nFluids * k + fidxA);
+			const int idxB = 5 * (nFluids * k + fidxB);
+
+			const double factor = -4. / 3. * mab / (ma + mb) * v_th(k) * Qab(k);
+			const Eigen::Vector3d ua = statesA.col(k).segment(1, 3) / na(k);
+			const Eigen::Vector3d ub = statesB.col(k).segment(1, 3) / nb(k);
+
+			if (showDebugMessage) {
+				if (k == 0) {
+					std::cout << "factor = " << factor << std::endl;
+					std::cout << "ua: " << ua.transpose() << std::endl;
+					std::cout << "ub: " << ub.transpose() << std::endl;
+				}
+			}
+
+			// Kinetic energy 
+			const Eigen::Vector3d uColl = ma * ua + mb * ub;
+			const Eigen::Vector3d qMaa = +factor / ma * nb(k) * uColl;
+			const Eigen::Vector3d qMab = -factor / ma * na(k) * uColl;
+			const Eigen::Vector3d qMba = -factor / mb * nb(k) * uColl;
+			const Eigen::Vector3d qMbb = +factor / mb * na(k) * uColl;
+
+			i = idxA;
+			j = idxA;
+			triplets.push_back(T(i + 4, j + 1, qMaa(0)));
+			triplets.push_back(T(i + 4, j + 2, qMaa(1)));
+			triplets.push_back(T(i + 4, j + 3, qMaa(2)));
+
+			i = idxA;
+			j = idxB;
+			triplets.push_back(T(i + 4, j + 1, qMab(0)));
+			triplets.push_back(T(i + 4, j + 2, qMab(1)));
+			triplets.push_back(T(i + 4, j + 3, qMab(2)));
+
+			i = idxB;
+			j = idxA;
+			triplets.push_back(T(i + 4, j + 1, qMba(0)));
+			triplets.push_back(T(i + 4, j + 2, qMba(1)));
+			triplets.push_back(T(i + 4, j + 3, qMba(2)));
+
+			i = idxB;
+			j = idxB;
+			triplets.push_back(T(i + 4, j + 1, qMbb(0)));
+			triplets.push_back(T(i + 4, j + 2, qMbb(1)));
+			triplets.push_back(T(i + 4, j + 3, qMbb(2)));
+
+			// thermal energy source
+			const double qTaa = +factor / ma * 3 * (gamma - 1) * ma * nb(k);
+			const double qTab = -factor / ma * 3 * (gamma - 1) * mb * na(k);
+			const double qTba = -factor / mb * 3 * (gamma - 1) * ma * nb(k);
+			const double qTbb = +factor / mb * 3 * (gamma - 1) * mb * na(k);
+
+			i = idxA;
+			j = idxA;
+			triplets.push_back(T(i + 4, j + 1, qTaa * (-0.5) * ua(0)));
+			triplets.push_back(T(i + 4, j + 2, qTaa * (-0.5) * ua(1)));
+			triplets.push_back(T(i + 4, j + 3, qTaa * (-0.5) * ua(2)));
+			triplets.push_back(T(i + 4, j + 4, qTaa));
+
+			i = idxA;
+			j = idxB;
+			triplets.push_back(T(i + 4, j + 1, qTab * (-0.5) * ub(0)));
+			triplets.push_back(T(i + 4, j + 2, qTab * (-0.5) * ub(1)));
+			triplets.push_back(T(i + 4, j + 3, qTab * (-0.5) * ub(2)));
+			triplets.push_back(T(i + 4, j + 4, qTab));
+
+			i = idxB;
+			j = idxA;
+			triplets.push_back(T(i + 4, j + 1, qTba * (-0.5) * ua(0)));
+			triplets.push_back(T(i + 4, j + 2, qTba * (-0.5) * ua(1)));
+			triplets.push_back(T(i + 4, j + 3, qTba * (-0.5) * ua(2)));
+			triplets.push_back(T(i + 4, j + 4, qTba));
+
+			i = idxB;
+			j = idxB;
+			triplets.push_back(T(i + 4, j + 1, qTbb * (-0.5) * ub(0)));
+			triplets.push_back(T(i + 4, j + 2, qTbb * (-0.5) * ub(1)));
+			triplets.push_back(T(i + 4, j + 3, qTbb * (-0.5) * ub(2)));
+			triplets.push_back(T(i + 4, j + 4, qTbb));
+		}
+	}
+	S_J.setFromTriplets(triplets.begin(), triplets.end());
+	S_J.makeCompressed();
+
+	if (showDebugMessage) {
+		std::cout << "Jacobian: " << std::endl;
+		std::cout << S_J.topLeftCorner(5 * nFluids, 5 * nFluids).toDense() << std::endl;
+	}
+
+	Eigen::MatrixXd tempStates = fluidStates.leftCols(nFluidCells);
+	Eigen::Map<Eigen::VectorXd> states(tempStates.data(), tempStates.size());
+	assert(S_J.cols() == states.size());
+	assert(states.allFinite());
+
+	if (showDebugMessage) {
+		std::cout << "states in vector format: " << std::endl;
+		std::cout << states.topRows(5 * nFluids) << std::endl;
+	}
+	Eigen::VectorXd src = S_J * states;
+	assert(src.allFinite());
+
+	const int rows = fluidStates.rows();
+	Eigen::Map<Eigen::MatrixXd> sources(src.data(), rows, nFluidCells);
+	fluidSources.leftCols(nFluidCells) = sources;
+}
+
+/**
+* Update Euler fluids with explicit scheme.
+*/
+void AppmSolver::updateFluidStatesExplicit(const double dt)
+{
 	fluidSources.setZero();
+
+	const int nCells = dualMesh.getNumberOfCells();
+	int nFluidCells = 0;
+	for (int k = 0; k < nCells; k++) {
+		if (dualMesh.getCell(k)->getType() == Cell::Type::FLUID) {
+			nFluidCells++;
+		}
+		else {
+			break;
+		}
+	}
 
 	const int nElasticCollisions = elasticCollisions.size();
 	std::cout << "Number of elastic collisions: " << nElasticCollisions << std::endl;
@@ -2215,7 +2473,6 @@ void AppmSolver::updateFluidStatesExplicit(const double dt)
 			const Eigen::Vector3d Ra = prefactor * (ua - ub);
 			fluidSources.col(k).segment(5 * fidxA + 1, 3) += 1 / ma * Ra; // fluid A
 			fluidSources.col(k).segment(5 * fidxB + 1, 3) -= 1 / mb * Ra; // fluid B
-
 			
 			// Energy source
 			const double Qa = prefactor / (ma + mb) * (3 * (Ta(k) - Tb(k)) + (ua - ub).dot(ma * ua + mb * ub));
@@ -2224,10 +2481,6 @@ void AppmSolver::updateFluidStatesExplicit(const double dt)
 		}
 	}
 
-
-	for (int k = 0; k < nCells; k++) {
-		fluidStates.col(k) += -dt * sumOfFaceFluxes.col(k) + dt * fluidSources.col(k);
-	}
 }
 
 /**
@@ -2383,17 +2636,17 @@ void AppmSolver::updateFluidStatesImplicit(const double dt)
 			const Eigen::Vector3d ub = statesB.col(k).segment(1, 3).array() / nb(k);
 
 			// coefficients in energy equation due to kinetic energy (friction)
-			const Eigen::Vector3d quaa = +1. / ma * prefactor * nb(k) * (ma * ua + mb * ub);
-			const Eigen::Vector3d quab = -1. / ma * prefactor * na(k) * (ma * ua + mb * ub);
-			const Eigen::Vector3d quba = -1. / mb * prefactor * na(k) * (ma * ua + mb * ub);
-			const Eigen::Vector3d qubb = +1. / mb * prefactor * nb(k) * (ma * ua + mb * ub);
+			const Eigen::Vector3d quaa = +1. / ma * prefactor / (ma + mb) * nb(k) * (ma * ua + mb * ub);
+			const Eigen::Vector3d quab = -1. / ma * prefactor / (ma + mb) * na(k) * (ma * ua + mb * ub);
+			const Eigen::Vector3d quba = -1. / mb * prefactor / (ma + mb) * na(k) * (ma * ua + mb * ub);
+			const Eigen::Vector3d qubb = +1. / mb * prefactor / (ma + mb) * nb(k) * (ma * ua + mb * ub);
 
 			// coefficients in energy equation due to thermal energy
 			const double gamma = Physics::gamma;
-			const double qeaa = +1. / ma * prefactor * 3 * nb(k) * (gamma - 1) * ma;
-			const double qeab = -1. / ma * prefactor * 3 * na(k) * (gamma - 1) * mb;
-			const double qeba = -1. / mb * prefactor * 3 * na(k) * (gamma - 1) * ma;
-			const double qebb = +1. / mb * prefactor * 3 * nb(k) * (gamma - 1) * mb;
+			const double qeaa = +1. / ma * prefactor / (ma + mb) * 3 * nb(k) * (gamma - 1) * ma;
+			const double qeab = -1. / ma * prefactor / (ma + mb) * 3 * na(k) * (gamma - 1) * mb;
+			const double qeba = -1. / mb * prefactor / (ma + mb) * 3 * na(k) * (gamma - 1) * ma;
+			const double qebb = +1. / mb * prefactor / (ma + mb) * 3 * nb(k) * (gamma - 1) * mb;
 
 			// ... for fluid A
 			i = idxA;
@@ -2844,6 +3097,9 @@ void AppmSolver::writeXdmfDualVolume(const std::string & filename)
 void AppmSolver::writeOutput(const int iteration, const double time)
 {
 	std::cout << "Write output at iteration " << iteration << ", time = " << time << std::endl;
+	outputIterations.push_back(iteration);
+	timeStamps.push_back(time);
+
 	const std::string filename = (std::stringstream() << "appm-" << iteration << ".h5").str();
 
 	const int nPrimalFaces = primalMesh.getNumberOfFaces();
@@ -4832,6 +5088,16 @@ const double AppmSolver::SolverParameters::getApParameter() const
 	return this->lambdaSq;
 }
 
+void AppmSolver::SolverParameters::setEulerSourcesImplicit(const bool b)
+{
+	this->isEulerSourcesImplicit = b;
+}
+
+const bool AppmSolver::SolverParameters::getEulerSourcesImplicit() const
+{
+	return isEulerSourcesImplicit;
+}
+
 std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters & obj)
 {
 	os << "APPM Solver Parameters:" << std::endl;
@@ -4849,6 +5115,7 @@ std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters 
 	os << "isMaxwellEnabled: " << obj.isMaxwellEnabled << std::endl;
 	os << "maxwellSolverType: " << obj.maxwellSolverType << std::endl;
 	os << "AP parameter: " << obj.lambdaSq << std::endl;
+	os << "isEulerSourcesImplicit: " << obj.isEulerSourcesImplicit << std::endl;
 	os << "=======================" << std::endl;
 	return os;
 }

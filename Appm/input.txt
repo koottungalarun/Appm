@@ -34,7 +34,7 @@ initEfield: 0 0 0
 #
 ### Simulation controls
 maxTime: 5
-maxIterations: 500
+maxIterations: 100
 outputFrequency: 1
 #
 ### numerics
@@ -44,6 +44,7 @@ isFluidEnabled: 1
 isMassfluxImplicit: 1
 isLorentzForceEnabled: 1
 isMaxwellEnabled: 0
+isEulerSourcesImplicit: 0
 #
 #
 ######################
