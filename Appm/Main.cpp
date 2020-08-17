@@ -180,6 +180,11 @@ void Main::readInputFile()
 			std::istringstream(value) >> b;
 			solverParameters.setEulerSourcesImplicit(b);
 		}
+		if (tag == "timestepSizeFactor") {
+			double dtFactor = 1;
+			std::istringstream(value) >> dtFactor;
+			solverParameters.setTimestepSizeFactor(dtFactor);
+		}
 	}
 
 	std::cout << solverParameters << std::endl;

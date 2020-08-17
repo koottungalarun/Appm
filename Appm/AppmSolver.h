@@ -83,12 +83,15 @@ public:
 		const double getApParameter() const;
 		void setEulerSourcesImplicit(const bool b);
 		const bool getEulerSourcesImplicit() const;
+		const double getTimestepSizeFactor() const;
+		void setTimestepSizeFactor(const double dt_factor);
 
 		friend std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters & obj);
 	private:
 		double lambdaSq = 1;
 		int maxIterations = 0;
 		double maxTime = 0;
+		double timestepSizeFactor = 1;
 		double timestepSizeMax = 1;
 		int outputFrequency = 1;
 
@@ -298,9 +301,6 @@ private:
 	void setImplicitMassFluxTerms(const double dt);
 	void updateFluidStates(const double dt, const bool isImplicitSources);
 	Eigen::SparseMatrix<double> getJacobianEulerSourceElasticCollisions() const;
-	void updateFluidStatesExplicitWithJacobian(const double dt);
-	void updateFluidStatesExplicit(const double dt);
-	void updateFluidStatesImplicit(const double dt);
 
 	void solveMaxwellSystem(const double time, const double dt, const double dt_previous, const Eigen::SparseMatrix<double> & Msigma);
 	

@@ -34,7 +34,8 @@ initEfield: 0 0 0
 #
 ### Simulation controls
 maxTime: 5
-maxIterations: 100
+maxIterations: 500
+timestepSizeFactor: 1
 outputFrequency: 1
 #
 ### numerics
@@ -44,7 +45,7 @@ isFluidEnabled: 1
 isMassfluxImplicit: 1
 isLorentzForceEnabled: 1
 isMaxwellEnabled: 0
-isEulerSourcesImplicit: 0
+isEulerSourcesImplicit: 1
 #
 #
 ######################
@@ -52,8 +53,8 @@ isEulerSourcesImplicit: 0
 ######################
 # Format: Symbol, name, massRatio, charge
 # species: e, Electron, 1e-4, -1
-species: Ar, Argon, 1, 0
 species: Ar+, Ion, 1, 1
+species: Ar, Argon, 1, 0
 #
 #
 ######################
