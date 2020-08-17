@@ -598,6 +598,8 @@ void AppmSolver::setInelasticCollisions(const std::vector<std::string>& list)
 
 		const std::string filename = ss.str();
 		InelasticCollision * inelasticCollision = new InelasticCollision(filename, kScale, Tscale);
+		const double electronMassRatio = getSpecies(idxEl).getMassRatio();
+		inelasticCollision->setScalingParameters(scalingParameters, electronMassRatio);
 		inelasticCollision->setElectronFluidx(idxEl);
 		inelasticCollision->setAtomFluidx(idxAtom);
 		inelasticCollision->setIonFluidx(idxIon);
@@ -948,6 +950,12 @@ void AppmSolver::applyFluidInitializationType()
 	}
 	break;
 
+	case FluidInitType::TEST_FRICTION_NUMBERDENSITY:
+	{
+		std::cout << "Initialize fluid states: " << initType << std::endl;
+		init_fluid_frictionTest_numberDensity();
+	}
+	break;
 	//case FluidInitType::DEFAULT:
 	//{
 	//	std::cout << "Initialize fluid states: " << "Explosion" << std::endl;
@@ -1228,6 +1236,55 @@ void AppmSolver::init_fluid_frictionTest_temperature()
 			else {
 				fluidStates.col(i).segment(5 * fluidx, 5) = stateZero;
 			}
+		}
+	}
+}
+
+/**
+* Initialize charge-neutral fluid
+*/
+void AppmSolver::init_fluid_frictionTest_numberDensity()
+{
+	const int nCells = dualMesh.getNumberOfCells();
+	const int nFluids = getNFluids();
+	const int nFluidCells = dualMesh.getNumberFluidCells();
+
+	const double n0 = 1;
+	const double n1 = 2;
+	const double p0 = 1;
+	const Eigen::Vector3d u0 = Eigen::Vector3d::Zero();
+
+	// assume that we have three fluids: neutrals, electrons (negative), ions (positive)
+	assert(nFluids == 3);
+
+	// find index of neutral species, electrons, and ions
+	int idxN = -1;
+	int idxE = -1;
+	int idxI = -1;
+	assert(nFluids >= 3);
+	for (int fluidx = 0; fluidx < nFluids; fluidx++) {
+		if (idxN == -1 && getSpecies(fluidx).getCharge() == 0) {
+			idxN = fluidx;
+		}
+		if (idxE == -1 && getSpecies(fluidx).getCharge() == -1) {
+			idxE = fluidx;
+		}
+		if (idxI == -1 && getSpecies(fluidx).getCharge() == +1) {
+			idxI = fluidx;
+		}
+	}
+	assert(idxN >= 0);
+	assert(idxE >= 0);
+	assert(idxI >= 0);
+	
+	// define quiescent, charge-neutral plasma with number density n > n0 for neutral species
+	for (int fluidx = 0; fluidx < nFluids; fluidx++) {
+		const double massRatio = getSpecies(fluidx).getMassRatio();
+		const Eigen::VectorXd state0 = Physics::primitive2state(massRatio, n0, p0, u0);
+		const Eigen::VectorXd state1 = Physics::primitive2state(massRatio, n1, p0, u0);
+		const Eigen::VectorXd state = (fluidx != idxN) ? state0 : state1;
+		for (int k = 0; k < nFluidCells; k++) {
+			fluidStates.col(k).segment(5 * fluidx, 5) = state;
 		}
 	}
 }
@@ -2144,15 +2201,25 @@ void AppmSolver::updateFluidStates(const double dt, const bool isImplicitSources
 	const int n = 5 * nFluidCells * nFluids;
 
 	fluidSources.setZero();
-	Eigen::SparseMatrix<double> M_elastic = getJacobianEulerSourceElasticCollisions();
+	Eigen::SparseMatrix<double> M_elastic;
+	M_elastic = getJacobianEulerSourceElasticCollisions();
 	assert(M_elastic.rows() == n);
 	assert(M_elastic.cols() == n);
+
+	Eigen::SparseMatrix<double> M_inelastic;
+	M_inelastic = getJacobianEulerSourceInelasticCollisions();
+	assert(M_inelastic.rows() == n);
+	assert(M_inelastic.cols() == n);
+
+	Eigen::SparseMatrix<double> M;
+	M = M_elastic; // TODO
+	//M = M_elastic + M_inelastic;
 
 	if (isImplicitSources) {
 		// implicit scheme
 		Eigen::SparseMatrix<double> A(n, n);
 		A.setIdentity();
-		A -= dt * M_elastic;
+		A -= dt * M;
 
 		// data mapper from matrix to vector format
 		Eigen::MatrixXd states = fluidStates.leftCols(nFluidCells);
@@ -2193,14 +2260,17 @@ void AppmSolver::updateFluidStates(const double dt, const bool isImplicitSources
 		Eigen::Map<Eigen::VectorXd> statesVec(states.data(), states.size());
 
 		// Get sources in vector format
-		assert(M_elastic.cols() == statesVec.size());
+		assert(M.cols() == statesVec.size());
 		assert(statesVec.allFinite());
-		Eigen::VectorXd srcVec = M_elastic * statesVec; // src = M * state
+		Eigen::VectorXd srcVec = M * statesVec; // src = M * state
 		assert(srcVec.allFinite());
 
 		// Reshape source vector to matrix format
 		Eigen::Map<Eigen::MatrixXd> src_as_matrix(srcVec.data(), fluidSources.rows(), nFluidCells);
 		fluidSources.leftCols(nFluidCells) = src_as_matrix;
+
+		Eigen::MatrixXd inelasticSources = getInelatsicSourcesExplicit();
+		fluidSources.leftCols(nFluidCells) += inelasticSources;
 
 		// Update states
 		fluidStates.leftCols(nFluidCells) += 
@@ -2400,6 +2470,118 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceElasticCollisions(
 	M.setFromTriplets(triplets.begin(), triplets.end());
 	M.makeCompressed();
 	return M;
+}
+
+Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollisions() const
+{
+	const int nFluidCells = dualMesh.getNumberFluidCells();
+	const int nFluids = getNFluids();
+	typedef Eigen::Triplet<double> T;
+	std::vector<T> triplets;
+
+	const int nCollisions = inelasticCollisions.size();
+	std::cout << "Number of inelastic collisions: " << nCollisions << std::endl;
+
+	// For all collisions ...
+	for (int collIdx = 0; collIdx < nCollisions; collIdx++) {
+		const InelasticCollision * collision = inelasticCollisions[collIdx];
+
+		// Fluid index for atoms, electrons, ions
+		const int fidxA = collision->getAtomFluidx();
+		const int fidxE = collision->getElectronFluidx();
+		const int fidxI = collision->getIonFluidx();
+
+		// Species mass ratios
+		const double mA = getSpecies(fidxA).getMassRatio();
+		const double mE = getSpecies(fidxE).getMassRatio();
+		const double mI = getSpecies(fidxI).getMassRatio();
+
+		// Species states
+		const Eigen::MatrixXd & statesA = getStates(fidxA, nFluidCells);
+		const Eigen::MatrixXd & statesE = getStates(fidxE, nFluidCells);
+		const Eigen::MatrixXd & statesI = getStates(fidxI, nFluidCells);
+
+		// Species number density
+		Eigen::VectorXd nA = statesA.row(0);
+		Eigen::VectorXd nE = statesE.row(0);
+		Eigen::VectorXd nI = statesI.row(0);
+
+		// Electron temperature
+		Eigen::VectorXd Te = Physics::getTemperature(statesE, mE);
+
+		// Reaction rates and species production rates
+		Eigen::VectorXd ki = collision->getIonizationRate(Te);
+		Eigen::VectorXd kr = collision->getRecombinationRate_Saha(ki, Te);
+		Eigen::VectorXd wi = ki.array() * nA.array() * nE.array();
+		Eigen::VectorXd wr = kr.array() * nI.array() * nE.array().pow(2);
+		Eigen::VectorXd w_net = wi - wr; // net species production rate
+
+		int i, j;
+		// Define Jacobian matrix for inelastic sources
+		for (int k = 0; k < nFluidCells; k++) {
+			// Species sources
+
+
+			// Momentum sources
+
+			// Energy sources
+		}
+	}
+
+
+	// Create Jacobian matrix from triplets
+	const int n = 5 * nFluidCells * nFluids;
+	Eigen::SparseMatrix<double> M(n, n);
+	M.setFromTriplets(triplets.begin(), triplets.end());
+	M.makeCompressed();
+	return M;
+}
+
+/**
+* This is a reference implementation for inelastic source terms of the Euler equations with explicit discretization. 
+*/
+Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
+{
+	const int nFluids = getNFluids();
+	const int nFluidCells = dualMesh.getNumberFluidCells();
+	Eigen::MatrixXd src(5 * nFluids, nFluidCells);
+	src.setZero();
+
+	const int nCollisions = inelasticCollisions.size();
+	for (int collIdx = 0; collIdx < nCollisions; collIdx++) {
+		const InelasticCollision * collision = inelasticCollisions[collIdx];
+		const int fidxA = collision->getAtomFluidx();
+		const int fidxE = collision->getElectronFluidx();
+		const int fidxI = collision->getIonFluidx();
+
+		Eigen::VectorXd ki(nFluidCells);
+		Eigen::VectorXd kr(nFluidCells);
+		ki.setOnes();
+		kr.setOnes();
+
+		const Eigen::MatrixXd statesA = getStates(fidxA, nFluidCells);
+		const Eigen::MatrixXd statesE = getStates(fidxE, nFluidCells);
+		const Eigen::MatrixXd statesI = getStates(fidxI, nFluidCells);
+
+		const Eigen::VectorXd nA = statesA.row(0);
+		const Eigen::VectorXd nE = statesE.row(0);
+		const Eigen::VectorXd nI = statesI.row(0);
+
+		
+		for (int k = 0; k < nFluidCells; k++) {
+			Eigen::VectorXd localSrc(5 * nFluids);
+			localSrc.setZero();
+
+			localSrc(5 * fidxA + 0) = -ki(k) * nE(k) * nA(k) + kr(k) * pow(nE(k),2) * nI(k);
+			localSrc(5 * fidxE + 0) = +ki(k) * nE(k) * nA(k) - kr(k) * pow(nE(k), 2) * nI(k);
+			localSrc(5 * fidxI + 0) = +ki(k) * nE(k) * nA(k) - kr(k) * pow(nE(k), 2) * nI(k);
+
+
+
+			src.col(k) = localSrc;
+		}
+	}
+	return src;
 }
 
 
@@ -4745,6 +4927,9 @@ void AppmSolver::SolverParameters::setFluidInitType(const std::string & s)
 	if (trimmed == "TEST_FRICTION_TEMPERATURE") {
 		this->fluidInitType = FluidInitType::TEST_FRICTION_TEMPERATURE;
 	}
+	if (trimmed == "TEST_FRICTION_NUMBERDENSITY") {
+		this->fluidInitType = FluidInitType::TEST_FRICTION_NUMBERDENSITY;
+	}
 	if (this->fluidInitType == FluidInitType::DEFAULT) {
 		std::cout << "Warning: it may be that the FluidInitType is not correctly read." << std::endl;
 		std::cout << "Value read from imput file: " << trimmed << std::endl;
@@ -4845,6 +5030,10 @@ std::ostream & operator<<(std::ostream & os, const AppmSolver::FluidInitType & o
 
 	case AppmSolver::FluidInitType::TEST_FRICTION_TEMPERATURE:
 		os << "TEST_FRICTION_TEMPERATURE";
+		break;
+
+	case AppmSolver::FluidInitType::TEST_FRICTION_NUMBERDENSITY:
+		os << "TEST_FRICTION_NUMBERDENSITY";
 		break;
 
 	default:

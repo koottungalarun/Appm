@@ -55,7 +55,7 @@ InelasticCollision::~InelasticCollision()
 * @param T electron temperature
 * @return ionization rate k_i (T).
 */
-Eigen::VectorXd InelasticCollision::getIonizationRate(const Eigen::VectorXd & T)
+Eigen::VectorXd InelasticCollision::getIonizationRate(const Eigen::VectorXd & T) const
 {
 	const int N = T.size();
 	Eigen::VectorXd result = table->interpolate(T);
@@ -63,7 +63,7 @@ Eigen::VectorXd InelasticCollision::getIonizationRate(const Eigen::VectorXd & T)
 	return result;
 }
 
-Eigen::VectorXd InelasticCollision::getRecombinationRate_Saha(const Eigen::VectorXd & ki, const Eigen::VectorXd & Te)
+Eigen::VectorXd InelasticCollision::getRecombinationRate_Saha(const Eigen::VectorXd & ki, const Eigen::VectorXd & Te) const
 {
 	const double a = getRecombSahaCoeff();
 
@@ -115,9 +115,8 @@ void InelasticCollision::setIonFluidx(const int idx)
 	this->fluidxIons = idx;
 }
 
-void InelasticCollision::setScalingParameters(const ScalingParameters & params)
+void InelasticCollision::setScalingParameters(const ScalingParameters & params, const double electronMassRatio)
 {
-	const double electronMassRatio = 1; // TODO <<<--------------
 	const double mbar = params.getMassScale();
 	const double nbar = params.getNumberDensityScale();
 	const double Tbar = params.getTemperatureScale();
@@ -126,8 +125,8 @@ void InelasticCollision::setScalingParameters(const ScalingParameters & params)
 
 	const double h2 = pow(pc.planckConstant(), 2);
 	const double kB = pc.kB();
-	const double pi = pc.pi();
-	const double temp = h2 / (2 * pi * mbar * kB * Tbar);
+	const double twoPi_inv = 0.5 * M_1_PI;
+	const double temp = twoPi_inv * h2 / (mbar * kB * Tbar);
 	const double deBroglieScaled_pow3 = pow(temp, 3./2.);
 	const double g0 = 1;
 	const double g1 = 6;

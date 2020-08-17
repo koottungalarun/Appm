@@ -42,7 +42,12 @@ public:
 	friend std::ostream & operator<<(std::ostream & os, const AppmSolver::MaxwellSolverType & obj);
 
 	enum class FluidInitType {
-		DEFAULT, UNIFORM, SHOCKTUBE, TEST_FRICTION, TEST_FRICTION_TEMPERATURE
+		DEFAULT, 
+		UNIFORM, 
+		SHOCKTUBE, 
+		TEST_FRICTION, 
+		TEST_FRICTION_TEMPERATURE, 
+		TEST_FRICTION_NUMBERDENSITY
 	};
 	friend std::ostream & operator<<(std::ostream & os, const AppmSolver::FluidInitType & obj);
 
@@ -257,6 +262,7 @@ private:
 	void init_ignitionWire();
 	void init_fluid_frictonTest();
 	void init_fluid_frictionTest_temperature();
+	void init_fluid_frictionTest_numberDensity();
 	
 	void set_Efield_uniform(const Eigen::Vector3d direction);
 	void set_Bfield_azimuthal();
@@ -301,6 +307,8 @@ private:
 	void setImplicitMassFluxTerms(const double dt);
 	void updateFluidStates(const double dt, const bool isImplicitSources);
 	Eigen::SparseMatrix<double> getJacobianEulerSourceElasticCollisions() const;
+	Eigen::SparseMatrix<double> getJacobianEulerSourceInelasticCollisions() const;
+	Eigen::MatrixXd getInelasticSourcesExplicit();
 
 	void solveMaxwellSystem(const double time, const double dt, const double dt_previous, const Eigen::SparseMatrix<double> & Msigma);
 	

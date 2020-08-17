@@ -29,12 +29,13 @@ mesh: mesh-coarse-test.txt
 ######################
 ### Initial conditions
 #initFluidState: TEST_FRICTION_TEMPERATURE
-initFluidState: TEST_FRICTION
+# initFluidState: TEST_FRICTION
+initFluidState: TEST_FRICTION_NUMBERDENSITY
 initEfield: 0 0 0
 #
 ### Simulation controls
 maxTime: 5
-maxIterations: 500
+maxIterations: 2
 timestepSizeFactor: 1
 outputFrequency: 1
 #
@@ -60,9 +61,9 @@ species: Ar, Argon, 1, 0
 ######################
 ### REACTIONS
 ######################
-elastic-collision: Ar-Ar+
+# elastic-collision: Ar-Ar+
 # elastic-collision: e-Ar
 # elastic-collision: e-Ar+
-# inelastic-collision: e-Ar
+inelastic-collision: e-Ar
 
 

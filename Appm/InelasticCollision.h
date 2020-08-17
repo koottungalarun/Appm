@@ -1,5 +1,8 @@
 #pragma once
 
+#define _USE_MATH_DEFINES
+#include <cmath>
+
 #include "InterpolationTable.h"
 #include <fstream>
 #include <Eigen/Dense>
@@ -15,8 +18,8 @@ public:
 
 	~InelasticCollision();
 
-	Eigen::VectorXd getIonizationRate(const Eigen::VectorXd & T);
-	Eigen::VectorXd getRecombinationRate_Saha(const Eigen::VectorXd & ki, const Eigen::VectorXd & Te);
+	Eigen::VectorXd getIonizationRate(const Eigen::VectorXd & T) const;
+	Eigen::VectorXd getRecombinationRate_Saha(const Eigen::VectorXd & ki, const Eigen::VectorXd & Te) const;
 
 	Eigen::MatrixXd getData() const;
 
@@ -30,7 +33,7 @@ public:
 	void setElectronMassRatio(const double electronMassRatio);
 	void setMassScale(const double mbar);
 	void setTemperatureScale(const double Tbar);
-	void setScalingParameters(const ScalingParameters & params);
+	void setScalingParameters(const ScalingParameters & params, const double electronMassRatio);
 
 private:
 	InterpolationTable * table = nullptr;
