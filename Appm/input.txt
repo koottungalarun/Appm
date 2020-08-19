@@ -34,8 +34,8 @@ initFluidState: TEST_FRICTION_NUMBERDENSITY
 initEfield: 0 0 0
 #
 ### Simulation controls
-maxTime: 5
-maxIterations: 2
+maxTime: 1
+maxIterations: 50
 timestepSizeFactor: 1
 outputFrequency: 1
 #
@@ -46,15 +46,15 @@ isFluidEnabled: 1
 isMassfluxImplicit: 1
 isLorentzForceEnabled: 1
 isMaxwellEnabled: 0
-isEulerSourcesImplicit: 1
+isEulerSourcesImplicit: 0
 #
 #
 ######################
 ### SPECIES
 ######################
 # Format: Symbol, name, massRatio, charge
-# species: e, Electron, 1e-4, -1
-species: Ar+, Ion, 1, 1
+species: e, Electron, 0.01, -1
+species: Ar+, Ion, 0.99, 1
 species: Ar, Argon, 1, 0
 #
 #

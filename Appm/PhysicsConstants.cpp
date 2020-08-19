@@ -42,3 +42,8 @@ const double PhysicsConstants::pi()
 {
 	return M_PI;
 }
+
+const double PhysicsConstants::atomicMass()
+{
+	return _u;
+}

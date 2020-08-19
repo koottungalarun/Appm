@@ -25,6 +25,8 @@ private:
 	double E0 = 0;
 	/** pressure scale (Pa) */
 	double p0 = 0;
+	/** mass scale (kg) */
+	double m0 = 0;
 
 	/* Scaled Debye length squared */
 	double lambdaSq = 0;
@@ -48,6 +50,7 @@ public:
 	void setLengthScale(const double x);
 	void setScaledDebyeLength(const double lambdasq);
 	void setPressureScale(const double p);
+	void setMassScale(const double m);
 
 	double getTemperatureScale() const;
 	double getLengthScale() const;

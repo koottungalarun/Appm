@@ -5,6 +5,7 @@
 # p     background gas pressure (Pa), ideal gas
 # T     temperature (K)
 # x     spatial length scale (m)
+# m     mass scale, in atomic units (1u = 1.66e-27 kg)
 # lambdaSq    scaled Debye length
 #
 #
@@ -16,4 +17,5 @@
 T=10000
 x=1e-2
 p=10135
+m=39.948
 

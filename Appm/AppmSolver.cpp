@@ -2269,8 +2269,10 @@ void AppmSolver::updateFluidStates(const double dt, const bool isImplicitSources
 		Eigen::Map<Eigen::MatrixXd> src_as_matrix(srcVec.data(), fluidSources.rows(), nFluidCells);
 		fluidSources.leftCols(nFluidCells) = src_as_matrix;
 
-		Eigen::MatrixXd inelasticSources = getInelatsicSourcesExplicit();
+		Eigen::MatrixXd inelasticSources = getInelasticSourcesExplicit();
 		fluidSources.leftCols(nFluidCells) += inelasticSources;
+
+		std::cout << "max of sources: " << fluidSources.cwiseAbs().maxCoeff() << std::endl;
 
 		// Update states
 		fluidStates.leftCols(nFluidCells) += 
@@ -2548,16 +2550,21 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 	src.setZero();
 
 	const int nCollisions = inelasticCollisions.size();
+	std::cout << "Number of inelastic collisions: " << nCollisions << std::endl;
 	for (int collIdx = 0; collIdx < nCollisions; collIdx++) {
 		const InelasticCollision * collision = inelasticCollisions[collIdx];
 		const int fidxA = collision->getAtomFluidx();
 		const int fidxE = collision->getElectronFluidx();
 		const int fidxI = collision->getIonFluidx();
 
+		const double mA = getSpecies(fidxA).getMassRatio();
+		const double mE = getSpecies(fidxE).getMassRatio();
+		const double mI = getSpecies(fidxI).getMassRatio();
+
 		Eigen::VectorXd ki(nFluidCells);
 		Eigen::VectorXd kr(nFluidCells);
-		ki.setOnes();
-		kr.setOnes();
+		ki.setOnes(); // TODO
+		kr.setOnes(); // TODO
 
 		const Eigen::MatrixXd statesA = getStates(fidxA, nFluidCells);
 		const Eigen::MatrixXd statesE = getStates(fidxE, nFluidCells);
@@ -2567,16 +2574,64 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 		const Eigen::VectorXd nE = statesE.row(0);
 		const Eigen::VectorXd nI = statesI.row(0);
 
-		
+		// TODO
+		const double Ei = 0; /* Ionization energy */
+
 		for (int k = 0; k < nFluidCells; k++) {
+			const Eigen::Vector3d uA = statesA.col(k).segment(1, 3) / nA(k);
+			const Eigen::Vector3d uE = statesE.col(k).segment(1, 3) / nE(k);
+			const Eigen::Vector3d uI = statesI.col(k).segment(1, 3) / nI(k);
+
 			Eigen::VectorXd localSrc(5 * nFluids);
 			localSrc.setZero();
 
-			localSrc(5 * fidxA + 0) = -ki(k) * nE(k) * nA(k) + kr(k) * pow(nE(k),2) * nI(k);
+			// Number density sources
+			localSrc(5 * fidxA + 0) = -ki(k) * nE(k) * nA(k) + kr(k) * pow(nE(k), 2) * nI(k);
 			localSrc(5 * fidxE + 0) = +ki(k) * nE(k) * nA(k) - kr(k) * pow(nE(k), 2) * nI(k);
 			localSrc(5 * fidxI + 0) = +ki(k) * nE(k) * nA(k) - kr(k) * pow(nE(k), 2) * nI(k);
 
+			// Momentum sources
+			localSrc.segment(5 * fidxA + 1, 3) =
+				-ki(k) * nE(k) * statesA.col(k).segment(1, 3)
+				+ kr(k) * (mI * pow(nE(k), 2) * statesI.col(k).segment(1, 3) + mE * nA(k) * nE(k) * statesE.col(k).segment(1, 3));
 
+			localSrc.segment(5 * fidxE + 1, 3) =
+				ki(k) * nA(k) * statesE.col(k).segment(1, 3)
+				- kr(k) * nI(k) * nE(k) * statesE.col(k).segment(1, 3);
+
+			localSrc.segment(5 * fidxI + 1, 3) =
+				ki(k) / mI * (nE(k) * statesA.col(k).segment(1,3) - mE * nA(k) * statesE.col(k).segment(1,3))
+				- kr(k) * pow(nE(k),2) * nA(k) / nI(k) * statesI.col(k).segment(1, 3);
+
+			// Energy sources
+			double a0 = 0.5 * pow(mA, 2) * nE(k) * uI.dot(statesI.col(k).segment(1, 3));
+			double a1 = 0.5 * pow(mA, 2) * nI(k) * statesE.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
+			double a2 = mI * mE*nE(k) * statesI.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
+			double a3 = mI * nI(k) * (nE(k) * statesE(4, k) - 0.5 * statesE.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3)));
+			localSrc(5 * fidxA + 4) =
+				-ki(k) * nE(k) * statesA(4, k)
+				+ kr(k) * (a0 + a1 + a2 + a3);
+
+			double b0 = nE(k) * statesA(4, k);
+			double b1 = 0.5 / mI * nE(k) * uA.dot(statesA.col(k).segment(1, 3));
+			double b2 = 0.5 / mI * mE * nA(k) * uE.dot(statesE.col(k).segment(1, 3));
+			double b3 = -statesA.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
+			double c0 = pow(nE(k), 2) * statesI(4, k);
+			double c1 = 0.5 * mI * pow(nE(k), 2) * uI.dot(statesI.col(k).segment(1, 3));
+			double c2 = -0.5 * mE * nI(k) * statesE.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
+			double c3 = -mI * nE(k) * statesI.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
+			localSrc(5 * fidxE + 4) = 
+				1/mE * Ei * (-ki(k) * nA(k) * nE(k) + kr(k) * nI(k) * pow(nE(k),2)) 
+				- ki(k) / mI * (b0 + b1 + b2 + b3)
+				+ kr(k) * (c0 + c1 + c2 + c3);
+
+			double d0 = 0.5 * pow(mI, -2) * nE(k) * uI.dot(statesI.col(k).segment(1, 3));
+			double d1 = 0.5 * pow(mI, -2) * mE * nA(k) * uE.dot(statesE.col(k).segment(1, 3));
+			double d2 = -1 / mI * 1 / mE * statesA.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
+			double d3 = nE(k) * (statesA(4, k) - 0.5 * statesA.col(k).segment(1, 3).dot(statesA.col(k).segment(1, 3)));
+			localSrc(5 * fidxI + 4) = 
+				ki(k) / mI * (d0 + d1 + d2 + d3)
+				- kr(k) / mI * pow(nE(k),2) * statesI(4,k);
 
 			src.col(k) = localSrc;
 		}

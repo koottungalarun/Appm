@@ -25,6 +25,9 @@ private:
 	/** Planck constant (Js) */
 	const double _h = 6.626e-34; 
 
+	/** Atomic mass (kg) */
+	const double _u = 1.66053906660e-27;
+
 	PhysicsConstants();
 	PhysicsConstants(const PhysicsConstants &);
 	PhysicsConstants & operator=(const PhysicsConstants &);
@@ -40,4 +43,5 @@ public:
 	const double c0();
 	const double planckConstant();
 	const double pi();
+	const double atomicMass();
 };

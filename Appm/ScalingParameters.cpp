@@ -58,6 +58,12 @@ ScalingParameters::ScalingParameters(const std::string & filename)
 			std::istringstream(line.substr(pos + 1)) >> p;
 			setPressureScale(p);
 		}
+		if (tag == "m") {
+			double m = 0;
+			std::istringstream(line.substr(pos + 1)) >> m; // mass is given in atomic units (1u = 1.66e-27 kg)
+			m *= PhysicsConstants::instance().atomicMass();
+			setMassScale(m);
+		}
 		if (tag == "lambdaSq") {
 			double lambdasq = 0;
 			std::istringstream(line.substr(pos + 1)) >> lambdasq;
@@ -156,6 +162,12 @@ void ScalingParameters::setPressureScale(const double p)
 	this->p0 = p;
 }
 
+void ScalingParameters::setMassScale(const double m)
+{
+	assert(m > 0);
+	this->m0 = m;
+}
+
 double ScalingParameters::getTemperatureScale() const
 {
 	return T0;
@@ -192,8 +204,7 @@ double ScalingParameters::getTimeScale() const
 
 double ScalingParameters::getMassScale() const
 {
-	assert(false);
-	return 0;
+	return m0;
 }
 
 std::ostream & operator<<(std::ostream & os, const ScalingParameters & obj)
@@ -202,6 +213,7 @@ std::ostream & operator<<(std::ostream & os, const ScalingParameters & obj)
 	os << "x: " << obj.x0 << std::endl;
 	os << "n: " << obj.n0 << std::endl;
 	os << "T: " << obj.T0 << std::endl;
+	os << "m: " << obj.m0 << std::endl;
 	os << "lambdaSq: " << obj.lambdaSq;
 	return os;
 }
