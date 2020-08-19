@@ -47,7 +47,8 @@ public:
 		SHOCKTUBE, 
 		TEST_FRICTION, 
 		TEST_FRICTION_TEMPERATURE, 
-		TEST_FRICTION_NUMBERDENSITY
+		TEST_FRICTION_NUMBERDENSITY, 
+		TEST_FRICTION_ELECTRONS_NONZERO_VELOCITY
 	};
 	friend std::ostream & operator<<(std::ostream & os, const AppmSolver::FluidInitType & obj);
 
@@ -263,7 +264,8 @@ private:
 	void init_fluid_frictonTest();
 	void init_fluid_frictionTest_temperature();
 	void init_fluid_frictionTest_numberDensity();
-	
+	void init_fluid_frictionTest_electrons_nonzero_velocity();
+
 	void set_Efield_uniform(const Eigen::Vector3d direction);
 	void set_Bfield_azimuthal();
 

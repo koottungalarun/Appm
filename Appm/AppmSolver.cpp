@@ -956,6 +956,15 @@ void AppmSolver::applyFluidInitializationType()
 		init_fluid_frictionTest_numberDensity();
 	}
 	break;
+
+	case FluidInitType::TEST_FRICTION_ELECTRONS_NONZERO_VELOCITY:
+	{
+		std::cout << "Initialize fluid states: " << initType << std::endl;
+		init_fluid_frictionTest_electrons_nonzero_velocity();
+	}
+	break;
+
+
 	//case FluidInitType::DEFAULT:
 	//{
 	//	std::cout << "Initialize fluid states: " << "Explosion" << std::endl;
@@ -1287,6 +1296,53 @@ void AppmSolver::init_fluid_frictionTest_numberDensity()
 			fluidStates.col(k).segment(5 * fluidx, 5) = state;
 		}
 	}
+}
+
+void AppmSolver::init_fluid_frictionTest_electrons_nonzero_velocity()
+{
+	const int nCells = dualMesh.getNumberOfCells();
+	const int nFluids = getNFluids();
+	const int nFluidCells = dualMesh.getNumberFluidCells();
+
+	const double n0 = 1;
+	const double p0 = 1;
+	const Eigen::Vector3d u0 = Eigen::Vector3d::Zero();
+	const Eigen::Vector3d u1 = Eigen::Vector3d::UnitZ();
+
+	// assume that we have three fluids: neutrals, electrons (negative), ions (positive)
+	assert(nFluids == 3);
+
+	// find index of neutral species, electrons, and ions
+	int idxN = -1;
+	int idxE = -1;
+	int idxI = -1;
+	assert(nFluids >= 3);
+	for (int fluidx = 0; fluidx < nFluids; fluidx++) {
+		if (idxN == -1 && getSpecies(fluidx).getCharge() == 0) {
+			idxN = fluidx;
+		}
+		if (idxE == -1 && getSpecies(fluidx).getCharge() == -1) {
+			idxE = fluidx;
+		}
+		if (idxI == -1 && getSpecies(fluidx).getCharge() == +1) {
+			idxI = fluidx;
+		}
+	}
+	assert(idxN >= 0);
+	assert(idxE >= 0);
+	assert(idxI >= 0);
+
+	// define quiescent, charge-neutral plasma with nonzero electron velocity
+	for (int fluidx = 0; fluidx < nFluids; fluidx++) {
+		const double massRatio = getSpecies(fluidx).getMassRatio();
+		const Eigen::VectorXd state0 = Physics::primitive2state(massRatio, n0, p0, u0);
+		const Eigen::VectorXd stateNonZero = Physics::primitive2state(massRatio, n0, p0, u1);
+		const Eigen::VectorXd state = (fluidx != idxE) ? state0 : stateNonZero;
+		for (int k = 0; k < nFluidCells; k++) {
+			fluidStates.col(k).segment(5 * fluidx, 5) = state;
+		}
+	}
+
 }
 
 /**
@@ -2591,47 +2647,61 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 			localSrc(5 * fidxI + 0) = +ki(k) * nE(k) * nA(k) - kr(k) * pow(nE(k), 2) * nI(k);
 
 			// Momentum sources
-			localSrc.segment(5 * fidxA + 1, 3) =
-				-ki(k) * nE(k) * statesA.col(k).segment(1, 3)
-				+ kr(k) * (mI * pow(nE(k), 2) * statesI.col(k).segment(1, 3) + mE * nA(k) * nE(k) * statesE.col(k).segment(1, 3));
+			//localSrc.segment(5 * fidxA + 1, 3) =
+			//	-ki(k) * nE(k) * statesA.col(k).segment(1, 3)
+			//	+ kr(k) * (mI * pow(nE(k), 2) * statesI.col(k).segment(1, 3) + mE * nA(k) * nE(k) * statesE.col(k).segment(1, 3));
 
-			localSrc.segment(5 * fidxE + 1, 3) =
-				ki(k) * nA(k) * statesE.col(k).segment(1, 3)
-				- kr(k) * nI(k) * nE(k) * statesE.col(k).segment(1, 3);
+			//localSrc.segment(5 * fidxE + 1, 3) =
+			//	ki(k) * nA(k) * statesE.col(k).segment(1, 3)
+			//	- kr(k) * nI(k) * nE(k) * statesE.col(k).segment(1, 3);
 
-			localSrc.segment(5 * fidxI + 1, 3) =
-				ki(k) / mI * (nE(k) * statesA.col(k).segment(1,3) - mE * nA(k) * statesE.col(k).segment(1,3))
-				- kr(k) * pow(nE(k),2) * nA(k) / nI(k) * statesI.col(k).segment(1, 3);
+			//localSrc.segment(5 * fidxI + 1, 3) =
+			//	ki(k) / mI * (nE(k) * statesA.col(k).segment(1,3) - mE * nA(k) * statesE.col(k).segment(1,3))
+			//	- kr(k) * pow(nE(k),2) * nA(k) / nI(k) * statesI.col(k).segment(1, 3);
 
 			// Energy sources
-			double a0 = 0.5 * pow(mA, 2) * nE(k) * uI.dot(statesI.col(k).segment(1, 3));
-			double a1 = 0.5 * pow(mA, 2) * nI(k) * statesE.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
-			double a2 = mI * mE*nE(k) * statesI.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
-			double a3 = mI * nI(k) * (nE(k) * statesE(4, k) - 0.5 * statesE.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3)));
-			localSrc(5 * fidxA + 4) =
-				-ki(k) * nE(k) * statesA(4, k)
-				+ kr(k) * (a0 + a1 + a2 + a3);
+			//double a0 = 0.5 * pow(mA, 2) * nE(k) * uI.dot(statesI.col(k).segment(1, 3));
+			//double a1 = 0.5 * pow(mA, 2) * nI(k) * statesE.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
+			//double a2 = mI * mE*nE(k) * statesI.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
+			//double a3 = mI * nI(k) * (nE(k) * statesE(4, k) - 0.5 * statesE.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3)));
+			//localSrc(5 * fidxA + 4) =
+			//	-ki(k) * nE(k) * statesA(4, k)
+			//	+ kr(k) * (a0 + a1 + a2 + a3);
 
-			double b0 = nE(k) * statesA(4, k);
-			double b1 = 0.5 / mI * nE(k) * uA.dot(statesA.col(k).segment(1, 3));
-			double b2 = 0.5 / mI * mE * nA(k) * uE.dot(statesE.col(k).segment(1, 3));
-			double b3 = -statesA.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
-			double c0 = pow(nE(k), 2) * statesI(4, k);
-			double c1 = 0.5 * mI * pow(nE(k), 2) * uI.dot(statesI.col(k).segment(1, 3));
-			double c2 = -0.5 * mE * nI(k) * statesE.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
-			double c3 = -mI * nE(k) * statesI.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
-			localSrc(5 * fidxE + 4) = 
-				1/mE * Ei * (-ki(k) * nA(k) * nE(k) + kr(k) * nI(k) * pow(nE(k),2)) 
-				- ki(k) / mI * (b0 + b1 + b2 + b3)
-				+ kr(k) * (c0 + c1 + c2 + c3);
+			//double b0 = nE(k) * statesA(4, k);
+			//double b1 = 0.5 / mI * nE(k) * uA.dot(statesA.col(k).segment(1, 3));
+			//double b2 = 0.5 / mI * mE * nA(k) * uE.dot(statesE.col(k).segment(1, 3));
+			//double b3 = -statesA.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
+			//double c0 = pow(nE(k), 2) * statesI(4, k);
+			//double c1 = 0.5 * mI * pow(nE(k), 2) * uI.dot(statesI.col(k).segment(1, 3));
+			//double c2 = -0.5 * mE * nI(k) * statesE.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
+			//double c3 = -mI * nE(k) * statesI.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
+			//localSrc(5 * fidxE + 4) = 
+			//	1/mE * Ei * (-ki(k) * nA(k) * nE(k) + kr(k) * nI(k) * pow(nE(k),2)) 
+			//	- ki(k) / mI * (b0 + b1 + b2 + b3)
+			//	+ kr(k) * (c0 + c1 + c2 + c3);
 
-			double d0 = 0.5 * pow(mI, -2) * nE(k) * uI.dot(statesI.col(k).segment(1, 3));
-			double d1 = 0.5 * pow(mI, -2) * mE * nA(k) * uE.dot(statesE.col(k).segment(1, 3));
-			double d2 = -1 / mI * 1 / mE * statesA.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
-			double d3 = nE(k) * (statesA(4, k) - 0.5 * statesA.col(k).segment(1, 3).dot(statesA.col(k).segment(1, 3)));
-			localSrc(5 * fidxI + 4) = 
-				ki(k) / mI * (d0 + d1 + d2 + d3)
-				- kr(k) / mI * pow(nE(k),2) * statesI(4,k);
+			//double d0 = 0.5 * pow(mI, -2) * nE(k) * uI.dot(statesI.col(k).segment(1, 3));
+			//double d1 = 0.5 * pow(mI, -2) * mE * nA(k) * uE.dot(statesE.col(k).segment(1, 3));
+			//double d2 = -1 / mI * 1 / mE * statesA.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
+			//double d3 = nE(k) * (statesA(4, k) - 0.5 * statesA.col(k).segment(1, 3).dot(statesA.col(k).segment(1, 3)));
+			//localSrc(5 * fidxI + 4) = 
+			//	ki(k) / mI * (d0 + d1 + d2 + d3)
+			//	- kr(k) / mI * pow(nE(k),2) * statesI(4,k);
+
+			double eA = statesA(4, k) / nA(k) - 0.5 * uA.dot(uA);
+			double eE = statesE(4, k) / nE(k) - 0.5 * uE.dot(uE);
+			double eI = statesI(4, k) / nI(k) - 0.5 * uI.dot(uI);
+
+			localSrc(5 * fidxA + 4) = -ki(k) * nE(k) * nA(k) * eA + kr(k) * pow(nE(k), 2) * nI(k) * mI * eI;
+
+			localSrc(5 * fidxE + 4) = 1 / mE * (
+				-(1 / mI - 1) * ki(k) * nE(k) * nA(k) * eA
+				+ (1 - mI) * kr(k) * pow(nE(k), 2) * nI(k) * eI);
+
+			localSrc(5 * fidxI + 4) = 1 / mI * (
+				ki(k) * 1 / mI * nE(k) * nA(k) * eA
+				- kr(k) * pow(nE(k), 2) * nI(k) * eI);
 
 			src.col(k) = localSrc;
 		}
@@ -4985,6 +5055,9 @@ void AppmSolver::SolverParameters::setFluidInitType(const std::string & s)
 	if (trimmed == "TEST_FRICTION_NUMBERDENSITY") {
 		this->fluidInitType = FluidInitType::TEST_FRICTION_NUMBERDENSITY;
 	}
+	if (trimmed == "TEST_FRICTION_ELECTRONS_NONZERO_VELOCITY") {
+		this->fluidInitType = FluidInitType::TEST_FRICTION_ELECTRONS_NONZERO_VELOCITY;
+	}
 	if (this->fluidInitType == FluidInitType::DEFAULT) {
 		std::cout << "Warning: it may be that the FluidInitType is not correctly read." << std::endl;
 		std::cout << "Value read from imput file: " << trimmed << std::endl;
@@ -5089,6 +5162,10 @@ std::ostream & operator<<(std::ostream & os, const AppmSolver::FluidInitType & o
 
 	case AppmSolver::FluidInitType::TEST_FRICTION_NUMBERDENSITY:
 		os << "TEST_FRICTION_NUMBERDENSITY";
+		break;
+
+	case AppmSolver::FluidInitType::TEST_FRICTION_ELECTRONS_NONZERO_VELOCITY:
+		os << "TEST_FRICTION_ELECTRONS_NONZERO_VELOCITY";
 		break;
 
 	default:
