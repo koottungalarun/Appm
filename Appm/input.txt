@@ -54,8 +54,8 @@ isEulerSourcesImplicit: 0
 ### SPECIES
 ######################
 # Format: Symbol, name, massRatio, charge
-species: e, Electron, 0.25, -1
-species: Ar+, Ion, 0.75, 1
+species: e, Electron, 0.1, -1
+species: Ar+, Ion, 0.9, 1
 species: Ar, Argon, 1, 0
 #
 #

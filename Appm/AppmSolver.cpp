@@ -2661,12 +2661,12 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 
 			// Thermal energy sources, ionization
 			srcA(4) -= wi * eA;
-			srcE(4) += wi * eA * pow(mI, -1);
+			srcE(4) -= wi * eA * pow(mI, -1);
 			srcI(4) += wi * eA * pow(mI, -2);
 
 			// Thermal energy sources, recombination
 			srcA(4) += wr * eI * mI;
-			srcE(4) -= wr * eI;
+			srcE(4) += wr * eI;
 			srcI(4) -= wr * eI / mI;
 
 			// Momentum sources; note that momentum conservation yields 
