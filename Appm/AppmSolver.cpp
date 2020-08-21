@@ -2633,77 +2633,110 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 		// TODO
 		const double Ei = 0; /* Ionization energy */
 
+		const bool isMomentumSourceActive = false;
+		
 		for (int k = 0; k < nFluidCells; k++) {
+			//std::cout << "k = " << k << std::endl;
+			// species velocity vector
 			const Eigen::Vector3d uA = statesA.col(k).segment(1, 3) / nA(k);
 			const Eigen::Vector3d uE = statesE.col(k).segment(1, 3) / nE(k);
 			const Eigen::Vector3d uI = statesI.col(k).segment(1, 3) / nI(k);
 
+			// species thermal energy
+			const double eA = statesA(4, k) / nA(k) - 0.5 * uA.dot(uA);
+			const double eE = statesE(4, k) / nE(k) - 0.5 * uE.dot(uE);
+			const double eI = statesI(4, k) / nI(k) - 0.5 * uI.dot(uI);
+
+			Eigen::VectorXd srcA = Eigen::VectorXd::Zero(5);
+			Eigen::VectorXd srcE = Eigen::VectorXd::Zero(5);
+			Eigen::VectorXd srcI = Eigen::VectorXd::Zero(5);
+
+			const double wi = ki(k) * nA(k) * nE(k);
+			const double wr = kr(k) * pow(nE(k), 2) * nI(k);
+
+			// Number density sources, ionization and recombination
+			srcA(0) -= wi - wr;
+			srcE(0) += wi - wr;
+			srcI(0) += wi - wr;
+
+			// Thermal energy sources, ionization
+			srcA(4) -= wi * eA;
+			srcE(4) += wi * eA * pow(mI, -1);
+			srcI(4) += wi * eA * pow(mI, -2);
+
+			// Thermal energy sources, recombination
+			srcA(4) += wr * eI * mI;
+			srcE(4) -= wr * eI;
+			srcI(4) -= wr * eI / mI;
+
+			// Momentum sources; note that momentum conservation yields 
+			// uA = mI * uI + mE * uE
+
+			// Momentum sources, ionization.
+			//srcA.segment(1, 3) -= wi * uA;
+			//srcE.segment(1, 3) += wi * pow(mI, -2) * (uA - mE * uE);
+			//srcI.segment(1, 3) += wi / mI * (uE - uA);
+
+			// Momentum sources, recombination
+			//srcA.segment(1, 3) += wr * 0;
+			//srcE.segment(1, 3) -= wr * 0;
+			//srcI.segment(1, 3) -= wr * 0;
+
+
+
+			
+			//if (isMomentumSourceActive) {
+			//	/*
+			//	* Ionization -- momentum sources
+			//	*/
+			//	srcA.segment(1, 3) -= ki(k) * nE(k) * statesA.col(k).segment(1, 3);
+			//	srcE.segment(1, 3) += ki(k) * nA(k) * statesE.col(k).segment(1, 3);
+			//	srcI.segment(1, 3) += ki(k) / mI * (
+			//		nE(k) * statesA.col(k).segment(1, 3)
+			//		- mE * nA(k) * statesE.col(k).segment(1, 3));
+
+			//	/*
+			//	* Ionization -- kinetic energy source
+			//	*/
+			//	// kinetic energy in neutral species
+			//	srcA(4) -= 0.5 * ki(k) * nE(k) * uA.dot(statesA.col(k).segment(1, 3));
+			//	// kinetic energy of electrons minus excess kinetic energy in heavy species
+			//	srcE(4) += 0.5 * ki(k) * nA(k) * uE.dot(statesE.col(k).segment(1, 3))
+			//		- ki(k) / mE * (0.5 * mI * uI.dot(uI) - 0.5 * uA.dot(uA));
+			//	// kinetic energy in ions, with velocity defined by momentum conservation
+			//	srcI(4) += 0.5 * ki(k) * (
+			//		pow(mI, -2) * nE(k) * uA.dot(statesA.col(k).segment(1, 3))
+			//		+ pow(mE / mI, 2) * nA(k) * uE.dot(statesE.col(k).segment(1, 3))
+			//		- 2 * mE / mI * statesA.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3)));
+
+			//	/*
+			//	* Recombination -- momentum source
+			//	*/
+			//	srcA.segment(1, 3) += kr(k) * (
+			//		mI * pow(nE(k), 2) * statesI.col(k).segment(1, 3)
+			//		+ mE * nE(k) * nI(k) * statesE.col(k).segment(1, 3));
+			//	srcE.segment(1, 3) -= kr(k) * nE(k) * nI(k) * statesE.col(k).segment(1, 3);
+			//	srcI.segment(1, 3) -= kr(k) * pow(nE(k), 2) * statesI.col(k).segment(1, 3);
+
+			//	/*
+			//	* Recombination -- kinetic energy source
+			//	*/
+			//	// kinetic energy in neutral species
+			//	srcA(4) += kr(k) * 0.5 * pow(nE(k), 2) * nI(k) * (pow(mI, 2) * uI.dot(uI) + pow(mE, 2) * uE.dot(uE) + 2 * mI * mE * uI.dot(uE));
+			//	// kinetic energy in electrons minus excess kinetic energy in heavy species
+			//	srcE(4) -= kr(k) * 0.5 * pow(nE(k), 2) * nI(k) * uE.dot(uE)
+			//		+ kr(k) / mE * (0.5 * uA.dot(uA) - mI * 0.5 * nI.dot(nI));
+			//	// kinetic energy in ions
+			//	srcI(4) -= kr(k) * 0.5 * pow(nE(k), 2) * uI.dot(statesI.col(k).segment(1, 3));
+			//}
+			
+			// Update data structure with local species sources
 			Eigen::VectorXd localSrc(5 * nFluids);
 			localSrc.setZero();
-
-			// Number density sources
-			localSrc(5 * fidxA + 0) = -ki(k) * nE(k) * nA(k) + kr(k) * pow(nE(k), 2) * nI(k);
-			localSrc(5 * fidxE + 0) = +ki(k) * nE(k) * nA(k) - kr(k) * pow(nE(k), 2) * nI(k);
-			localSrc(5 * fidxI + 0) = +ki(k) * nE(k) * nA(k) - kr(k) * pow(nE(k), 2) * nI(k);
-
-			// Momentum sources
-			//localSrc.segment(5 * fidxA + 1, 3) =
-			//	-ki(k) * nE(k) * statesA.col(k).segment(1, 3)
-			//	+ kr(k) * (mI * pow(nE(k), 2) * statesI.col(k).segment(1, 3) + mE * nA(k) * nE(k) * statesE.col(k).segment(1, 3));
-
-			//localSrc.segment(5 * fidxE + 1, 3) =
-			//	ki(k) * nA(k) * statesE.col(k).segment(1, 3)
-			//	- kr(k) * nI(k) * nE(k) * statesE.col(k).segment(1, 3);
-
-			//localSrc.segment(5 * fidxI + 1, 3) =
-			//	ki(k) / mI * (nE(k) * statesA.col(k).segment(1,3) - mE * nA(k) * statesE.col(k).segment(1,3))
-			//	- kr(k) * pow(nE(k),2) * nA(k) / nI(k) * statesI.col(k).segment(1, 3);
-
-			// Energy sources
-			//double a0 = 0.5 * pow(mA, 2) * nE(k) * uI.dot(statesI.col(k).segment(1, 3));
-			//double a1 = 0.5 * pow(mA, 2) * nI(k) * statesE.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
-			//double a2 = mI * mE*nE(k) * statesI.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
-			//double a3 = mI * nI(k) * (nE(k) * statesE(4, k) - 0.5 * statesE.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3)));
-			//localSrc(5 * fidxA + 4) =
-			//	-ki(k) * nE(k) * statesA(4, k)
-			//	+ kr(k) * (a0 + a1 + a2 + a3);
-
-			//double b0 = nE(k) * statesA(4, k);
-			//double b1 = 0.5 / mI * nE(k) * uA.dot(statesA.col(k).segment(1, 3));
-			//double b2 = 0.5 / mI * mE * nA(k) * uE.dot(statesE.col(k).segment(1, 3));
-			//double b3 = -statesA.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
-			//double c0 = pow(nE(k), 2) * statesI(4, k);
-			//double c1 = 0.5 * mI * pow(nE(k), 2) * uI.dot(statesI.col(k).segment(1, 3));
-			//double c2 = -0.5 * mE * nI(k) * statesE.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
-			//double c3 = -mI * nE(k) * statesI.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
-			//localSrc(5 * fidxE + 4) = 
-			//	1/mE * Ei * (-ki(k) * nA(k) * nE(k) + kr(k) * nI(k) * pow(nE(k),2)) 
-			//	- ki(k) / mI * (b0 + b1 + b2 + b3)
-			//	+ kr(k) * (c0 + c1 + c2 + c3);
-
-			//double d0 = 0.5 * pow(mI, -2) * nE(k) * uI.dot(statesI.col(k).segment(1, 3));
-			//double d1 = 0.5 * pow(mI, -2) * mE * nA(k) * uE.dot(statesE.col(k).segment(1, 3));
-			//double d2 = -1 / mI * 1 / mE * statesA.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3));
-			//double d3 = nE(k) * (statesA(4, k) - 0.5 * statesA.col(k).segment(1, 3).dot(statesA.col(k).segment(1, 3)));
-			//localSrc(5 * fidxI + 4) = 
-			//	ki(k) / mI * (d0 + d1 + d2 + d3)
-			//	- kr(k) / mI * pow(nE(k),2) * statesI(4,k);
-
-			double eA = statesA(4, k) / nA(k) - 0.5 * uA.dot(uA);
-			double eE = statesE(4, k) / nE(k) - 0.5 * uE.dot(uE);
-			double eI = statesI(4, k) / nI(k) - 0.5 * uI.dot(uI);
-
-			localSrc(5 * fidxA + 4) = -ki(k) * nE(k) * nA(k) * eA + kr(k) * pow(nE(k), 2) * nI(k) * mI * eI;
-
-			localSrc(5 * fidxE + 4) = 1 / mE * (
-				-(1 / mI - 1) * ki(k) * nE(k) * nA(k) * eA
-				+ (1 - mI) * kr(k) * pow(nE(k), 2) * nI(k) * eI);
-
-			localSrc(5 * fidxI + 4) = 1 / mI * (
-				ki(k) * 1 / mI * nE(k) * nA(k) * eA
-				- kr(k) * pow(nE(k), 2) * nI(k) * eI);
-
-			src.col(k) = localSrc;
+			localSrc.segment(5 * fidxA, 5) += srcA;
+			localSrc.segment(5 * fidxE, 5) += srcE;
+			localSrc.segment(5 * fidxI, 5) += srcI;
+			src.col(k) += localSrc;
 		}
 	}
 	return src;
