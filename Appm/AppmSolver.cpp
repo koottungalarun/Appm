@@ -2619,8 +2619,12 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 
 		Eigen::VectorXd ki(nFluidCells);
 		Eigen::VectorXd kr(nFluidCells);
-		ki.setOnes(); // TODO
-		kr.setOnes(); // TODO
+		const double kValueTest = 1; // TODO replace with actual value if implicit scheme is available
+		ki.setConstant(kValueTest); // TODO
+		kr.setConstant(kValueTest); // TODO
+
+		/* Ionization energy */
+		const double Ei = 0; // TODO
 
 		const Eigen::MatrixXd statesA = getStates(fidxA, nFluidCells);
 		const Eigen::MatrixXd statesE = getStates(fidxE, nFluidCells);
@@ -2630,11 +2634,6 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 		const Eigen::VectorXd nE = statesE.row(0);
 		const Eigen::VectorXd nI = statesI.row(0);
 
-		// TODO
-		const double Ei = 0; /* Ionization energy */
-
-		const bool isMomentumSourceActive = false;
-		
 		for (int k = 0; k < nFluidCells; k++) {
 			//std::cout << "k = " << k << std::endl;
 			// species velocity vector
@@ -2669,66 +2668,29 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 			srcE(4) += wr * eI;
 			srcI(4) -= wr * eI / mI;
 
-			// Momentum sources; note that momentum conservation yields 
-			// uA = mI * uI + mE * uE
+			// Momentum sources; note that momentum conservation 
+			// yields uA = mI * uI + mE * uE
 
-			// Momentum sources, ionization.
-			//srcA.segment(1, 3) -= wi * uA;
-			//srcE.segment(1, 3) += wi * pow(mI, -2) * (uA - mE * uE);
-			//srcI.segment(1, 3) += wi / mI * (uE - uA);
+			// Momentum sources, ionization
+			srcA.segment(1, 3) -= wi * uA;
+			srcE.segment(1, 3) += wi * uE;
+			srcI.segment(1, 3) += wi / mI * (uA - mE * uE);
 
 			// Momentum sources, recombination
-			//srcA.segment(1, 3) += wr * 0;
-			//srcE.segment(1, 3) -= wr * 0;
-			//srcI.segment(1, 3) -= wr * 0;
+			srcA.segment(1, 3) += wr * (mI * uI + mE * uE);
+			srcE.segment(1, 3) -= wr * uE;
+			srcI.segment(1, 3) -= wr * uI;
 
-
-
+			// Kinetic energy sources, ionization
+			srcA(4) -= wi * 0.5 * uA.squaredNorm();
+			srcE(4) += wi * 0.5 * pow(mE, -1) * ((1 - pow(mI, -1)) * uA.squaredNorm() + 2 * mE / mI * uA.dot(uE) - pow(mE, 2) / mI * uE.squaredNorm());
+			srcI(4) += wi * 0.5 * pow(mI, -2) * (uA.squaredNorm() - 2 * mE * uA.dot(uE) + pow(mE, 2) * uE.squaredNorm());
 			
-			//if (isMomentumSourceActive) {
-			//	/*
-			//	* Ionization -- momentum sources
-			//	*/
-			//	srcA.segment(1, 3) -= ki(k) * nE(k) * statesA.col(k).segment(1, 3);
-			//	srcE.segment(1, 3) += ki(k) * nA(k) * statesE.col(k).segment(1, 3);
-			//	srcI.segment(1, 3) += ki(k) / mI * (
-			//		nE(k) * statesA.col(k).segment(1, 3)
-			//		- mE * nA(k) * statesE.col(k).segment(1, 3));
-
-			//	/*
-			//	* Ionization -- kinetic energy source
-			//	*/
-			//	// kinetic energy in neutral species
-			//	srcA(4) -= 0.5 * ki(k) * nE(k) * uA.dot(statesA.col(k).segment(1, 3));
-			//	// kinetic energy of electrons minus excess kinetic energy in heavy species
-			//	srcE(4) += 0.5 * ki(k) * nA(k) * uE.dot(statesE.col(k).segment(1, 3))
-			//		- ki(k) / mE * (0.5 * mI * uI.dot(uI) - 0.5 * uA.dot(uA));
-			//	// kinetic energy in ions, with velocity defined by momentum conservation
-			//	srcI(4) += 0.5 * ki(k) * (
-			//		pow(mI, -2) * nE(k) * uA.dot(statesA.col(k).segment(1, 3))
-			//		+ pow(mE / mI, 2) * nA(k) * uE.dot(statesE.col(k).segment(1, 3))
-			//		- 2 * mE / mI * statesA.col(k).segment(1, 3).dot(statesE.col(k).segment(1, 3)));
-
-			//	/*
-			//	* Recombination -- momentum source
-			//	*/
-			//	srcA.segment(1, 3) += kr(k) * (
-			//		mI * pow(nE(k), 2) * statesI.col(k).segment(1, 3)
-			//		+ mE * nE(k) * nI(k) * statesE.col(k).segment(1, 3));
-			//	srcE.segment(1, 3) -= kr(k) * nE(k) * nI(k) * statesE.col(k).segment(1, 3);
-			//	srcI.segment(1, 3) -= kr(k) * pow(nE(k), 2) * statesI.col(k).segment(1, 3);
-
-			//	/*
-			//	* Recombination -- kinetic energy source
-			//	*/
-			//	// kinetic energy in neutral species
-			//	srcA(4) += kr(k) * 0.5 * pow(nE(k), 2) * nI(k) * (pow(mI, 2) * uI.dot(uI) + pow(mE, 2) * uE.dot(uE) + 2 * mI * mE * uI.dot(uE));
-			//	// kinetic energy in electrons minus excess kinetic energy in heavy species
-			//	srcE(4) -= kr(k) * 0.5 * pow(nE(k), 2) * nI(k) * uE.dot(uE)
-			//		+ kr(k) / mE * (0.5 * uA.dot(uA) - mI * 0.5 * nI.dot(nI));
-			//	// kinetic energy in ions
-			//	srcI(4) -= kr(k) * 0.5 * pow(nE(k), 2) * uI.dot(statesI.col(k).segment(1, 3));
-			//}
+			// Kinetic energy sources, recombination;
+			srcA(4) += wr * 0.5 * (mI * uI.squaredNorm() + mE * uE.squaredNorm()); 
+			srcE(4) -= wr * 0.5 * pow(mE, -1) * (mI * (1 - mI) * uI.squaredNorm() - 2 * mI * mE * uI.dot(uE) - pow(mE, 2) * uE.squaredNorm());
+			srcI(4) -= wr * 0.5 * uI.squaredNorm();
+			
 			
 			// Update data structure with local species sources
 			Eigen::VectorXd localSrc(5 * nFluids);
