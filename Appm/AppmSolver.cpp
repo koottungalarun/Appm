@@ -192,7 +192,7 @@ void AppmSolver::run()
 	writeOutput(iteration, time);
 	
 	try {
-		while (true) {
+		while (iteration < maxIterations && time < maxTime) {
 			// Initialize data
 			fluidSources.setZero();
 			faceFluxes.setZero();
@@ -2334,6 +2334,10 @@ void AppmSolver::updateFluidStates(const double dt, const bool isImplicitSources
 		fluidStates.leftCols(nFluidCells) += 
 			- dt * sumOfFaceFluxes.leftCols(nFluidCells) 
 			+ dt * fluidSources.leftCols(nFluidCells);
+
+		const int idxE = getSpeciesIndex("e");
+		const Eigen::VectorXd electronState = fluidStates.col(0).segment(5 * idxE, 5);
+		std::cout << "electron state: " << electronState.transpose() << std::endl;
 	}
 }
 
@@ -2619,9 +2623,8 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 
 		Eigen::VectorXd ki(nFluidCells);
 		Eigen::VectorXd kr(nFluidCells);
-		const double kValueTest = 1; // TODO replace with actual value if implicit scheme is available
-		ki.setConstant(kValueTest); // TODO
-		kr.setConstant(kValueTest); // TODO
+		ki.setConstant(0.5); // TODO
+		kr.setConstant(2); // TODO
 
 		/* Ionization energy */
 		const double Ei = 0; // TODO
@@ -2634,24 +2637,24 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 		const Eigen::VectorXd nE = statesE.row(0);
 		const Eigen::VectorXd nI = statesI.row(0);
 
-		for (int k = 0; k < nFluidCells; k++) {
+		for (int idxC = 0; idxC < nFluidCells; idxC++) {
 			//std::cout << "k = " << k << std::endl;
 			// species velocity vector
-			const Eigen::Vector3d uA = statesA.col(k).segment(1, 3) / nA(k);
-			const Eigen::Vector3d uE = statesE.col(k).segment(1, 3) / nE(k);
-			const Eigen::Vector3d uI = statesI.col(k).segment(1, 3) / nI(k);
+			const Eigen::Vector3d uA = statesA.col(idxC).segment(1, 3) / nA(idxC);
+			const Eigen::Vector3d uE = statesE.col(idxC).segment(1, 3) / nE(idxC);
+			const Eigen::Vector3d uI = statesI.col(idxC).segment(1, 3) / nI(idxC);
 
 			// species thermal energy
-			const double eA = statesA(4, k) / nA(k) - 0.5 * uA.dot(uA);
-			const double eE = statesE(4, k) / nE(k) - 0.5 * uE.dot(uE);
-			const double eI = statesI(4, k) / nI(k) - 0.5 * uI.dot(uI);
+			const double eA = statesA(4, idxC) / nA(idxC) - 0.5 * uA.dot(uA);
+			const double eE = statesE(4, idxC) / nE(idxC) - 0.5 * uE.dot(uE);
+			const double eI = statesI(4, idxC) / nI(idxC) - 0.5 * uI.dot(uI);
 
 			Eigen::VectorXd srcA = Eigen::VectorXd::Zero(5);
 			Eigen::VectorXd srcE = Eigen::VectorXd::Zero(5);
 			Eigen::VectorXd srcI = Eigen::VectorXd::Zero(5);
 
-			const double wi = ki(k) * nA(k) * nE(k);
-			const double wr = kr(k) * pow(nE(k), 2) * nI(k);
+			const double wi = ki(idxC) * nA(idxC) * nE(idxC);
+			const double wr = kr(idxC) * pow(nE(idxC), 2) * nI(idxC);
 
 			// Number density sources, ionization and recombination
 			srcA(0) -= wi - wr;
@@ -2690,7 +2693,12 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 			srcA(4) += wr * 0.5 * (mI * uI.squaredNorm() + mE * uE.squaredNorm()); 
 			srcE(4) -= wr * 0.5 * pow(mE, -1) * (mI * (1 - mI) * uI.squaredNorm() - 2 * mI * mE * uI.dot(uE) - pow(mE, 2) * uE.squaredNorm());
 			srcI(4) -= wr * 0.5 * uI.squaredNorm();
-			
+
+			if (idxC == 0) {
+				std::cout << "srcA: " << srcA.transpose() << std::endl;
+				std::cout << "srcE: " << srcE.transpose() << std::endl;
+				std::cout << "srcI: " << srcI.transpose() << std::endl;
+			}			
 			
 			// Update data structure with local species sources
 			Eigen::VectorXd localSrc(5 * nFluids);
@@ -2698,7 +2706,7 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 			localSrc.segment(5 * fidxA, 5) += srcA;
 			localSrc.segment(5 * fidxE, 5) += srcE;
 			localSrc.segment(5 * fidxI, 5) += srcI;
-			src.col(k) += localSrc;
+			src.col(idxC) += localSrc;
 		}
 	}
 	return src;

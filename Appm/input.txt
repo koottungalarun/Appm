@@ -19,6 +19,7 @@
 ### MESH
 ######################
 mesh: mesh-coarse-test.txt
+# mesh: mesh-coarse.txt
 # mesh: mesh-medium.txt
 # mesh: mesh-fine.txt
 #
@@ -30,13 +31,14 @@ mesh: mesh-coarse-test.txt
 ### Initial conditions
 #initFluidState: TEST_FRICTION_TEMPERATURE
 # initFluidState: TEST_FRICTION
-initFluidState: TEST_FRICTION_NUMBERDENSITY
+# initFluidState: TEST_FRICTION_NUMBERDENSITY
+initFluidState: TEST_FRICTION_ELECTRONS_NONZERO_VELOCITY
 # initFluidState: UNIFORM
 initEfield: 0 0 0
 #
 ### Simulation controls
-maxTime: 2
-maxIterations: 80
+maxTime: 30
+maxIterations: 1300
 timestepSizeFactor: 1
 outputFrequency: 1
 #
@@ -54,8 +56,8 @@ isEulerSourcesImplicit: 0
 ### SPECIES
 ######################
 # Format: Symbol, name, massRatio, charge
-species: e, Electron, 0.1, -1
-species: Ar+, Ion, 0.9, 1
+species: e, Electron, 0.4, -1
+species: Ar+, Ion, 0.6, 1
 species: Ar, Argon, 1, 0
 #
 #
