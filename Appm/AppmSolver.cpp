@@ -321,10 +321,11 @@ void AppmSolver::run()
 					if (iteration % outputFrequency == 0) {
 						writeOutput(iteration, time);
 					}
-					if (iteration % (10 * outputFrequency) == 0) {
-						writeXdmf("appm.xdmf");
-						writeXdmfDualVolume("appm-volume.xdmf");
-					}
+					// Write intermediate output file in case that the simulation crashes
+					//if (iteration % (10 * outputFrequency) == 0) {
+					//	writeXdmf("appm.xdmf");
+					//	writeXdmfDualVolume("appm-volume.xdmf");
+					//}
 				}
 			}
 			else {
@@ -2731,10 +2732,14 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 		const double mE = getSpecies(fidxE).getMassRatio();
 		const double mI = getSpecies(fidxI).getMassRatio();
 
-		Eigen::VectorXd ki(nFluidCells);
-		Eigen::VectorXd kr(nFluidCells);
-		ki.setConstant(0.5); // TODO
-		kr.setConstant(2); // TODO
+		// sum of particle masses in collision
+		const double M = mE + mA;
+		assert(M == 2 * mE + mI);
+
+		//Eigen::VectorXd ki(nFluidCells);
+		//Eigen::VectorXd kr(nFluidCells);
+		//ki.setConstant(0.5); // TODO
+		//kr.setConstant(2); // TODO
 
 		/* Ionization energy */
 		const double Ei = 0; // TODO
@@ -2749,57 +2754,71 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 
 		for (int idxC = 0; idxC < nFluidCells; idxC++) {
 			//std::cout << "k = " << k << std::endl;
+
+			const Eigen::VectorXd stateA = statesA.col(idxC);
+			const Eigen::VectorXd stateE = statesE.col(idxC);
+			const Eigen::VectorXd stateI = statesI.col(idxC);
+
 			// species velocity vector
-			const Eigen::Vector3d uA = statesA.col(idxC).segment(1, 3) / nA(idxC);
-			const Eigen::Vector3d uE = statesE.col(idxC).segment(1, 3) / nE(idxC);
-			const Eigen::Vector3d uI = statesI.col(idxC).segment(1, 3) / nI(idxC);
+			const Eigen::Vector3d uA = stateA.segment(1, 3) / nA(idxC);
+			const Eigen::Vector3d uE = stateE.segment(1, 3) / nE(idxC);
+			const Eigen::Vector3d uI = stateI.segment(1, 3) / nI(idxC);
 
 			// species thermal energy
-			const double eA = statesA(4, idxC) / nA(idxC) - 0.5 * uA.dot(uA);
-			const double eE = statesE(4, idxC) / nE(idxC) - 0.5 * uE.dot(uE);
-			const double eI = statesI(4, idxC) / nI(idxC) - 0.5 * uI.dot(uI);
+			const double eA = stateA(4) / nA(idxC) - 0.5 * uA.dot(uA);
+			const double eE = stateE(4) / nE(idxC) - 0.5 * uE.dot(uE);
+			const double eI = stateI(4) / nI(idxC) - 0.5 * uI.dot(uI);
+
+			// species temperature 
+			const double Ta = Physics::getTemperature(stateA, mA);
+			const double Te = Physics::getTemperature(stateE, mE);
+			const double Ti = Physics::getTemperature(stateI, mI);
 
 			Eigen::VectorXd srcA = Eigen::VectorXd::Zero(5);
 			Eigen::VectorXd srcE = Eigen::VectorXd::Zero(5);
 			Eigen::VectorXd srcI = Eigen::VectorXd::Zero(5);
 
-			const double wi = ki(idxC) * nA(idxC) * nE(idxC);
-			const double wr = kr(idxC) * pow(nE(idxC), 2) * nI(idxC);
+			// Ionization and recombination rate
+			const double wi = 2 * nA(idxC) * nE(idxC);
+			const double wr = pow(nE(idxC), 2) * nI(idxC);
+
+			// Bulk velocity for ionization and recombination
+			const Eigen::Vector3d U0 = mE / M * uE + mA / M * uA;
+			const Eigen::Vector3d U1 = 2 * mE / M * uE + mI / M * uI;
+
+			// total energy for ionization and recombination in center of mass frame
+			const double etot_i_com = 0.5 * M * U0.squaredNorm() + 3. / 2. * Ta;
+			const double etot_r_com = 0.5 * M * U1.squaredNorm() + 3. / 2. * Ti; 
 
 			// Number density sources, ionization and recombination
-			srcA(0) += 0;
+			const double wnet = wi - wr;
+			srcA(0) += -wnet;
 			srcE(0) += 0;
-			srcI(0) += 0;
-
-			// Thermal energy sources, ionization
-			srcA(4) += 0;
-			srcE(4) += 0;
-			srcI(4) += 0;
-
-			// Thermal energy sources, recombination
-			srcA(4) += 0;
-			srcE(4) += 0;
-			srcI(4) += 0;
+			srcI(0) += wnet;
 
 			// Momentum sources, ionization
-			srcA.segment(1, 3) += Eigen::Vector3d::Zero();
+			srcA.segment(1, 3) += -M * wi * U0;
 			srcE.segment(1, 3) += Eigen::Vector3d::Zero();
-			srcI.segment(1, 3) += Eigen::Vector3d::Zero();
+			srcI.segment(1, 3) += +M * wi * U0;
 
 			// Momentum sources, recombination
-			srcA.segment(1, 3) += Eigen::Vector3d::Zero();
+			srcA.segment(1, 3) += +M * wr * U1;
 			srcE.segment(1, 3) += Eigen::Vector3d::Zero();
-			srcI.segment(1, 3) += Eigen::Vector3d::Zero();
+			srcI.segment(1, 3) += -M * wr * U1;
 
-			// Kinetic energy sources, ionization
-			srcA(4) += 0;
+			// Total energy sources, ionization
+			srcA(4) += -wi * etot_i_com;
 			srcE(4) += 0;
 			srcI(4) += 0;
 			
-			// Kinetic energy sources, recombination;
-			srcA(4) += 0; 
+			// Total energy sources, recombination;
+			srcA(4) += wi * etot_r_com; 
 			srcE(4) += 0;
 			srcI(4) += 0;
+
+			// Scaling of momentum and energy sources because they are divided by mass fraction
+			srcE.segment(1, 3) *= 1. / mE;
+			srcI.segment(1, 3) *= 1. / mI;
 
 			if (idxC == 0) {
 				std::cout << "srcA: " << srcA.transpose() << std::endl;
