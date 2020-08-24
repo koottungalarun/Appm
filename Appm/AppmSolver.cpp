@@ -916,6 +916,9 @@ void AppmSolver::init_multiFluid()
 */
 void AppmSolver::applyFluidInitializationType()
 {
+	// set default value for all fluid states
+	fluidStates.setConstant(std::nan(""));
+
 	const FluidInitType initType = solverParams.getFluidInitType();
 	switch (initType) {
 	case FluidInitType::SHOCKTUBE:
@@ -961,6 +964,14 @@ void AppmSolver::applyFluidInitializationType()
 	{
 		std::cout << "Initialize fluid states: " << initType << std::endl;
 		init_fluid_frictionTest_electrons_nonzero_velocity();
+	}
+	break;
+
+	case FluidInitType::INIT_FILE:
+	{
+		const std::string filename = "initFluid.txt";
+		std::cout << "Initialize from init file: " << filename << std::endl;
+		init_multiFluid_readFromFile(filename);
 	}
 	break;
 
@@ -1343,6 +1354,105 @@ void AppmSolver::init_fluid_frictionTest_electrons_nonzero_velocity()
 		}
 	}
 
+}
+
+/**
+* Read initial conditions for multi-fluid from a text file. 
+* Assume that it is structured as follows:
+* - Fluids are identified by their name (the name is given in the input file)
+* - Initial state is given by number density (n), temperature (T), and velocity z-component (uz)
+* - Format example: 
+*     Ion
+*     n: 1
+*     T: 1
+*     uz: 0
+* - Empty lines and comment lines (start with #) are skipped
+*/
+void AppmSolver::init_multiFluid_readFromFile(const std::string & filename)
+{
+	std::vector<InitDataStruct> initDataVec;
+	InitDataStruct initData;
+
+
+	// Read input file and store data in a struct
+	std::ifstream file(filename);
+	std::string line;
+	while (std::getline(file, line)) {
+		if (line.empty()) { 
+			continue; // skip empty lines
+		}
+		if (line.front() == '#') {
+			continue; // skip comment lines
+		}
+		std::stringstream ss(line);
+		std::string varName;
+		double value;
+		ss >> varName >> value;
+
+		if (varName.size() == 2) {
+			std::string temp = varName.substr(0,2);
+			if (temp == "n:") {
+				initData.n = value;
+			}
+			if (temp == "T:") {
+				initData.T = value;
+			}
+			if (temp == "u:") {
+				initData.uz = value;
+			}
+		}
+		else {
+			// If fluidName is already defined
+			if (initData.fluidName.size() > 0) {
+				// push existing init data to vector of initData 
+				assert(initData.n > 0 && initData.T > 0 && initData.fluidName.size() > 0);
+				initDataVec.push_back(initData);
+
+				// create an empty struct for next fluid
+				initData = InitDataStruct();
+			}
+			initData.fluidName = varName.substr(0, varName.size() - 1);
+		}
+	}
+	// Add last fluid init data
+	assert(initData.n > 0 && initData.T > 0 && initData.fluidName.size() > 0);
+	initDataVec.push_back(initData);
+
+	// Show init data that has been read
+	std::cout << "Number of fluid init data read: " << initDataVec.size() << std::endl;
+	std::cout << "**************" << std::endl;
+	for (int i = 0; i < initDataVec.size(); i++) {
+		std::cout << initDataVec[i] << std::endl;
+		std::cout << "**************" << std::endl;
+	}
+
+	// Apply data to fluids
+	for (int i = 0; i < initDataVec.size(); i++) {
+		// find species index 
+		int fidx = -1;
+		double massRatio = 0;
+		for (int j = 0; j < getNFluids(); j++) {
+			if (speciesList[j].getName() == initDataVec[i].fluidName) {
+				fidx = j;
+				massRatio = speciesList[j].getMassRatio();
+			}
+		}
+		assert(fidx >= 0);
+		assert(fidx < getNFluids());
+
+		// Define fluid state from init data
+		double n = initDataVec[fidx].n;
+		double T = initDataVec[fidx].T;
+		double uz = initDataVec[fidx].uz;
+		Eigen::Vector3d u(0, 0, uz);
+		double p = n * T;
+		Eigen::VectorXd state = Physics::primitive2state(massRatio, n, p, u);
+
+		// Set fluid state for all fluid cells
+		for (int k = 0; k < dualMesh.getNumberFluidCells(); k++) {
+			fluidStates.col(k).segment(5 * fidx, 5) = state;
+		}
+	}
 }
 
 /**
@@ -2657,42 +2767,39 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 			const double wr = kr(idxC) * pow(nE(idxC), 2) * nI(idxC);
 
 			// Number density sources, ionization and recombination
-			srcA(0) -= wi - wr;
-			srcE(0) += wi - wr;
-			srcI(0) += wi - wr;
+			srcA(0) += 0;
+			srcE(0) += 0;
+			srcI(0) += 0;
 
 			// Thermal energy sources, ionization
-			srcA(4) -= wi * eA;
-			srcE(4) -= wi * eA * pow(mI, -1);
-			srcI(4) += wi * eA * pow(mI, -2);
+			srcA(4) += 0;
+			srcE(4) += 0;
+			srcI(4) += 0;
 
 			// Thermal energy sources, recombination
-			srcA(4) += wr * eI * mI;
-			srcE(4) += wr * eI;
-			srcI(4) -= wr * eI / mI;
-
-			// Momentum sources; note that momentum conservation 
-			// yields uA = mI * uI + mE * uE
+			srcA(4) += 0;
+			srcE(4) += 0;
+			srcI(4) += 0;
 
 			// Momentum sources, ionization
-			srcA.segment(1, 3) -= wi * uA;
-			srcE.segment(1, 3) += wi * uE;
-			srcI.segment(1, 3) += wi / mI * (uA - mE * uE);
+			srcA.segment(1, 3) += Eigen::Vector3d::Zero();
+			srcE.segment(1, 3) += Eigen::Vector3d::Zero();
+			srcI.segment(1, 3) += Eigen::Vector3d::Zero();
 
 			// Momentum sources, recombination
-			srcA.segment(1, 3) += wr * (mI * uI + mE * uE);
-			srcE.segment(1, 3) -= wr * uE;
-			srcI.segment(1, 3) -= wr * uI;
+			srcA.segment(1, 3) += Eigen::Vector3d::Zero();
+			srcE.segment(1, 3) += Eigen::Vector3d::Zero();
+			srcI.segment(1, 3) += Eigen::Vector3d::Zero();
 
 			// Kinetic energy sources, ionization
-			srcA(4) -= wi * 0.5 * uA.squaredNorm();
-			srcE(4) += wi * 0.5 * pow(mE, -1) * ((1 - pow(mI, -1)) * uA.squaredNorm() + 2 * mE / mI * uA.dot(uE) - pow(mE, 2) / mI * uE.squaredNorm());
-			srcI(4) += wi * 0.5 * pow(mI, -2) * (uA.squaredNorm() - 2 * mE * uA.dot(uE) + pow(mE, 2) * uE.squaredNorm());
+			srcA(4) += 0;
+			srcE(4) += 0;
+			srcI(4) += 0;
 			
 			// Kinetic energy sources, recombination;
-			srcA(4) += wr * 0.5 * (mI * uI.squaredNorm() + mE * uE.squaredNorm()); 
-			srcE(4) -= wr * 0.5 * pow(mE, -1) * (mI * (1 - mI) * uI.squaredNorm() - 2 * mI * mE * uI.dot(uE) - pow(mE, 2) * uE.squaredNorm());
-			srcI(4) -= wr * 0.5 * uI.squaredNorm();
+			srcA(4) += 0; 
+			srcE(4) += 0;
+			srcI(4) += 0;
 
 			if (idxC == 0) {
 				std::cout << "srcA: " << srcA.transpose() << std::endl;
@@ -5061,6 +5168,9 @@ void AppmSolver::SolverParameters::setFluidInitType(const std::string & s)
 	if (trimmed == "TEST_FRICTION_ELECTRONS_NONZERO_VELOCITY") {
 		this->fluidInitType = FluidInitType::TEST_FRICTION_ELECTRONS_NONZERO_VELOCITY;
 	}
+	if (trimmed == "INIT_FILE") {
+		this->fluidInitType = FluidInitType::INIT_FILE;
+	}
 	if (this->fluidInitType == FluidInitType::DEFAULT) {
 		std::cout << "Warning: it may be that the FluidInitType is not correctly read." << std::endl;
 		std::cout << "Value read from imput file: " << trimmed << std::endl;
@@ -5171,9 +5281,22 @@ std::ostream & operator<<(std::ostream & os, const AppmSolver::FluidInitType & o
 		os << "TEST_FRICTION_ELECTRONS_NONZERO_VELOCITY";
 		break;
 
+	case AppmSolver::FluidInitType::INIT_FILE:
+		os << "INIT_FILE";
+		break;
+
 	default:
 		os << "unknown";
 		assert(false);
 	}
+	return os;
+}
+
+std::ostream & operator<<(std::ostream & os, const AppmSolver::InitDataStruct & obj)
+{
+	std::cout << "fluid name:\t" << obj.fluidName << std::endl;
+	std::cout << "n:\t" << obj.n << std::endl;
+	std::cout << "T:\t" << obj.T << std::endl;
+	std::cout << "uz:\t" << obj.uz << std::endl;
 	return os;
 }

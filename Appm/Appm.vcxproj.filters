@@ -229,5 +229,8 @@
     <Text Include="toDelete-AppmSolverParams.txt">
       <Filter>Resource Files</Filter>
     </Text>
+    <Text Include="initFluid.txt">
+      <Filter>Resource Files</Filter>
+    </Text>
   </ItemGroup>
 </Project>

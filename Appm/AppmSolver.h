@@ -48,7 +48,8 @@ public:
 		TEST_FRICTION, 
 		TEST_FRICTION_TEMPERATURE, 
 		TEST_FRICTION_NUMBERDENSITY, 
-		TEST_FRICTION_ELECTRONS_NONZERO_VELOCITY
+		TEST_FRICTION_ELECTRONS_NONZERO_VELOCITY,
+		INIT_FILE
 	};
 	friend std::ostream & operator<<(std::ostream & os, const AppmSolver::FluidInitType & obj);
 
@@ -130,6 +131,18 @@ public:
 	void setElasticCollisions(const std::vector<std::string> & list);
 	void setInelasticCollisions(const std::vector<std::string> & list);
 	void setScalingParameters(const std::string & filename);
+
+
+	// Structure to save init data
+	struct InitDataStruct {
+		std::string fluidName;
+		double n = 0;
+		double T = 0;
+		double uz = 0;
+
+	};
+	friend std::ostream & operator<<(std::ostream & os, const AppmSolver::InitDataStruct & obj);
+
 
 protected:
 	PrimalMesh primalMesh;
@@ -265,6 +278,8 @@ private:
 	void init_fluid_frictionTest_temperature();
 	void init_fluid_frictionTest_numberDensity();
 	void init_fluid_frictionTest_electrons_nonzero_velocity();
+
+	void init_multiFluid_readFromFile(const std::string & filename);
 
 	void set_Efield_uniform(const Eigen::Vector3d direction);
 	void set_Bfield_azimuthal();
