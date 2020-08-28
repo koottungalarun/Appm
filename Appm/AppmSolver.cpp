@@ -2733,8 +2733,9 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 		const double mI = getSpecies(fidxI).getMassRatio();
 
 		// sum of particle masses in collision
-		const double M = mE + mA;
-		assert(M == 2 * mE + mI);
+		const double M = mA;
+		assert(mA == mE + mI);
+		// 
 
 		//Eigen::VectorXd ki(nFluidCells);
 		//Eigen::VectorXd kr(nFluidCells);
@@ -2742,7 +2743,7 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 		//kr.setConstant(2); // TODO
 
 		/* Ionization energy */
-		const double Ei = 0; // TODO
+		const double E_ion = 0; // TODO
 
 		const Eigen::MatrixXd statesA = getStates(fidxA, nFluidCells);
 		const Eigen::MatrixXd statesE = getStates(fidxE, nFluidCells);
@@ -2779,42 +2780,75 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 			Eigen::VectorXd srcI = Eigen::VectorXd::Zero(5);
 
 			// Ionization and recombination rate
-			const double wi = 2 * nA(idxC) * nE(idxC);
-			const double wr = pow(nE(idxC), 2) * nI(idxC);
+			const double Gamma_ion = 2 * nA(idxC) * nE(idxC); // TODO
+			const double Gamma_rec = pow(nE(idxC), 2) * nI(idxC);
 
 			// Bulk velocity for ionization and recombination
 			const Eigen::Vector3d U0 = mE / M * uE + mA / M * uA;
 			const Eigen::Vector3d U1 = 2 * mE / M * uE + mI / M * uI;
 
+			// Relative velocities 
+			const Eigen::Vector3d w0 = uE - uA;
+			const Eigen::Vector3d w1 = uE - mE * uE - mI * uI;
+			const Eigen::Vector3d w2 = uE - uI;
+
+
 			// total energy for ionization and recombination in center of mass frame
 			const double etot_i_com = 0.5 * M * U0.squaredNorm() + 3. / 2. * Ta;
 			const double etot_r_com = 0.5 * M * U1.squaredNorm() + 3. / 2. * Ti; 
 
+			// Net ionization rate
+			const double Gamma_net = Gamma_ion - Gamma_rec;
+
+			// factors in momentum and energy balance
+			const double alpha2 = 2 * Te / mE; 
+			const double lambda1 = w1.squaredNorm() / alpha2;
+			const double lambda_i = 0; // lambda = 0 corresponds to thermal limit
+			const double lambda_r = lambda1;
+			const double mu = mE;
+			const double R0_ion = 0;
+			const double R1_rec = 0;
+			const double R2_rec = 0;
+			const double J00_ion = 0;
+			const double J11_rec = 0;
+			const double J22_rec = 0;
+			const double J12_rec = 0;
+
+
+			const double R_ion = R0_ion;
+			const double K_ion = Gamma_ion - R0_ion;
+			const double W_ion = J00_ion - 2 * lambda_i * R0_ion + lambda_i * Gamma_ion;
+			const double J_ion = J00_ion - lambda_i * R0_ion;
+			const double R_rec = R1_rec + R2_rec;
+			const double K_rec = 2 * Gamma_rec - R1_rec - R2_rec;
+			const double W_rec = J11_rec + J22_rec + 2 * J12_rec + 4 * lambda_r * Gamma_rec - 4 * lambda_r * R1_rec - 4 * lambda_r * R2_rec;
+			const double J_rec = J11_rec + J22_rec + 2 * J12_rec - 2 * lambda_r * R1_rec - 2 * lambda_r * R2_rec;
+
+
 			// Number density sources, ionization and recombination
-			const double wnet = wi - wr;
-			srcA(0) += -wnet;
-			srcE(0) += 0;
-			srcI(0) += wnet;
+			srcA(0) += -Gamma_net;
+			srcE(0) += Gamma_net;
+			srcI(0) += Gamma_net;
 
 			// Momentum sources, ionization
-			srcA.segment(1, 3) += -M * wi * U0;
-			srcE.segment(1, 3) += Eigen::Vector3d::Zero();
-			srcI.segment(1, 3) += +M * wi * U0;
+			srcA.segment(1, 3) += -M * Gamma_ion * U0 - (Ta - Te) / Te * mu * K_ion * w0 + mu * R_ion * w0;
+			srcE.segment(1, 3) += -mu * R_ion * w0;
+			srcI.segment(1, 3) += +M * Gamma_ion * U0 + (Ta - Te) / Te * mu * K_ion * w0;
 
 			// Momentum sources, recombination
-			srcA.segment(1, 3) += +M * wr * U1;
-			srcE.segment(1, 3) += Eigen::Vector3d::Zero();
-			srcI.segment(1, 3) += -M * wr * U1;
+			srcA.segment(1, 3) += +M * Gamma_rec * U1 + (Ti - Te)/Te * mu * K_rec * w1;
+			srcE.segment(1, 3) += -mu * R_rec * w1;
+			srcI.segment(1, 3) += -M * Gamma_rec * U1 - (Ti - Te)/Te * mu * K_rec * w1 + mu * R_rec * w1;
 
 			// Total energy sources, ionization
-			srcA(4) += -wi * etot_i_com;
-			srcE(4) += 0;
-			srcI(4) += 0;
+			srcA(4) += -Gamma_ion * etot_i_com - mu / M * pow(Ta - Te, 2) / Te * W_ion + (Ta - Te) / Te * mu * K_ion * w0.dot(U0) + mu * R_ion * w0.dot(U0) - 2 * mu / M * (Ta - Te) * J_ion;
+			srcE(4) += -Gamma_ion * E_ion - mu * R_ion * w0.dot(U0) + 2 * mu / M * (Ta - Te) * J_ion;
+			srcI(4) += +Gamma_ion * etot_i_com + mu / M * pow(Ta - Te, 2) / Te * W_ion - (Ta - Te) / Te * mu * K_ion * w0.dot(U0);
 			
 			// Total energy sources, recombination;
-			srcA(4) += wi * etot_r_com; 
-			srcE(4) += 0;
-			srcI(4) += 0;
+			srcA(4) += +Gamma_rec * etot_r_com + mu / M * pow(Ti - Te, 2) / Te * W_rec + (Ti - Te) / Te * mu * K_rec * w1.dot(U1);
+			srcE(4) += -Gamma_rec * etot_r_com - mu / M * pow(Ti - Te, 2) / Te * W_rec - (Ti - Te) / Te * mu * K_rec * w1.dot(U1) + mu * R_rec * w1.dot(U1) - 2 * mu / M * (Ti - Te) * J_rec;
+			srcI(4) += +Gamma_rec * E_ion - mu * R_rec * w1.dot(U1) + 2 * mu / M * (Ti - Te) * J_rec;
 
 			// Scaling of momentum and energy sources because they are divided by mass fraction
 			srcE.segment(1, 3) *= 1. / mE;
