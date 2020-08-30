@@ -8,32 +8,6 @@ int main() {
 	std::cout << "*    APPM             *" << std::endl;
 	std::cout << "***********************" << std::endl;
 
-	//int N = 10;
-	//Eigen::VectorXd x(N), y(N);
-	//const double dx = 1. / (N - 1);
-	//for (int i = 0; i < N; i++) {
-	//	x(i) = i * dx;
-	//}
-	//y = x.array().pow(2);
-
-	//InterpolationTable table(x, y);
-	//Eigen::VectorXd sites(N);
-	//sites = Eigen::VectorXd::LinSpaced(N, 0.0, 1.0);
-	//sites(0) = std::nanf("");
-	//Eigen::VectorXd result;
-	//Eigen::MatrixXd data(sites.rows(), 2);
-
-	//result = table.interpolate(sites);
-	//data.col(0) = y;
-	//data.col(1) = result;
-	//std::cout << data << std::endl;
-
-	//result = table.interpolate(sites);
-	//data.col(0) = y;
-	//data.col(1) = result;
-	//std::cout << data << std::endl;
-	//return EXIT_SUCCESS;
-
 	const std::string inputFilename = "input.txt";
 
 	Main main;
@@ -67,11 +41,9 @@ void Main::run()
 	readInputFile();
 
 	PrimalMesh::PrimalMeshParams primalMeshParams;
-	//primalMeshParams = PrimalMesh::PrimalMeshParams("primalMeshParams.txt");
 	assert(this->meshFilename.size() > 0);
 	primalMeshParams = PrimalMesh::PrimalMeshParams(this->meshFilename);
 
-	//AppmSolver appm(primalMeshParams, appmParameters);
 	AppmSolver appm;
 	appm.setScalingParameters("scales.txt");
 	appm.setSolverParameters(solverParameters);
