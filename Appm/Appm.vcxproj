@@ -137,6 +137,9 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="alglibinternal.h" />
+    <ClInclude Include="alglibmisc.h" />
+    <ClInclude Include="ap.h" />
     <ClInclude Include="AppmSolver.h" />
     <ClInclude Include="Cell.h" />
     <ClInclude Include="DualMesh.h" />
@@ -148,17 +151,24 @@
     <ClInclude Include="H5Reader.h" />
     <ClInclude Include="H5Writer.h" />
     <ClInclude Include="InelasticCollision.h" />
+    <ClInclude Include="integration.h" />
+    <ClInclude Include="interpolation.h" />
     <ClInclude Include="Ionization.h" />
+    <ClInclude Include="linalg.h" />
     <ClInclude Include="Main.h" />
     <ClInclude Include="Mesh.h" />
     <ClInclude Include="Numerics.h" />
+    <ClInclude Include="optimization.h" />
     <ClInclude Include="Physics.h" />
     <ClInclude Include="PhysicsConstants.h" />
     <ClInclude Include="PrimalMesh.h" />
     <ClInclude Include="Recombination.h" />
     <ClInclude Include="ScalingParameters.h" />
+    <ClInclude Include="solvers.h" />
+    <ClInclude Include="specialfunctions.h" />
     <ClInclude Include="Species.h" />
     <ClInclude Include="InterpolationTable.h" />
+    <ClInclude Include="stdafx.h" />
     <ClInclude Include="TriPrism.h" />
     <ClInclude Include="Vertex.h" />
     <ClInclude Include="XdmfAttribute.h" />
@@ -172,6 +182,9 @@
     <ClInclude Include="XmlElement.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="alglibinternal.cpp" />
+    <ClCompile Include="alglibmisc.cpp" />
+    <ClCompile Include="ap.cpp" />
     <ClCompile Include="AppmSolver.cpp" />
     <ClCompile Include="Cell.cpp" />
     <ClCompile Include="DualMesh.cpp" />
@@ -182,15 +195,21 @@
     <ClCompile Include="H5Reader.cpp" />
     <ClCompile Include="H5Writer.cpp" />
     <ClCompile Include="InelasticCollision.cpp" />
+    <ClCompile Include="integration.cpp" />
+    <ClCompile Include="interpolation.cpp" />
     <ClCompile Include="Ionization.cpp" />
+    <ClCompile Include="linalg.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Mesh.cpp" />
     <ClCompile Include="Numerics.cpp" />
+    <ClCompile Include="optimization.cpp" />
     <ClCompile Include="Physics.cpp" />
     <ClCompile Include="PhysicsConstants.cpp" />
     <ClCompile Include="PrimalMesh.cpp" />
     <ClCompile Include="Recombination.cpp" />
     <ClCompile Include="ScalingParameters.cpp" />
+    <ClCompile Include="solvers.cpp" />
+    <ClCompile Include="specialfunctions.cpp" />
     <ClCompile Include="Species.cpp" />
     <ClCompile Include="InterpolationTable.cpp" />
     <ClCompile Include="TriPrism.cpp" />
