@@ -1,4 +1,35 @@
 #include "Main.h"
+#include "Interpolation2d.h"
+
+
+/**
+* This is a test for checking bicubic spline interpolation
+*/
+void test_bicubicInterpolation() {
+	Eigen::VectorXd lambdaVec(10);
+	lambdaVec << 0, 1e-3, 1e-2, 1e-1, 3e-1, 5e-1, 1, 3, 5, 10;
+
+	const std::string filename = "collisions/inelastic/I_R0ion.csv";
+	const Interpolation2d::DataTransform xTrans = Interpolation2d::DataTransform::NONE;
+	const Interpolation2d::DataTransform yTrans = Interpolation2d::DataTransform::INVERSE;
+	const Interpolation2d::DataTransform fTrans = Interpolation2d::DataTransform::LOG;
+
+	Interpolation2d I_R0ion(filename, xTrans, yTrans, fTrans);
+
+	Eigen::VectorXd result;
+	Eigen::VectorXd xSites;
+	Eigen::VectorXd ySites = Eigen::VectorXd::LinSpaced(298,3e2,40e3);
+
+	Eigen::MatrixXd Mout(ySites.size(), lambdaVec.size() + 1);
+	Mout.col(0) = ySites;
+	for (int j = 0; j < lambdaVec.size(); j++) {
+		double lambda = lambdaVec(j);
+		xSites = lambda * Eigen::VectorXd::Ones(ySites.size());
+		result = I_R0ion.bicubicInterp(xSites, ySites);
+		Mout.col(j+1) = result;
+	}
+	std::ofstream("output.dat") << Mout << std::endl;
+}
 
 /**
 * Main function.
@@ -9,6 +40,8 @@ int main() {
 	std::cout << "***********************" << std::endl;
 
 	const std::string inputFilename = "input.txt";
+
+	//test_bicubicInterpolation();
 
 	Main main;
 	main.setInputFilename(inputFilename);
