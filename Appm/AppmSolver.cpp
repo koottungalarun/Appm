@@ -2753,6 +2753,10 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 		const Eigen::VectorXd nE = statesE.row(0);
 		const Eigen::VectorXd nI = statesI.row(0);
 
+		const Eigen::VectorXd TaVec = Physics::getTemperature(statesA, mA);
+		const Eigen::VectorXd TeVec = Physics::getTemperature(statesE, mE);
+		const Eigen::VectorXd TiVec = Physics::getTemperature(statesI, mI);
+
 		for (int idxC = 0; idxC < nFluidCells; idxC++) {
 			//std::cout << "k = " << k << std::endl;
 
@@ -2769,11 +2773,6 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 			const double eA = stateA(4) / nA(idxC) - 0.5 * uA.dot(uA);
 			const double eE = stateE(4) / nE(idxC) - 0.5 * uE.dot(uE);
 			const double eI = stateI(4) / nI(idxC) - 0.5 * uI.dot(uI);
-
-			// species temperature 
-			const double Ta = Physics::getTemperature(stateA, mA);
-			const double Te = Physics::getTemperature(stateE, mE);
-			const double Ti = Physics::getTemperature(stateI, mI);
 
 			Eigen::VectorXd srcA = Eigen::VectorXd::Zero(5);
 			Eigen::VectorXd srcE = Eigen::VectorXd::Zero(5);
