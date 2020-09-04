@@ -10,9 +10,9 @@ void test_bicubicInterpolation() {
 	lambdaVec << 0, 1e-3, 1e-2, 1e-1, 3e-1, 5e-1, 1, 3, 5, 10;
 
 	const std::string filename = "collisions/inelastic/I_R0ion.csv";
-	const Interpolation2d::DataTransform xTrans = Interpolation2d::DataTransform::NONE;
-	const Interpolation2d::DataTransform yTrans = Interpolation2d::DataTransform::INVERSE;
-	const Interpolation2d::DataTransform fTrans = Interpolation2d::DataTransform::LOG;
+	const DataTransform xTrans = DataTransform::NONE;
+	const DataTransform yTrans = DataTransform::INVERSE;
+	const DataTransform fTrans = DataTransform::LOG;
 
 	Interpolation2d I_R0ion(filename, xTrans, yTrans, fTrans);
 
