@@ -2758,6 +2758,30 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 		const Eigen::VectorXd TeVec = Physics::getTemperature(statesE, mE);
 		const Eigen::VectorXd TiVec = Physics::getTemperature(statesI, mI);
 
+		Eigen::VectorXd lambdaIon(TeVec.size());
+		lambdaIon.setZero();
+		Eigen::VectorXd lambdaRec(TeVec.size());
+		lambdaRec.setZero();
+
+		Eigen::VectorXd Gion = collision->getGionInterpolated(TeVec);
+		Eigen::VectorXd Grec = collision->getGrecInterpolated(TeVec, lambdaRec);
+		Eigen::VectorXd R0ion = collision->getR0ionInterpolated(TeVec, lambdaIon);
+		Eigen::VectorXd R1rec = collision->getR1recInterpolated(TeVec, lambdaRec);
+		Eigen::VectorXd R2rec = collision->getR2recInterpolated(TeVec, lambdaRec);
+		Eigen::VectorXd J00ion = collision->getJ00ionInterpolated(TeVec, lambdaIon);
+		Eigen::VectorXd J11rec = collision->getJ11recInterpolated(TeVec, lambdaRec);
+		Eigen::VectorXd J22rec = collision->getJ22recInterpolated(TeVec, lambdaRec);
+		Eigen::VectorXd J12rec = collision->getJ12recInterpolated(TeVec, lambdaRec);
+		assert(Gion.allFinite());
+		assert(Grec.allFinite());
+		assert(R0ion.allFinite());
+		assert(R1rec.allFinite());
+		assert(R2rec.allFinite());
+		assert(J00ion.allFinite());
+		assert(J11rec.allFinite());
+		assert(J22rec.allFinite());
+		assert(J12rec.allFinite());
+
 		for (int idxC = 0; idxC < nFluidCells; idxC++) {
 			const double Ta = TaVec(idxC);
 			const double Te = TeVec(idxC);

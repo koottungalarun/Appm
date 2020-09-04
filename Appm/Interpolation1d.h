@@ -13,7 +13,7 @@ public:
 
 	~Interpolation1d();
 
-	Eigen::VectorXd bicubicInterp(const Eigen::VectorXd & xSites);
+	const Eigen::VectorXd cubicInterp(const Eigen::VectorXd & xSites) const;
 
 
 

@@ -56,7 +56,7 @@ public:
 	* @param ySites vector of y(i)
 	* @return vector z(i) = S(x(i), y(i))
 	*/
-	Eigen::VectorXd bicubicInterp(const Eigen::VectorXd & xSites, const Eigen::VectorXd & ySites);
+	const Eigen::VectorXd bicubicInterp(const Eigen::VectorXd & xSites, const Eigen::VectorXd & ySites) const;
 	
 
 

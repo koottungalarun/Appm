@@ -4,7 +4,8 @@ Interpolation1d::Interpolation1d()
 {
 }
 
-Interpolation1d::Interpolation1d(const std::string & filename, const DataTransform xTrans, const DataTransform fTrans)
+Interpolation1d::Interpolation1d(const std::string & filename, const DataTransform xTrans_, const DataTransform fTrans_)
+	: xTrans(xTrans_), fTrans(fTrans_)
 {
 	readCsvFile(filename, xTrans, fTrans);
 
@@ -20,7 +21,7 @@ Interpolation1d::~Interpolation1d()
 {
 }
 
-Eigen::VectorXd Interpolation1d::bicubicInterp(const Eigen::VectorXd & xSites)
+const Eigen::VectorXd Interpolation1d::cubicInterp(const Eigen::VectorXd & xSites) const
 {
 	const int n = xSites.size();
 	Eigen::VectorXd result = Eigen::VectorXd(n);
@@ -67,8 +68,6 @@ Eigen::VectorXd Interpolation1d::bicubicInterp(const Eigen::VectorXd & xSites)
 	default:
 		assert(false);
 	}
-
-
 	return resultTrans;
 }
 

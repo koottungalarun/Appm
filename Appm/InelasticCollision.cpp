@@ -49,47 +49,47 @@ InelasticCollision::~InelasticCollision()
 {
 }
 
-Eigen::VectorXd InelasticCollision::getGionInterpolated(const Eigen::VectorXd & Te)
+const Eigen::VectorXd InelasticCollision::getGionInterpolated(const Eigen::VectorXd & Te) const
 {
-	return Eigen::VectorXd();
+	return data_Gion.cubicInterp(Te);
 }
 
-Eigen::VectorXd InelasticCollision::getR0ionInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda)
+const Eigen::VectorXd InelasticCollision::getR0ionInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const
 {
 	return data_R0ion.bicubicInterp(lambda, Te);
 }
 
-Eigen::VectorXd InelasticCollision::getJ00ionInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda)
+const Eigen::VectorXd InelasticCollision::getJ00ionInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const
 {
 	return data_J00ion.bicubicInterp(lambda, Te);
 }
 
-Eigen::VectorXd InelasticCollision::getGrecInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda)
+const Eigen::VectorXd InelasticCollision::getGrecInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const
 {
 	return data_Grec.bicubicInterp(lambda, Te);
 }
 
-Eigen::VectorXd InelasticCollision::getR1recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda)
+const Eigen::VectorXd InelasticCollision::getR1recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const
 {
 	return data_R1rec.bicubicInterp(lambda, Te);
 }
 
-Eigen::VectorXd InelasticCollision::getR2recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda)
+const Eigen::VectorXd InelasticCollision::getR2recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const
 {
 	return data_R2rec.bicubicInterp(lambda, Te);
 }
 
-Eigen::VectorXd InelasticCollision::getJ11recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda)
+const Eigen::VectorXd InelasticCollision::getJ11recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const
 {
 	return data_J11rec.bicubicInterp(lambda, Te);
 }
 
-Eigen::VectorXd InelasticCollision::getJ22recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda)
+const Eigen::VectorXd InelasticCollision::getJ22recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const
 {
 	return data_J22rec.bicubicInterp(lambda, Te);
 }
 
-Eigen::VectorXd InelasticCollision::getJ12recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda)
+const Eigen::VectorXd InelasticCollision::getJ12recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const
 {
 	return data_J12rec.bicubicInterp(lambda, Te);
 }

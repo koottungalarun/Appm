@@ -19,15 +19,15 @@ public:
 
 	~InelasticCollision();
 
-	Eigen::VectorXd getGionInterpolated(const Eigen::VectorXd & Te);
-	Eigen::VectorXd getR0ionInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda);
-	Eigen::VectorXd getJ00ionInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda);
-	Eigen::VectorXd getGrecInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda);
-	Eigen::VectorXd getR1recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda);
-	Eigen::VectorXd getR2recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda);
-	Eigen::VectorXd getJ11recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda);
-	Eigen::VectorXd getJ22recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda);
-	Eigen::VectorXd getJ12recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda);
+	const Eigen::VectorXd getGionInterpolated(const Eigen::VectorXd & Te) const;
+	const Eigen::VectorXd getR0ionInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const;
+	const Eigen::VectorXd getJ00ionInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const;
+	const Eigen::VectorXd getGrecInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const;
+	const Eigen::VectorXd getR1recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const;
+	const Eigen::VectorXd getR2recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const;
+	const Eigen::VectorXd getJ11recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const;
+	const Eigen::VectorXd getJ22recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const;
+	const Eigen::VectorXd getJ12recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const;
 
 	const int getElectronFluidx() const;
 	const int getIonFluidx() const;

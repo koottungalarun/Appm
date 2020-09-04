@@ -39,7 +39,7 @@ Interpolation2d::~Interpolation2d()
 * @param ySites vector of y(i)
 * @return vector z(i) = S(x(i), y(i))
 */
-Eigen::VectorXd Interpolation2d::bicubicInterp(const Eigen::VectorXd & xSites, const Eigen::VectorXd & ySites)
+const Eigen::VectorXd Interpolation2d::bicubicInterp(const Eigen::VectorXd & xSites, const Eigen::VectorXd & ySites) const
 {
 	assert(this->m > 0 && this->n > 0);
 
