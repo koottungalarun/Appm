@@ -3,6 +3,7 @@
 #include "interpolation.h"
 #include "DataTransform.h"
 #include <Eigen/Dense>
+#include <fstream>
 
 class Interpolation1d
 {
@@ -17,6 +18,15 @@ public:
 
 
 private:
+	alglib::real_1d_array x;
+	alglib::ae_int_t n = 0;
+	DataTransform xTrans;
+
+	alglib::real_1d_array f;
+	DataTransform fTrans;
+
+	alglib::spline1dinterpolant s;
+
 	void readCsvFile(const std::string & filename, const DataTransform & xTrans, const DataTransform & fTrans);
 
 
