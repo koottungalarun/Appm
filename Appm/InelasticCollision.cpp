@@ -31,7 +31,9 @@ InelasticCollision::InelasticCollision(const std::string & folderPath, const int
 	data_J22rec = Interpolation2d(filename, xTrans, yTrans, fTrans);
 
 	filename = folderPath + "I_J12rec.csv";
-	data_J12rec = Interpolation2d(filename, xTrans, yTrans, fTrans); // if lambda = 0 we have J12rec = 0. -> transformation with exp() cannot be executed
+	// if lambda = 0 we have J12rec = 0, transformation with exp() cannot be executed. 
+	// Therefore, pull lambda out of integral 
+	data_J12rec = Interpolation2d(filename, xTrans, yTrans, fTrans); 
 
 	filename = folderPath + "I_R0ion.csv";
 	data_R0ion = Interpolation2d(filename, xTrans, yTrans, fTrans);
