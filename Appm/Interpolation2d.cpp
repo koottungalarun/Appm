@@ -84,8 +84,10 @@ Eigen::VectorXd Interpolation2d::bicubicInterp(const Eigen::VectorXd & xSites, c
 	case DataTransform::LOG:
 		resultTrans = result.array().exp();
 		break;
+		
 	case DataTransform::INVERSE:
 		resultTrans = result.array().inverse();
+		break;
 		
 	default:
 		assert(false);
