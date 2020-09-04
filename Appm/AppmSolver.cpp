@@ -598,7 +598,7 @@ void AppmSolver::setInelasticCollisions(const std::vector<std::string>& list)
 		ss << "collisions/inelastic/" << tag << ".dat";
 
 		const std::string filename = ss.str();
-		InelasticCollision * inelasticCollision = new InelasticCollision(filename, kScale, Tscale);
+		InelasticCollision * inelasticCollision = new InelasticCollision();// filename, kScale, Tscale);
 		const double electronMassRatio = getSpecies(idxEl).getMassRatio();
 		inelasticCollision->setScalingParameters(scalingParameters, electronMassRatio);
 		inelasticCollision->setElectronFluidx(idxEl);

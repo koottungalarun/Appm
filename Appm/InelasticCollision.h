@@ -3,55 +3,45 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 
-#include "InterpolationTable.h"
+#include "Interpolation1d.h"
+#include "Interpolation2d.h"
+#include "DataTransform.h"
 #include <fstream>
 #include <Eigen/Dense>
-#include "PhysicsConstants.h"
-#include "ScalingParameters.h"
 
 class InelasticCollision
 {
 public:
 	InelasticCollision();
-	InelasticCollision(const std::string & filename);
-	InelasticCollision(const std::string & filename, const double kScale, const double Tscale);
+
+	/* Read data for inelastic collisions from folder */
+	InelasticCollision(const std::string & folderPath);
 
 	~InelasticCollision();
 
-	Eigen::VectorXd getIonizationRate(const Eigen::VectorXd & T) const;
-	Eigen::VectorXd getRecombinationRate_Saha(const Eigen::VectorXd & ki, const Eigen::VectorXd & Te) const;
+	Eigen::VectorXd getGionInterpolated(const Eigen::VectorXd & Te);
+	Eigen::VectorXd getR0ionInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda);
+	Eigen::VectorXd getJ00ionInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda);
+	Eigen::VectorXd getGrecInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda);
+	Eigen::VectorXd getR1recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda);
+	Eigen::VectorXd getR2recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda);
+	Eigen::VectorXd getJ11recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda);
+	Eigen::VectorXd getJ22recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda);
+	Eigen::VectorXd getJ12recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda);
 
-	Eigen::MatrixXd getData() const;
 
-	int getElectronFluidx() const;
-	void setElectronFluidx(const int idx);
-	int getAtomFluidx() const;
-	void setAtomFluidx(const int idx);
-	int getIonFluidx() const;
-	void setIonFluidx(const int idx);
-	void setNumberDensityScale(const double nbar);
-	void setElectronMassRatio(const double electronMassRatio);
-	void setMassScale(const double mbar);
-	void setTemperatureScale(const double Tbar);
-	void setScalingParameters(const ScalingParameters & params, const double electronMassRatio);
 
 private:
-	InterpolationTable * table = nullptr;
-	int fluidxElectrons = -1;
-	int fluidxAtoms = -1;
-	int fluidxIons = -1;
-	//double nbar = 0;
-	//double electronMassRatio = 0;
-	//double mbar = 0;
-	//double Tbar = 0;
-	//double deBroglieScaled_pow3 = 0;
-	double recomb_Saha_coeff = 0;
+	Interpolation1d data_Gion;
+	Interpolation2d data_R0ion;
+	Interpolation2d data_J00ion;
 
-	const double getRecombSahaCoeff() const;
-	void setRecombSahaCoeff(const double a);
+	Interpolation2d data_Grec;
+	Interpolation2d data_R1rec;
+	Interpolation2d data_R2rec;
+	Interpolation2d data_J11rec;
+	Interpolation2d data_J22rec;
+	Interpolation2d data_J12rec;
 
-	//const double getNumberDensityScale() const;
-	//const double getElectronMassRatio() const;
-	//const double getDeBroglieScaled_pow3() const;
 };
 

@@ -142,6 +142,7 @@
     <ClInclude Include="ap.h" />
     <ClInclude Include="AppmSolver.h" />
     <ClInclude Include="Cell.h" />
+    <ClInclude Include="DataTransform.h" />
     <ClInclude Include="DualMesh.h" />
     <ClInclude Include="Edge.h" />
     <ClInclude Include="EigenAuxiliaries.h" />
@@ -153,6 +154,7 @@
     <ClInclude Include="InelasticCollision.h" />
     <ClInclude Include="integration.h" />
     <ClInclude Include="interpolation.h" />
+    <ClInclude Include="Interpolation1d.h" />
     <ClInclude Include="Interpolation2d.h" />
     <ClInclude Include="Ionization.h" />
     <ClInclude Include="linalg.h" />
@@ -188,6 +190,7 @@
     <ClCompile Include="ap.cpp" />
     <ClCompile Include="AppmSolver.cpp" />
     <ClCompile Include="Cell.cpp" />
+    <ClCompile Include="DataTransform.cpp" />
     <ClCompile Include="DualMesh.cpp" />
     <ClCompile Include="Edge.cpp" />
     <ClCompile Include="ElasticCollision.cpp" />
@@ -198,6 +201,7 @@
     <ClCompile Include="InelasticCollision.cpp" />
     <ClCompile Include="integration.cpp" />
     <ClCompile Include="interpolation.cpp" />
+    <ClCompile Include="Interpolation1d.cpp" />
     <ClCompile Include="Interpolation2d.cpp" />
     <ClCompile Include="Ionization.cpp" />
     <ClCompile Include="linalg.cpp" />

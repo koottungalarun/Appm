@@ -147,6 +147,12 @@
     <ClInclude Include="Interpolation2d.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Interpolation1d.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DataTransform.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -273,6 +279,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Interpolation2d.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Interpolation1d.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DataTransform.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "interpolation.h"
+#include "DataTransform.h"
 #include <Eigen/Dense>
 #include <fstream>
 #include <string>
@@ -21,9 +22,9 @@ class Interpolation2d
 
 public:
 
-	enum class DataTransform {
-		NONE, INVERSE, LOG
-	};
+	//enum class DataTransform {
+	//	NONE, INVERSE, LOG
+	//};
 
 
 	Interpolation2d();

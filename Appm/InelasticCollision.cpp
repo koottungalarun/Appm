@@ -4,145 +4,87 @@ InelasticCollision::InelasticCollision()
 {
 }
 
-InelasticCollision::InelasticCollision(const std::string & filename) 
-	: InelasticCollision(filename, 1.0, 1.0)
+InelasticCollision::InelasticCollision(const std::string & folderPath)
 {
-}
+	const DataTransform xTrans = DataTransform::INVERSE;
+	const DataTransform yTrans = DataTransform::NONE;
+	const DataTransform fTrans = DataTransform::LOG;
 
-InelasticCollision::InelasticCollision(const std::string & filename, const double kScale, const double Tscale)
-{
-	assert(filename.size() > 0);
+	std::string filename;
+	filename = folderPath + "/I_Gion.csv";
+	data_Gion = Interpolation1d(filename, xTrans, fTrans);
 
-	std::vector<double> Tvec, kiVec;
+	filename = folderPath + "/I_Grec.csv";
+	data_Grec = Interpolation2d(filename, xTrans, yTrans, fTrans);
 
-	// Open data file
-	std::ifstream file(filename);
-	if (!file.is_open()) {
-		std::cout << "File is not open: " << filename << std::endl;
-		assert(false);
-	}
-	std::string line;
+	filename = folderPath + "/I_J00ion.csv";
+	data_J00ion = Interpolation2d(filename, xTrans, yTrans, fTrans);
 
-	int idx = 0;
-	// Read data file line by line
-	while (std::getline(file, line)) {
-		if (line.substr(0, 1) == "#") { continue; } // skip comment lines
+	filename = folderPath + "/I_J11rec.csv";
+	data_J11rec = Interpolation2d(filename, xTrans, yTrans, fTrans);
 
-		// Read one line
-		double T, ki, kr;
-		char c1, c2;
-		std::istringstream iss(line);
-		iss >> T >> c1 >> ki;
+	filename = folderPath + "/I_J22rec.csv";
+	data_J22rec = Interpolation2d(filename, xTrans, yTrans, fTrans);
 
-		// Store data from file in data vectors
-		Tvec.push_back(T / Tscale);
-		kiVec.push_back(ki / kScale);
-	}
-	table = new InterpolationTable(Tvec, kiVec);
+	filename = folderPath + "/I_J12rec.csv";
+	data_J12rec = Interpolation2d(filename, xTrans, yTrans, fTrans);
+
+	filename = folderPath + "/I_R0ion.csv";
+	data_R0ion = Interpolation2d(filename, xTrans, yTrans, fTrans);
+
+	filename = folderPath + "/I_R1rec.csv";
+	data_R1rec = Interpolation2d(filename, xTrans, yTrans, fTrans);
+
+	filename = folderPath + "/I_R2rec.csv";
+	data_R2rec = Interpolation2d(filename, xTrans, yTrans, fTrans);
 }
 
 InelasticCollision::~InelasticCollision()
 {
-	if (table != nullptr) {
-		delete table;
-		table = nullptr;
-	}
 }
 
-/**
-* Get ionization rate at temperature T.
-*
-* @param T electron temperature
-* @return ionization rate k_i (T).
-*/
-Eigen::VectorXd InelasticCollision::getIonizationRate(const Eigen::VectorXd & T) const
+Eigen::VectorXd InelasticCollision::getGionInterpolated(const Eigen::VectorXd & Te)
 {
-	const int N = T.size();
-	Eigen::VectorXd result = table->interpolate(T);
-	assert(result.size() == N);
-	return result;
+	return Eigen::VectorXd();
 }
 
-Eigen::VectorXd InelasticCollision::getRecombinationRate_Saha(const Eigen::VectorXd & ki, const Eigen::VectorXd & Te) const
+Eigen::VectorXd InelasticCollision::getR0ionInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda)
 {
-	const double a = getRecombSahaCoeff();
-
-	Eigen::VectorXd kr(ki.size());
-	kr = a * Te.array().pow(-3. / 2.) * ki.array();
-	return kr;
+	return data_R0ion.bicubicInterp(lambda, Te);
 }
 
-Eigen::MatrixXd InelasticCollision::getData() const
+Eigen::VectorXd InelasticCollision::getJ00ionInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda)
 {
-	Eigen::VectorXd x = table->getXdata();
-	Eigen::VectorXd y = table->getYdata();
-	Eigen::MatrixXd data(x.size(), 2);
-	data.col(0) = x;
-	data.col(1) = y;
-	return data;
+	return data_J00ion.bicubicInterp(lambda, Te);
 }
 
-int InelasticCollision::getElectronFluidx() const
+Eigen::VectorXd InelasticCollision::getGrecInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda)
 {
-	return fluidxElectrons;
+	return data_Grec.bicubicInterp(lambda, Te);
 }
 
-void InelasticCollision::setElectronFluidx(const int idx)
+Eigen::VectorXd InelasticCollision::getR1recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda)
 {
-	assert(idx >= 0);
-	this->fluidxElectrons = idx;
+	return data_R1rec.bicubicInterp(lambda, Te);
 }
 
-int InelasticCollision::getAtomFluidx() const
+Eigen::VectorXd InelasticCollision::getR2recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda)
 {
-	return fluidxAtoms;
+	return data_R2rec.bicubicInterp(lambda, Te);
 }
 
-void InelasticCollision::setAtomFluidx(const int idx)
+Eigen::VectorXd InelasticCollision::getJ11recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda)
 {
-	assert(idx >= 0);
-	this->fluidxAtoms = idx;
+	return data_J11rec.bicubicInterp(lambda, Te);
 }
 
-int InelasticCollision::getIonFluidx() const
+Eigen::VectorXd InelasticCollision::getJ22recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda)
 {
-	return fluidxIons;
+	return data_J22rec.bicubicInterp(lambda, Te);
 }
 
-void InelasticCollision::setIonFluidx(const int idx)
+Eigen::VectorXd InelasticCollision::getJ12recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda)
 {
-	assert(idx >= 0);
-	this->fluidxIons = idx;
+	return data_J12rec.bicubicInterp(lambda, Te);
 }
 
-void InelasticCollision::setScalingParameters(const ScalingParameters & params, const double electronMassRatio)
-{
-	const double mbar = params.getMassScale();
-	const double nbar = params.getNumberDensityScale();
-	const double Tbar = params.getTemperatureScale();
-
-	PhysicsConstants & pc = PhysicsConstants::instance();
-
-	const double h2 = pow(pc.planckConstant(), 2);
-	const double kB = pc.kB();
-	const double twoPi_inv = 0.5 * M_1_PI;
-	const double temp = twoPi_inv * h2 / (mbar * kB * Tbar);
-	const double deBroglieScaled_pow3 = pow(temp, 3./2.);
-	const double g0 = 1;
-	const double g1 = 6;
-	const double a = 2*g1/g0 * 1./(deBroglieScaled_pow3 * nbar) * pow(electronMassRatio,-3./2.);
-	setRecombSahaCoeff(a);
-}
-
-const double InelasticCollision::getRecombSahaCoeff() const
-{
-	assert(this->recomb_Saha_coeff > 0);
-	return this->recomb_Saha_coeff;
-}
-
-void InelasticCollision::setRecombSahaCoeff(const double a)
-{
-	assert(a > 0);
-	assert(isfinite(a));
-	this->recomb_Saha_coeff = a;
-}
