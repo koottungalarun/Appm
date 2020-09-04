@@ -590,30 +590,31 @@ void AppmSolver::setInelasticCollisions(const std::vector<std::string>& list)
 		assert(tagElectron == "e");
 		std::cout << "Inelastic collision: " << tagElectron << ", " << tagAtom << ", " << tagIon << std::endl;
 
-		const int idxEl = getSpeciesIndex(tagElectron);
-		const int idxAtom = getSpeciesIndex(tagAtom);
-		const int idxIon = getSpeciesIndex(tagIon);
+		const int idxE = getSpeciesIndex(tagElectron);
+		const int idxA = getSpeciesIndex(tagAtom);
+		const int idxI = getSpeciesIndex(tagIon);
 
 		std::stringstream ss;
 		ss << "collisions/inelastic/" << tag << ".dat";
 
 		const std::string filename = ss.str();
-		InelasticCollision * inelasticCollision = new InelasticCollision();// filename, kScale, Tscale);
-		const double electronMassRatio = getSpecies(idxEl).getMassRatio();
-		inelasticCollision->setScalingParameters(scalingParameters, electronMassRatio);
-		inelasticCollision->setElectronFluidx(idxEl);
-		inelasticCollision->setAtomFluidx(idxAtom);
-		inelasticCollision->setIonFluidx(idxIon);
+		const std::string folderPath = "collisions/inelastic/";
+		InelasticCollision * inelasticCollision = new InelasticCollision(folderPath, idxE, idxA, idxI);
+		const double electronMassRatio = getSpecies(idxE).getMassRatio();
+		//inelasticCollision->setScalingParameters(scalingParameters, electronMassRatio);
+		//inelasticCollision->setElectronFluidx(idxEl);
+		//inelasticCollision->setAtomFluidx(idxAtom);
+		//inelasticCollision->setIonFluidx(idxIon);
 
-		{
-			std::stringstream ss;
-			ss << "inelastic-" << tag << ".dat";
-			std::string filename = ss.str();
-			Eigen::MatrixXd data = inelasticCollision->getData();
-			std::ofstream file(filename);
-			std::cout << "Write data file: " << filename << std::endl;
-			file << data << std::endl;
-		}
+		//{
+		//	std::stringstream ss;
+		//	ss << "inelastic-" << tag << ".dat";
+		//	std::string filename = ss.str();
+		//	Eigen::MatrixXd data = inelasticCollision->getData();
+		//	std::ofstream file(filename);
+		//	std::cout << "Write data file: " << filename << std::endl;
+		//	file << data << std::endl;
+		//}
 		inelasticCollisions.push_back(inelasticCollision);
 	}
 }
@@ -2683,11 +2684,11 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 		Eigen::VectorXd Te = Physics::getTemperature(statesE, mE);
 
 		// Reaction rates and species production rates
-		Eigen::VectorXd ki = collision->getIonizationRate(Te);
-		Eigen::VectorXd kr = collision->getRecombinationRate_Saha(ki, Te);
-		Eigen::VectorXd wi = ki.array() * nA.array() * nE.array();
-		Eigen::VectorXd wr = kr.array() * nI.array() * nE.array().pow(2);
-		Eigen::VectorXd w_net = wi - wr; // net species production rate
+		//Eigen::VectorXd ki = collision->getIonizationRate(Te);
+		//Eigen::VectorXd kr = collision->getRecombinationRate_Saha(ki, Te);
+		//Eigen::VectorXd wi = ki.array() * nA.array() * nE.array();
+		//Eigen::VectorXd wr = kr.array() * nI.array() * nE.array().pow(2);
+		//Eigen::VectorXd w_net = wi - wr; // net species production rate
 
 		int i, j;
 		// Define Jacobian matrix for inelastic sources
@@ -2758,6 +2759,10 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 		const Eigen::VectorXd TiVec = Physics::getTemperature(statesI, mI);
 
 		for (int idxC = 0; idxC < nFluidCells; idxC++) {
+			const double Ta = TaVec(idxC);
+			const double Te = TeVec(idxC);
+			const double Ti = TiVec(idxC);
+
 			//std::cout << "k = " << k << std::endl;
 
 			const Eigen::VectorXd stateA = statesA.col(idxC);

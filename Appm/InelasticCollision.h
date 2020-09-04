@@ -15,7 +15,7 @@ public:
 	InelasticCollision();
 
 	/* Read data for inelastic collisions from folder */
-	InelasticCollision(const std::string & folderPath);
+	InelasticCollision(const std::string & folderPath, const int idxE, const int idxA, const int idxI);
 
 	~InelasticCollision();
 
@@ -29,9 +29,15 @@ public:
 	Eigen::VectorXd getJ22recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda);
 	Eigen::VectorXd getJ12recInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda);
 
-
+	const int getElectronFluidx() const;
+	const int getIonFluidx() const;
+	const int getAtomFluidx() const;
 
 private:
+	const int idxE;
+	const int idxA;
+	const int idxI;
+
 	Interpolation1d data_Gion;
 	Interpolation2d data_R0ion;
 	Interpolation2d data_J00ion;
@@ -43,5 +49,8 @@ private:
 	Interpolation2d data_J22rec;
 	Interpolation2d data_J12rec;
 
+
+
 };
+
 
