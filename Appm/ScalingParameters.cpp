@@ -207,6 +207,17 @@ double ScalingParameters::getMassScale() const
 	return m0;
 }
 
+double ScalingParameters::getEnergyScale() const
+{
+	PhysicsConstants & pc = PhysicsConstants::instance();
+	const double kB = pc.kB();
+	const double Tscale = getTemperatureScale();
+	const double Escale = kB * Tscale;
+	assert(Escale > 0);
+	assert(std::isfinite(Escale));
+	return Escale;
+}
+
 std::ostream & operator<<(std::ostream & os, const ScalingParameters & obj)
 {
 	os << "Scaling parameters: " << std::endl;

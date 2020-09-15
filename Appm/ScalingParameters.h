@@ -59,6 +59,7 @@ public:
 	double getCrossSectionsScale() const;
 	double getTimeScale() const;
 	double getMassScale() const;
+	double getEnergyScale() const;
 
 	friend std::ostream & operator<<(std::ostream & os, const ScalingParameters & obj);
 
