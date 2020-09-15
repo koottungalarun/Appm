@@ -112,7 +112,7 @@ const Eigen::VectorXd InelasticCollision::getR1rec(const Eigen::VectorXd & nE, c
 	const Eigen::VectorXd I_R1rec = getR1recInterpolated(TeVec, lambdaRec);
 	const double factor0 = 2. / 3. * (0.5 * g0) / g1 * nScale * pow(thermalDeBroglieScale, 3);
 	const Eigen::VectorXd factor1 = nI.array() * nE.array().pow(2) * vthE.array();
-	const Eigen::VectorXd factor2 = (-2 * lambdaRec).exp() * xStar.array().exp() * I_R1rec;
+	const Eigen::VectorXd factor2 = (-2 * lambdaRec).array().exp() * xStar.array().exp() * I_R1rec.array();
 	const Eigen::VectorXd R1rec = factor0 * factor1.array() * factor2.array();
 	assert(R1rec.allFinite());
 	return R1rec;
@@ -123,7 +123,7 @@ const Eigen::VectorXd InelasticCollision::getR2rec(const Eigen::VectorXd & nE, c
 	const Eigen::VectorXd I_R2rec = getR2recInterpolated(TeVec, lambdaRec);
 	const double factor0 = 2. / 3. * (0.5 * g0) / g1 * nScale * pow(thermalDeBroglieScale, 3);
 	const Eigen::VectorXd factor1 = nI.array() * nE.array().pow(2) * vthE.array();
-	const Eigen::VectorXd factor2 = (-2 * lambdaRec).exp() * xStar.array().exp() * I_R2rec;
+	const Eigen::VectorXd factor2 = (-2 * lambdaRec).array().exp() * xStar.array().exp() * I_R2rec.array();
 	const Eigen::VectorXd R2rec = factor0 * factor1.array() * factor2.array();
 	assert(R2rec.allFinite());
 	return R2rec;
@@ -134,7 +134,7 @@ const Eigen::VectorXd InelasticCollision::getJ11rec(const Eigen::VectorXd & nE, 
 	const Eigen::VectorXd I_J11rec = getJ11recInterpolated(TeVec, lambdaRec);
 	const double factor0 = (0.5 * g0) / g1 * nScale * pow(thermalDeBroglieScale, 3);
 	const Eigen::VectorXd factor1 = nI.array() * nE.array().pow(2) * vthE.array();
-	const Eigen::VectorXd factor2 = (-2 * lambdaRec).exp() * xStar.array().exp() * I_J11rec;
+	const Eigen::VectorXd factor2 = (-2 * lambdaRec).array().exp() * xStar.array().exp() * I_J11rec.array();
 	const Eigen::VectorXd R2rec = factor0 * factor1.array() * factor2.array();
 	assert(R2rec.allFinite());
 	return R2rec;
@@ -145,7 +145,7 @@ const Eigen::VectorXd InelasticCollision::getJ22rec(const Eigen::VectorXd & nE, 
 	const Eigen::VectorXd I_J22rec = getJ22recInterpolated(TeVec, lambdaRec);
 	const double factor0 = (0.5 * g0) / g1 * nScale * pow(thermalDeBroglieScale, 3);
 	const Eigen::VectorXd factor1 = nI.array() * nE.array().pow(2) * vthE.array();
-	const Eigen::VectorXd factor2 = (-2 * lambdaRec).exp() * xStar.array().exp() * I_J22rec;
+	const Eigen::VectorXd factor2 = (-2 * lambdaRec).array().exp() * xStar.array().exp() * I_J22rec.array();
 	const Eigen::VectorXd R2rec = factor0 * factor1.array() * factor2.array();
 	assert(R2rec.allFinite());
 	return R2rec;
@@ -156,7 +156,7 @@ const Eigen::VectorXd InelasticCollision::getJ12rec(const Eigen::VectorXd & nE, 
 	const Eigen::VectorXd I_J12rec = getJ12recInterpolated(TeVec, lambdaRec);
 	const double factor0 = 4./9. * (0.5 * g0) / g1 * nScale * pow(thermalDeBroglieScale, 3);
 	const Eigen::VectorXd factor1 = nI.array() * nE.array().pow(2) * vthE.array();
-	const Eigen::VectorXd factor2 = (-2 * lambdaRec).exp() * xStar.array().exp() * lambdaRec.array() * I_J12rec;
+	const Eigen::VectorXd factor2 = (-2 * lambdaRec).array().exp() * xStar.array().exp() * lambdaRec.array() * I_J12rec.array();
 	const Eigen::VectorXd R2rec = factor0 * factor1.array() * factor2.array();
 	assert(R2rec.allFinite());
 	return R2rec;

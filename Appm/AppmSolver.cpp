@@ -569,16 +569,6 @@ void AppmSolver::setElasticCollisions(const std::vector<std::string> & list)
 */
 void AppmSolver::setInelasticCollisions(const std::vector<std::string>& list)
 {
-	const double Tscale = scalingParameters.getTemperatureScale();
-	const double nScale = scalingParameters.getNumberDensityScale();
-	const double xScale = scalingParameters.getLengthScale();
-	const double tScale = scalingParameters.getTimeScale();
-	const double kScale = 1. / (nScale * tScale);
-
-	assert(nScale > 0);
-	assert(xScale > 0);
-	assert(tScale > 0);
-	assert(kScale > 0);
 	std::cout << "Set inelastic collisions" << std::endl;
 
 	this->inelasticCollisions = std::vector<InelasticCollision*>();
@@ -599,22 +589,8 @@ void AppmSolver::setInelasticCollisions(const std::vector<std::string>& list)
 
 		const std::string filename = ss.str();
 		const std::string folderPath = "collisions/inelastic/";
-		InelasticCollision * inelasticCollision = new InelasticCollision(folderPath, idxE, idxA, idxI);
+		InelasticCollision * inelasticCollision = new InelasticCollision(folderPath, idxE, idxA, idxI, scalingParameters);
 		const double electronMassRatio = getSpecies(idxE).getMassRatio();
-		//inelasticCollision->setScalingParameters(scalingParameters, electronMassRatio);
-		//inelasticCollision->setElectronFluidx(idxEl);
-		//inelasticCollision->setAtomFluidx(idxAtom);
-		//inelasticCollision->setIonFluidx(idxIon);
-
-		//{
-		//	std::stringstream ss;
-		//	ss << "inelastic-" << tag << ".dat";
-		//	std::string filename = ss.str();
-		//	Eigen::MatrixXd data = inelasticCollision->getData();
-		//	std::ofstream file(filename);
-		//	std::cout << "Write data file: " << filename << std::endl;
-		//	file << data << std::endl;
-		//}
 		inelasticCollisions.push_back(inelasticCollision);
 	}
 }
