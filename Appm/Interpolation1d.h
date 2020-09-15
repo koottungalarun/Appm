@@ -9,7 +9,7 @@ class Interpolation1d
 {
 public:
 	Interpolation1d();
-	Interpolation1d(const std::string & filename, const DataTransform xTrans, const DataTransform fTrans);
+	Interpolation1d(const std::string & filename, const DataTransform xTrans, const DataTransform fTrans, const double xScale, const double fScale);
 
 	~Interpolation1d();
 
@@ -27,7 +27,7 @@ private:
 
 	alglib::spline1dinterpolant s;
 
-	void readCsvFile(const std::string & filename, const DataTransform & xTrans, const DataTransform & fTrans);
+	void readCsvFile(const std::string & filename, const DataTransform & xTrans, const DataTransform & fTrans, const double xScale, const double fScale);
 
 
 	template<class T>

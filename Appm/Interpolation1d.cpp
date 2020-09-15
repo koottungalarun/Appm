@@ -4,10 +4,10 @@ Interpolation1d::Interpolation1d()
 {
 }
 
-Interpolation1d::Interpolation1d(const std::string & filename, const DataTransform xTrans_, const DataTransform fTrans_)
+Interpolation1d::Interpolation1d(const std::string & filename, const DataTransform xTrans_, const DataTransform fTrans_, const double xScale, const double fScale)
 	: xTrans(xTrans_), fTrans(fTrans_)
 {
-	readCsvFile(filename, xTrans, fTrans);
+	readCsvFile(filename, xTrans, fTrans, xScale, fScale);
 
 	assert(n > 0);
 	assert(x.length() > 0);
@@ -71,7 +71,7 @@ const Eigen::VectorXd Interpolation1d::cubicInterp(const Eigen::VectorXd & xSite
 	return resultTrans;
 }
 
-void Interpolation1d::readCsvFile(const std::string & filename, const DataTransform & xTrans, const DataTransform & fTrans)
+void Interpolation1d::readCsvFile(const std::string & filename, const DataTransform & xTrans, const DataTransform & fTrans, const double xScale, const double fScale)
 {
 	assert(xTrans == DataTransform::NONE);
 
@@ -115,8 +115,10 @@ void Interpolation1d::readCsvFile(const std::string & filename, const DataTransf
 	Eigen::VectorXd firstCol = map.col(0);
 
 	Eigen::VectorXd TeVec = firstCol.segment(1, firstCol.size() - 1);
+	TeVec *= xScale;
 
 	MatrixXdRowMajor dataMatrix = map.bottomRightCorner(rows - 1, cols - 1);
+	dataMatrix *= fScale;
 	if (fTrans != DataTransform::NONE) {
 		dataMatrix = applyTransform(dataMatrix, fTrans);
 	}
