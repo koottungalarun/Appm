@@ -2,6 +2,7 @@
 
 #include <Eigen/Dense>
 #include <iostream>
+#include "PhysicsConstants.h"
 
 #include <exception>
 
@@ -26,12 +27,17 @@ public:
 	/** Get temperature from fluid states in a list of cells. */
 	static Eigen::VectorXd getTemperature(const Eigen::MatrixXd & states, const double massRatio);
 
+	/** Get velocity from fluid state in a single cell. */
+	static const Eigen::Vector3d getVelocity(const Eigen::VectorXd & state);
+
+	/** Get velocity from fluid state in a list of cells. */
+	static const Eigen::Matrix3Xd getVelocity(const Eigen::MatrixXd & states);
 
 	static const Eigen::Vector3d getFluidFluxFromState(const Eigen::Vector3d & q);
 
 	static const Eigen::Vector3d getRusanovFlux(const Eigen::Vector3d & qL, const Eigen::Vector3d & qR, const bool showOutput = false);
 
-
+	static const double electronVolt_to_Joule(const double eV);
 	static const double thermionicEmissionCurrentDensity(const double Ts, const double W);
 };
 

@@ -68,6 +68,31 @@ Eigen::VectorXd Physics::getTemperature(const Eigen::MatrixXd & states, const do
 	return T;
 }
 
+/**
+* Get velocity vector from fluid state.
+*
+* @param state   state vector = [n, n*u, n*etot], with number density n, velocity vector u, and total energy etot.
+* @returns velocity vector u.
+*/
+const Eigen::Vector3d Physics::getVelocity(const Eigen::VectorXd & state)
+{
+	assert(state(0) > 0);
+	Eigen::Vector3d u = state.segment(1, 3) / state(0);
+	return u;
+}
+
+const Eigen::Matrix3Xd Physics::getVelocity(const Eigen::MatrixXd & states)
+{
+	const int n = states.cols();
+	assert(n >= 1);
+	Eigen::Matrix3Xd u = Eigen::MatrixXd::Zero(3, n);
+	for (int i = 0; i < n; i++) {
+		const Eigen::VectorXd state = states.col(i);
+		u.col(i) = Physics::getVelocity(state);
+	}
+	return u;
+}
+
 const Eigen::Vector3d Physics::getFluidFluxFromState(const Eigen::Vector3d & q)
 {
 	assert(q.norm() > 0);
@@ -142,6 +167,20 @@ const Eigen::Vector3d Physics::getRusanovFlux(const Eigen::Vector3d & qL, const 
 		std::cout << "flux:\t" << flux.transpose() << std::endl;
 	}
 	return flux;
+}
+
+/**
+* Convert a dimensional energy given in units of electronvolt (eV) to Joule (J).
+* Note: conversion is given by eV * 1.602e-19 J/eV
+* @return energy in units of Joule (J). 
+*/
+const double Physics::electronVolt_to_Joule(const double eV)
+{
+	// conversion factor from eV to J, i.e., 1 eV = 1.6022e-19 J
+	PhysicsConstants & pc = PhysicsConstants::instance();
+	const double elementaryCharge = pc.q(); 
+	const double joule = eV * elementaryCharge;
+	return joule;
 }
 
 const double Physics::thermionicEmissionCurrentDensity(const double Ts, const double W)
