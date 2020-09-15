@@ -10,41 +10,9 @@ InelasticCollision::InelasticCollision(const std::string & folderPath,
 	const ScalingParameters & scales) 
 	: idxE(idxE_), idxA(idxA_), idxI(idxI_)
 {
-	const DataTransform xTrans = DataTransform::NONE;
-	const DataTransform yTrans = DataTransform::INVERSE;
-	const DataTransform fTrans = DataTransform::LOG;
-
-	assert(folderPath.back() == '/'); // folder path should end with a path separator
-
-	std::string filename;
-	filename = folderPath + "I_Gion.csv";
-	data_Gion = Interpolation1d(filename, xTrans, fTrans);
-
-	filename = folderPath + "I_Grec.csv";
-	data_Grec = Interpolation2d(filename, xTrans, yTrans, fTrans);
-
-	filename = folderPath + "I_J00ion.csv";
-	data_J00ion = Interpolation2d(filename, xTrans, yTrans, fTrans);
-
-	filename = folderPath + "I_J11rec.csv";
-	data_J11rec = Interpolation2d(filename, xTrans, yTrans, fTrans);
-
-	filename = folderPath + "I_J22rec.csv";
-	data_J22rec = Interpolation2d(filename, xTrans, yTrans, fTrans);
-
-	filename = folderPath + "I_J12rec.csv";
-	// if lambda = 0 we have J12rec = 0, transformation with exp() cannot be executed. 
-	// Therefore, pull lambda out of integral 
-	data_J12rec = Interpolation2d(filename, xTrans, yTrans, fTrans); 
-
-	filename = folderPath + "I_R0ion.csv";
-	data_R0ion = Interpolation2d(filename, xTrans, yTrans, fTrans);
-
-	filename = folderPath + "I_R1rec.csv";
-	data_R1rec = Interpolation2d(filename, xTrans, yTrans, fTrans);
-
-	filename = folderPath + "I_R2rec.csv";
-	data_R2rec = Interpolation2d(filename, xTrans, yTrans, fTrans);
+	this->sigmaScale = scales.getCrossSectionsScale();
+	std::cout << "sigmaScale: " << sigmaScale << std::endl;
+	const double sigmaScaleInverse = 1. / sigmaScale;
 
 	// set parameters 
 	const double ionizationEnergy_eV = 15.75;
@@ -59,16 +27,53 @@ InelasticCollision::InelasticCollision(const std::string & folderPath,
 	const double h = pc.planckConstant();
 	const double massScale = scales.getMassScale();
 	const double Tscale = scales.getTemperatureScale();
-	this->thermalDeBroglieScale = h / sqrt(2*pi* massScale * kB * Tscale);
+	this->thermalDeBroglieScale = h / sqrt(2 * pi* massScale * kB * Tscale);
 	assert(std::isfinite(thermalDeBroglieScale));
 	assert(thermalDeBroglieScale > 0);
+
+
+	const DataTransform xTrans = DataTransform::NONE;
+	const DataTransform yTrans = DataTransform::INVERSE;
+	const DataTransform fTrans = DataTransform::LOG;
+
+	assert(folderPath.back() == '/'); // folder path should end with a path separator
+
+	std::string filename;
+	filename = folderPath + "I_Gion.csv";
+	data_Gion = Interpolation1d(filename, xTrans, fTrans, 1. / Tscale, sigmaScaleInverse);
+
+	filename = folderPath + "I_Grec.csv";
+	data_Grec = Interpolation2d(filename, xTrans, yTrans, fTrans, 1. / Tscale, sigmaScaleInverse);
+
+	filename = folderPath + "I_J00ion.csv";
+	data_J00ion = Interpolation2d(filename, xTrans, yTrans, fTrans, 1. / Tscale, sigmaScaleInverse);
+
+	filename = folderPath + "I_J11rec.csv";
+	data_J11rec = Interpolation2d(filename, xTrans, yTrans, fTrans, 1. / Tscale, sigmaScaleInverse);
+
+	filename = folderPath + "I_J22rec.csv";
+	data_J22rec = Interpolation2d(filename, xTrans, yTrans, fTrans, 1. / Tscale, sigmaScaleInverse);
+
+	filename = folderPath + "I_J12rec.csv";
+	// if lambda = 0 we have J12rec = 0, transformation with exp() cannot be executed. 
+	// Therefore, pull lambda out of integral 
+	data_J12rec = Interpolation2d(filename, xTrans, yTrans, fTrans, 1. / Tscale, sigmaScaleInverse);
+
+	filename = folderPath + "I_R0ion.csv";
+	data_R0ion = Interpolation2d(filename, xTrans, yTrans, fTrans, 1. / Tscale, sigmaScaleInverse);
+
+	filename = folderPath + "I_R1rec.csv";
+	data_R1rec = Interpolation2d(filename, xTrans, yTrans, fTrans, 1. / Tscale, sigmaScaleInverse);
+
+	filename = folderPath + "I_R2rec.csv";
+	data_R2rec = Interpolation2d(filename, xTrans, yTrans, fTrans, 1. / Tscale, sigmaScaleInverse);
 }
 
 InelasticCollision::~InelasticCollision()
 {
 }
 
-const Eigen::VectorXd InelasticCollision::getGion(const Eigen::VectorXd & nE, const Eigen::VectorXd & nA, const Eigen::VectorXd & vthE, const Eigen::VectorXd & lambdaIon, const Eigen::VectorXd & TeVec) const
+const Eigen::VectorXd InelasticCollision::getGion(const Eigen::VectorXd & nE, const Eigen::VectorXd & nA, const Eigen::VectorXd & vthE, const Eigen::VectorXd & TeVec, const Eigen::VectorXd & lambdaIon) const
 {	
 	const Eigen::VectorXd I_Gion = getGionInterpolated(TeVec);
 	const Eigen::VectorXd Gion = nE.array() * nA.array() * vthE.array() * (-1 * lambdaIon.array()).exp() * I_Gion.array();
@@ -76,10 +81,10 @@ const Eigen::VectorXd InelasticCollision::getGion(const Eigen::VectorXd & nE, co
 	return Gion;
 }
 
-const Eigen::VectorXd InelasticCollision::getGrec(const double mE, const Eigen::VectorXd & TeVec, const Eigen::VectorXd & nI, const Eigen::VectorXd & nE, const Eigen::VectorXd & vthE, const Eigen::VectorXd & xStar, const Eigen::VectorXd & Te, const Eigen::VectorXd & lambdaVec) const
+const Eigen::VectorXd InelasticCollision::getGrec(const Eigen::VectorXd & nI, const Eigen::VectorXd & nE, const Eigen::VectorXd & vthE, const Eigen::VectorXd & xStar, const double mE, const Eigen::VectorXd & Te, const Eigen::VectorXd & lambdaVec) const
 {
 	const double factor0 = nScale * pow(thermalDeBroglieScale, 3) * g0 / (2 * g1);
-	const Eigen::VectorXd factor1 = (mE * TeVec).array().pow(-3./2.) * nI.array() * nE.array().pow(2) * vthE.array();
+	const Eigen::VectorXd factor1 = (mE * Te).array().pow(-3./2.) * nI.array() * nE.array().pow(2) * vthE.array();
 	const Eigen::VectorXd factor2 = (-2 * lambdaVec).array().exp() * xStar.array().exp();
 	const Eigen::VectorXd I_Grec = getGrecInterpolated(Te, lambdaVec);
 	const Eigen::VectorXd Grec = factor0 * factor1.array() * factor2.array() * I_Grec.array();

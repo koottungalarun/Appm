@@ -44,7 +44,7 @@ public:
 	* @param yTrans      transformation to data on y-axis
 	* @param fTrans      transformation to function data
 	*/
-	Interpolation2d(const std::string & filename, DataTransform xTrans, DataTransform yTrans, DataTransform fTrans);
+	Interpolation2d(const std::string & filename, DataTransform xTrans, DataTransform yTrans, DataTransform fTrans, const double yScale, const double fScale);
 
 
 	~Interpolation2d();
@@ -92,7 +92,7 @@ private:
 	/**
 	* Read data from csv file into internal data structure.
 	*/
-	void readCsvFile(const std::string & filename, const DataTransform & xTrans, const DataTransform & yTrans, const DataTransform & fTrans);
+	void readCsvFile(const std::string & filename, const DataTransform & xTrans, const DataTransform & yTrans, const DataTransform & fTrans, const double yScale, const double fScale);
 
 	void writeCsvFile(const std::string & filename);
 

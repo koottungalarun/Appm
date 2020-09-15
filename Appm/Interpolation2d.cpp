@@ -6,16 +6,16 @@ Interpolation2d::Interpolation2d()
 
 
 
-Interpolation2d::Interpolation2d(const std::string & filename, const DataTransform xTrans, const DataTransform yTrans, const DataTransform fTrans)
+Interpolation2d::Interpolation2d(const std::string & filename, const DataTransform xTrans, const DataTransform yTrans, const DataTransform fTrans, const double yScale, const double fScale)
 {
 	this->xTrans = xTrans;
 	this->yTrans = yTrans;
 	this->fTrans = fTrans;
 
 	// Read data from file
-	readCsvFile(filename, xTrans, yTrans, fTrans);
+	readCsvFile(filename, xTrans, yTrans, fTrans, yScale, fScale);
 
-	writeCsvFile("temp.dat");
+	//writeCsvFile("temp.dat");
 
 	assert(this->n = x.length());
 	assert(this->m = y.length());
@@ -103,7 +103,7 @@ const Eigen::VectorXd Interpolation2d::bicubicInterp(const Eigen::VectorXd & xSi
 * such that f(x(j), y(i)) = z(i,j). That is, z(i,j) are the grid values
 * to be interpolated.
 */
-void Interpolation2d::readCsvFile(const std::string & filename, const DataTransform & xTrans, const DataTransform & yTrans, const DataTransform & fTrans)
+void Interpolation2d::readCsvFile(const std::string & filename, const DataTransform & xTrans, const DataTransform & yTrans, const DataTransform & fTrans, const double yScale, const double fScale)
 {
 	assert(xTrans == DataTransform::NONE);
 
@@ -147,8 +147,10 @@ void Interpolation2d::readCsvFile(const std::string & filename, const DataTransf
 
 	Eigen::VectorXd lambdaVec = firstRow.segment(1, firstRow.size() - 1);
 	Eigen::VectorXd TeVec = firstCol.segment(1, firstCol.size() - 1);
+	TeVec *= yScale;
 
 	MatrixXdRowMajor dataMatrix = map.bottomRightCorner(rows - 1, cols - 1);
+	dataMatrix *= fScale;
 	if (fTrans != DataTransform::NONE) {
 		dataMatrix = applyTransform(dataMatrix, fTrans);
 	}
