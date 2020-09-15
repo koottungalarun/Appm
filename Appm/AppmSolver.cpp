@@ -2717,8 +2717,8 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 {
 	const int nFluids = getNFluids();
-	const int nFluidCells = dualMesh.getNumberFluidCells();
-	Eigen::MatrixXd src(5 * nFluids, nFluidCells);
+	const int n = dualMesh.getNumberFluidCells();
+	Eigen::MatrixXd src(5 * nFluids, n);
 	src.setZero();
 
 	const int nCollisions = inelasticCollisions.size();
@@ -2734,44 +2734,66 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 		const double mI = getSpecies(fidxI).getMassRatio();
 
 		// sum of particle masses in collision
-		const double M = mA;
 		assert(mA == mE + mI);
-		// 
-
-		//Eigen::VectorXd ki(nFluidCells);
-		//Eigen::VectorXd kr(nFluidCells);
-		//ki.setConstant(0.5); // TODO
-		//kr.setConstant(2); // TODO
 
 		/* Ionization energy */
-		const double E_ion = 0; // TODO
+		const double E_ion = collision->getIonizationEnergyScaled();
 
-		const Eigen::MatrixXd statesA = getStates(fidxA, nFluidCells);
-		const Eigen::MatrixXd statesE = getStates(fidxE, nFluidCells);
-		const Eigen::MatrixXd statesI = getStates(fidxI, nFluidCells);
+		// Fluid states of species (A = neutral atoms, E = electrons, I = ions)
+		const Eigen::MatrixXd statesA = getStates(fidxA, n);
+		const Eigen::MatrixXd statesE = getStates(fidxE, n);
+		const Eigen::MatrixXd statesI = getStates(fidxI, n);
 
+		// Number densities
 		const Eigen::VectorXd nA = statesA.row(0);
 		const Eigen::VectorXd nE = statesE.row(0);
 		const Eigen::VectorXd nI = statesI.row(0);
 
+		// Temperature
 		const Eigen::VectorXd TaVec = Physics::getTemperature(statesA, mA);
 		const Eigen::VectorXd TeVec = Physics::getTemperature(statesE, mE);
 		const Eigen::VectorXd TiVec = Physics::getTemperature(statesI, mI);
+		assert(TeVec.allFinite());
+		assert((TeVec.array() > 0).all());
 
-		Eigen::VectorXd lambdaIon(TeVec.size());
-		lambdaIon.setZero();
-		Eigen::VectorXd lambdaRec(TeVec.size());
-		lambdaRec.setZero();
+		// Velocity vector
+		const Eigen::MatrixXd uAmat = Physics::getVelocity(statesA);
+		const Eigen::MatrixXd uEmat = Physics::getVelocity(statesE);
+		const Eigen::MatrixXd uImat = Physics::getVelocity(statesI);
+		assert(uAmat.cols() == n);
+		assert(uEmat.cols() == n);
+		assert(uImat.cols() == n);
 
-		Eigen::VectorXd Gion = collision->getGionInterpolated(TeVec);
-		Eigen::VectorXd Grec = collision->getGrecInterpolated(TeVec, lambdaRec);
-		Eigen::VectorXd R0ion = collision->getR0ionInterpolated(TeVec, lambdaIon);
-		Eigen::VectorXd R1rec = collision->getR1recInterpolated(TeVec, lambdaRec);
-		Eigen::VectorXd R2rec = collision->getR2recInterpolated(TeVec, lambdaRec);
-		Eigen::VectorXd J00ion = collision->getJ00ionInterpolated(TeVec, lambdaIon);
-		Eigen::VectorXd J11rec = collision->getJ11recInterpolated(TeVec, lambdaRec);
-		Eigen::VectorXd J22rec = collision->getJ22recInterpolated(TeVec, lambdaRec);
-		Eigen::VectorXd J12rec = collision->getJ12recInterpolated(TeVec, lambdaRec);
+		// Relative velocities in collisions
+		const Eigen::Matrix3Xd w0mat = uEmat - uAmat; 
+		const Eigen::Matrix3Xd w1mat = mI * w0mat;
+
+		// Get ratio of kinetic energy to thermal energy
+		Eigen::VectorXd lambdaIon = Eigen::VectorXd::Zero(TeVec.size());
+		Eigen::VectorXd lambdaRec = Eigen::VectorXd::Zero(TeVec.size());
+		for (int i = 0; i < n; i++) {
+			const Eigen::VectorXd w0 = w0mat.col(i);
+			const Eigen::VectorXd w1 = w1mat.col(i);
+			const double Te = TeVec(i);
+			lambdaIon(i) = 0.5 * mE / Te * w0.squaredNorm();
+			lambdaRec(i) = 0.5 * mE * Te * w1.squaredNorm();
+		}
+
+		// Thermal velocity of electrons
+		const Eigen::VectorXd vthE = ((8. / M_PI) * 1. / mE * TeVec).array().sqrt();
+
+		// Ratio of 
+		const Eigen::VectorXd xStar = E_ion * TeVec.array().inverse();
+
+		const Eigen::VectorXd Gion = collision->getGion(nE, nA, vthE, lambdaIon, TeVec);
+		const Eigen::VectorXd Grec = collision->getGrec(mE, TeVec, nI, nE, vthE, xStar, TeVec, lambdaRec);
+		const Eigen::VectorXd R0ion = collision->getR0ion(nE, nA, vthE, TeVec, lambdaIon);
+		const Eigen::VectorXd R1rec = collision->getR1rec(nE, nI, vthE, xStar, TeVec, lambdaRec);
+		const Eigen::VectorXd R2rec = collision->getR2rec(nE, nI, vthE, xStar, TeVec, lambdaRec);
+		const Eigen::VectorXd J00ion = collision->getJ00ion(nE, nA, vthE, TeVec, lambdaIon);
+		const Eigen::VectorXd J11rec = collision->getJ11rec(nE, nI, vthE, xStar, TeVec, lambdaRec);
+		const Eigen::VectorXd J22rec = collision->getJ22rec(nE, nI, vthE, xStar, TeVec, lambdaRec);
+		const Eigen::VectorXd J12rec = collision->getJ12rec(nE, nI, vthE, xStar, TeVec, lambdaRec);
 		assert(Gion.allFinite());
 		assert(Grec.allFinite());
 		assert(R0ion.allFinite());
@@ -2782,107 +2804,83 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 		assert(J22rec.allFinite());
 		assert(J12rec.allFinite());
 
-		for (int idxC = 0; idxC < nFluidCells; idxC++) {
-			const double Ta = TaVec(idxC);
-			const double Te = TeVec(idxC);
-			const double Ti = TiVec(idxC);
+		for (int i = 0; i < n; i++) {
+			const double Ta = TaVec(i);
+			const double Te = TeVec(i);
+			const double Ti = TiVec(i);
 
 			//std::cout << "k = " << k << std::endl;
 
-			const Eigen::VectorXd stateA = statesA.col(idxC);
-			const Eigen::VectorXd stateE = statesE.col(idxC);
-			const Eigen::VectorXd stateI = statesI.col(idxC);
+			const Eigen::VectorXd stateA = statesA.col(i);
+			const Eigen::VectorXd stateE = statesE.col(i);
+			const Eigen::VectorXd stateI = statesI.col(i);
 
 			// species velocity vector
-			const Eigen::Vector3d uA = stateA.segment(1, 3) / nA(idxC);
-			const Eigen::Vector3d uE = stateE.segment(1, 3) / nE(idxC);
-			const Eigen::Vector3d uI = stateI.segment(1, 3) / nI(idxC);
-
-			// species thermal energy
-			const double eA = stateA(4) / nA(idxC) - 0.5 * uA.dot(uA);
-			const double eE = stateE(4) / nE(idxC) - 0.5 * uE.dot(uE);
-			const double eI = stateI(4) / nI(idxC) - 0.5 * uI.dot(uI);
+			const Eigen::Vector3d uA = uAmat.col(i);
+			const Eigen::Vector3d uE = uEmat.col(i);
+			const Eigen::Vector3d uI = uImat.col(i);
 
 			Eigen::VectorXd srcA = Eigen::VectorXd::Zero(5);
 			Eigen::VectorXd srcE = Eigen::VectorXd::Zero(5);
 			Eigen::VectorXd srcI = Eigen::VectorXd::Zero(5);
 
-			// Ionization and recombination rate
-			const double Gamma_ion = 2 * nA(idxC) * nE(idxC); // TODO
-			const double Gamma_rec = pow(nE(idxC), 2) * nI(idxC);
 
 			// Bulk velocity for ionization and recombination
-			const Eigen::Vector3d U0 = mE / M * uE + mA / M * uA;
-			const Eigen::Vector3d U1 = 2 * mE / M * uE + mI / M * uI;
+			const Eigen::Vector3d U0 = 1. / (1. + 1. / mE) * uE + 1. / (1. + mE) * uA;
+			const Eigen::Vector3d U1 = 2. / (1. + 1. / mE) * uE + mI / (1. + mE) * uI;
 
-			// Relative velocities 
-			const Eigen::Vector3d w0 = uE - uA;
-			const Eigen::Vector3d w1 = uE - mE * uE - mI * uI;
-			const Eigen::Vector3d w2 = uE - uI;
-
+			// Relative collision velocities 
+			const Eigen::Vector3d w0 = w0mat.col(i);
+			const Eigen::Vector3d w1 = w1mat.col(i); 
 
 			// total energy for ionization and recombination in center of mass frame
-			const double etot_i_com = 0.5 * M * U0.squaredNorm() + 3. / 2. * Ta;
-			const double etot_r_com = 0.5 * M * U1.squaredNorm() + 3. / 2. * Ti; 
-
-			// Net ionization rate
-			const double Gamma_net = Gamma_ion - Gamma_rec;
+			const double etot_i_com = 0.5 * (1 + mE) * U0.squaredNorm() + 3. / 2. * Ta;
+			const double etot_r_com = 0.5 * (1 + mE) * U1.squaredNorm() + 3. / 2. * Ti; 
 
 			// factors in momentum and energy balance
-			const double alpha2 = 2 * Te / mE; 
-			const double lambda1 = w1.squaredNorm() / alpha2;
-			const double lambda_i = 0; // lambda = 0 corresponds to thermal limit
-			const double lambda_r = lambda1;
-			const double mu = mE;
-			const double R0_ion = 0;
-			const double R1_rec = 0;
-			const double R2_rec = 0;
-			const double J00_ion = 0;
-			const double J11_rec = 0;
-			const double J22_rec = 0;
-			const double J12_rec = 0;
-
-
-			const double R_ion = R0_ion;
-			const double K_ion = Gamma_ion - R0_ion;
-			const double W_ion = J00_ion - 2 * lambda_i * R0_ion + lambda_i * Gamma_ion;
-			const double J_ion = J00_ion - lambda_i * R0_ion;
-			const double R_rec = R1_rec + R2_rec;
-			const double K_rec = 2 * Gamma_rec - R1_rec - R2_rec;
-			const double W_rec = J11_rec + J22_rec + 2 * J12_rec + 4 * lambda_r * Gamma_rec - 4 * lambda_r * R1_rec - 4 * lambda_r * R2_rec;
-			const double J_rec = J11_rec + J22_rec + 2 * J12_rec - 2 * lambda_r * R1_rec - 2 * lambda_r * R2_rec;
+			const double R_ion = R0ion(i);
+			const double K_ion = Gion(i) - R0ion(i);
+			const double W_ion = J00ion(i) - 2 * lambdaIon(i) * R0ion(i) + lambdaIon(i) * Gion(i);
+			const double J_ion = J00ion(i) - lambdaIon(i) * R0ion(i);
+			const double R_rec = R1rec(i) + R2rec(i);
+			const double K_rec = 2 * Grec(i) - R1rec(i) - R2rec(i);
+			const double W_rec = J11rec(i) + J22rec(i) + 2 * J12rec(i) + 4 * lambdaRec(i) * (Grec(i) - R1rec(i) - R2rec(i));
+			const double J_rec = J11rec(i) + J22rec(i) + 2 * J12rec(i) - 2 * lambdaRec(i) * (R1rec(i) + R2rec(i));
 
 
 			// Number density sources, ionization and recombination
-			srcA(0) += -Gamma_net;
-			srcE(0) += Gamma_net;
-			srcI(0) += Gamma_net;
+			const double GammaNet = Gion(i) - Grec(i);
+			srcA(0) -= GammaNet;
+			srcE(0) += GammaNet;
+			srcI(0) += GammaNet;
 
-			// Momentum sources, ionization
-			srcA.segment(1, 3) += -M * Gamma_ion * U0 - (Ta - Te) / Te * mu * K_ion * w0 + mu * R_ion * w0;
-			srcE.segment(1, 3) += -mu * R_ion * w0;
-			srcI.segment(1, 3) += +M * Gamma_ion * U0 + (Ta - Te) / Te * mu * K_ion * w0;
+			// Momentum sources
+			srcA.segment(1, 3) += -(1 + mE) * (Gion(i) * U0 - Grec(i) * U1) 
+				+ mE * (-(Ta - Te) / Te * K_ion * w0 + (Ti - Te)/Te * K_rec * w1 + R_ion * w0);
 
-			// Momentum sources, recombination
-			srcA.segment(1, 3) += +M * Gamma_rec * U1 + (Ti - Te)/Te * mu * K_rec * w1;
-			srcE.segment(1, 3) += -mu * R_rec * w1;
-			srcI.segment(1, 3) += -M * Gamma_rec * U1 - (Ti - Te)/Te * mu * K_rec * w1 + mu * R_rec * w1;
+			srcE.segment(1, 3) += -mE * (R_ion * w0 + R_rec * w1);
 
-			// Total energy sources, ionization
-			srcA(4) += -Gamma_ion * etot_i_com - mu / M * pow(Ta - Te, 2) / Te * W_ion + (Ta - Te) / Te * mu * K_ion * w0.dot(U0) + mu * R_ion * w0.dot(U0) - 2 * mu / M * (Ta - Te) * J_ion;
-			srcE(4) += -Gamma_ion * E_ion - mu * R_ion * w0.dot(U0) + 2 * mu / M * (Ta - Te) * J_ion;
-			srcI(4) += +Gamma_ion * etot_i_com + mu / M * pow(Ta - Te, 2) / Te * W_ion - (Ta - Te) / Te * mu * K_ion * w0.dot(U0);
-			
-			// Total energy sources, recombination;
-			srcA(4) += +Gamma_rec * etot_r_com + mu / M * pow(Ti - Te, 2) / Te * W_rec + (Ti - Te) / Te * mu * K_rec * w1.dot(U1);
-			srcE(4) += -Gamma_rec * etot_r_com - mu / M * pow(Ti - Te, 2) / Te * W_rec - (Ti - Te) / Te * mu * K_rec * w1.dot(U1) + mu * R_rec * w1.dot(U1) - 2 * mu / M * (Ti - Te) * J_rec;
-			srcI(4) += +Gamma_rec * E_ion - mu * R_rec * w1.dot(U1) + 2 * mu / M * (Ti - Te) * J_rec;
+			srcI.segment(1, 3) += -(1 + mE) * (Gion(i) * U0 - Grec(i) * U1)
+				+ mE * ((Ta - Te) / Te * K_ion * w0 - (Ti - Te) / Te * K_rec * w1 + R_rec * w1);
 
+			// Total energy sources
+			srcA(4) += -(Gion(i) * etot_i_com - Grec(i) * etot_r_com) 
+				+ 1./(1. + 1./mE) * (-pow(Ta - Te,2) / Te * W_ion + pow(Ti - Te,2) / Te * W_rec - 2 * (Ta - Te) * J_ion) 
+				+ mE * ((Ta - Te)/Te * K_ion * w0.dot(U0) + (Ti - Te)/Te * K_rec * w1.dot(U1) + R_ion * w0.dot(U0));
+
+			srcE(4) += (Grec(i) - Gion(i)) * E_ion
+				+ 2. / (1 + 1. / mE) * ((Ta - Te) * J_ion + (Ti - Te) * J_rec)
+				- mE * (R_ion * w0.dot(U0) + R_rec * w1.dot(U1));
+
+			srcI(4) += Gion(i) * etot_i_com - Grec(i) * etot_r_com
+				+ 1. / (1 + mE) * (pow(Ta - Te, 2) / Te * W_ion - pow(Ti - Te, 2) / Te * W_rec - 2 * (Ti - Te) * J_rec)
+				+ mE * (-(Ta - Te) / Te * K_ion * w0.dot(U0) + (Ti - Te) / Te * K_rec * w1.dot(U1) + R_ion * w0.dot(U0));
+				
 			// Scaling of momentum and energy sources because they are divided by mass fraction
 			srcE.segment(1, 3) *= 1. / mE;
 			srcI.segment(1, 3) *= 1. / mI;
 
-			if (idxC == 0) {
+			if (i == 0) {
 				std::cout << "srcA: " << srcA.transpose() << std::endl;
 				std::cout << "srcE: " << srcE.transpose() << std::endl;
 				std::cout << "srcI: " << srcI.transpose() << std::endl;
@@ -2894,7 +2892,7 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 			localSrc.segment(5 * fidxA, 5) += srcA;
 			localSrc.segment(5 * fidxE, 5) += srcE;
 			localSrc.segment(5 * fidxI, 5) += srcI;
-			src.col(idxC) += localSrc;
+			src.col(i) += localSrc;
 		}
 	}
 	return src;
