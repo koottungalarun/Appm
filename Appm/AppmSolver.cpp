@@ -2352,6 +2352,7 @@ void AppmSolver::updateFluidStates(const double dt, const bool isImplicitSources
 
 	Eigen::SparseMatrix<double> M_inelastic;
 	M_inelastic = getJacobianEulerSourceInelasticCollisions();
+	assert(M_inelastic.nonZeros() == 0); // the Jacobian for inelastic collisions is not yet implemented
 	assert(M_inelastic.rows() == n);
 	assert(M_inelastic.cols() == n);
 
@@ -2680,6 +2681,7 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 
 
 	// Create Jacobian matrix from triplets
+	assert(triplets.empty()); // the source terms are not yet implemented
 	const int n = 5 * nFluidCells * nFluids;
 	Eigen::SparseMatrix<double> M(n, n);
 	M.setFromTriplets(triplets.begin(), triplets.end());
@@ -2761,8 +2763,21 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 		// Ratio of 
 		const Eigen::VectorXd xStar = E_ion * TeVec.array().inverse();
 
-		const Eigen::VectorXd Gion = collision->getGion(nE, nA, vthE, lambdaIon, TeVec);
-		const Eigen::VectorXd Grec = collision->getGrec(mE, TeVec, nI, nE, vthE, xStar, TeVec, lambdaRec);
+		int i = 0;
+		std::cout << "i = " << i << std::endl;
+		std::cout << "nE: " << nE(i) << std::endl;
+		std::cout << "nA: " << nA(i) << std::endl;
+		std::cout << "vthE: " << vthE(i) << std::endl;
+		std::cout << "lambdaIon: " << lambdaIon(i) << std::endl;
+		std::cout << "Te: " << TeVec(i) << std::endl;
+		std::cout << "Ti: " << TiVec(i) << std::endl;
+		std::cout << "Ta: " << TaVec(i) << std::endl;
+
+
+		const Eigen::VectorXd Gion = collision->getGion(nE, nA, vthE, TeVec, lambdaIon);
+		std::cout << "Gion: " << Gion(i) << std::endl;
+		const Eigen::VectorXd Grec = collision->getGrec(nI, nE, vthE, xStar, mE, TeVec, lambdaRec);
+		std::cout << "Grec: " << Grec(i) << std::endl;
 		const Eigen::VectorXd R0ion = collision->getR0ion(nE, nA, vthE, TeVec, lambdaIon);
 		const Eigen::VectorXd R1rec = collision->getR1rec(nE, nI, vthE, xStar, TeVec, lambdaRec);
 		const Eigen::VectorXd R2rec = collision->getR2rec(nE, nI, vthE, xStar, TeVec, lambdaRec);
@@ -2836,7 +2851,7 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 
 			srcE.segment(1, 3) += -mE * (R_ion * w0 + R_rec * w1);
 
-			srcI.segment(1, 3) += -(1 + mE) * (Gion(i) * U0 - Grec(i) * U1)
+			srcI.segment(1, 3) += +(1 + mE) * (Gion(i) * U0 - Grec(i) * U1)
 				+ mE * ((Ta - Te) / Te * K_ion * w0 - (Ti - Te) / Te * K_rec * w1 + R_rec * w1);
 
 			// Total energy sources
@@ -2857,6 +2872,7 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 			srcI.segment(1, 3) *= 1. / mI;
 
 			if (i == 0) {
+				std::cout << "Gion, Grec: " << Gion(i) << ", " << Grec(i) << std::endl;
 				std::cout << "srcA: " << srcA.transpose() << std::endl;
 				std::cout << "srcE: " << srcE.transpose() << std::endl;
 				std::cout << "srcI: " << srcI.transpose() << std::endl;
