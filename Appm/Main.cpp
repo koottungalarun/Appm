@@ -5,31 +5,70 @@
 /**
 * This is a test for checking bicubic spline interpolation
 */
-void test_bicubicInterpolation() {
-	Eigen::VectorXd lambdaVec(10);
-	lambdaVec << 0, 1e-3, 1e-2, 1e-1, 3e-1, 5e-1, 1, 3, 5, 10;
+//void test_bicubicInterpolation() {
+//	Eigen::VectorXd lambdaVec(10);
+//	lambdaVec << 0, 1e-3, 1e-2, 1e-1, 3e-1, 5e-1, 1, 3, 5, 10;
+//
+//	const std::string filename = "collisions/inelastic/I_R0ion.csv";
+//	const DataTransform xTrans = DataTransform::NONE;
+//	const DataTransform yTrans = DataTransform::INVERSE;
+//	const DataTransform fTrans = DataTransform::LOG;
+//
+//	const double fScale = 1;
+//
+//	Interpolation2d I_R0ion(filename, xTrans, yTrans, fTrans, fScale);
+//
+//	Eigen::VectorXd result;
+//	Eigen::VectorXd xSites;
+//	Eigen::VectorXd ySites = Eigen::VectorXd::LinSpaced(298,3e2,40e3);
+//
+//	Eigen::MatrixXd Mout(ySites.size(), lambdaVec.size() + 1);
+//	Mout.col(0) = ySites;
+//	for (int j = 0; j < lambdaVec.size(); j++) {
+//		double lambda = lambdaVec(j);
+//		xSites = lambda * Eigen::VectorXd::Ones(ySites.size());
+//		result = I_R0ion.bicubicInterp(xSites, ySites);
+//		Mout.col(j+1) = result;
+//	}
+//	std::ofstream("output.dat") << Mout << std::endl;
+//}
 
-	const std::string filename = "collisions/inelastic/I_R0ion.csv";
-	const DataTransform xTrans = DataTransform::NONE;
-	const DataTransform yTrans = DataTransform::INVERSE;
-	const DataTransform fTrans = DataTransform::LOG;
 
-	Interpolation2d I_R0ion(filename, xTrans, yTrans, fTrans);
+void test_Gion() {
+	std::string folderPath = "collisions/inelastic/";
+	int idxA = -1;
+	int idxE = -1;
+	int idxI = -1;
+	ScalingParameters scales("scales.txt");
+	std::cout << scales << std::endl;
+	InelasticCollision collision(folderPath, idxE, idxA, idxI, scales);
 
-	Eigen::VectorXd result;
-	Eigen::VectorXd xSites;
-	Eigen::VectorXd ySites = Eigen::VectorXd::LinSpaced(298,3e2,40e3);
+	Eigen::VectorXd Te = Eigen::VectorXd::LinSpaced(298, 300, 30e3);
+	Eigen::VectorXd I_Gion = collision.getGionInterpolated(Te);
 
-	Eigen::MatrixXd Mout(ySites.size(), lambdaVec.size() + 1);
-	Mout.col(0) = ySites;
-	for (int j = 0; j < lambdaVec.size(); j++) {
-		double lambda = lambdaVec(j);
-		xSites = lambda * Eigen::VectorXd::Ones(ySites.size());
-		result = I_R0ion.bicubicInterp(xSites, ySites);
-		Mout.col(j+1) = result;
-	}
-	std::ofstream("output.dat") << Mout << std::endl;
+	const int n = Te.size();
+	Eigen::VectorXd nE = Eigen::VectorXd::Ones(n);
+	Eigen::VectorXd nA = Eigen::VectorXd::Ones(n);
+	Eigen::VectorXd nI = Eigen::VectorXd::Ones(n);
+	Eigen::VectorXd vthE = Eigen::VectorXd::Ones(n);
+	Eigen::VectorXd xStar = Eigen::VectorXd::Zero(n);
+	const double mE = 1e-4;
+	Eigen::VectorXd lambdaIon = Eigen::VectorXd::Zero(n);
+	Eigen::VectorXd lambdaRec = Eigen::VectorXd::Zero(n);
+
+	Eigen::VectorXd Gion = collision.getGion(nE, nA, vthE, lambdaIon, Te);
+	Eigen::VectorXd Grec = collision.getGrec(nI, nE, vthE, xStar, mE, Te, lambdaRec);
+
+	Eigen::MatrixXd data(n, 4);
+	data.col(0) = Te;
+	data.col(1) = I_Gion;
+	data.col(2) = Gion;
+	data.col(3) = Grec;
+
+	std::cout << data << std::endl;
+	std::ofstream("output.dat") << data << std::endl;
 }
+
 
 /**
 * Main function.
@@ -41,6 +80,7 @@ int main() {
 
 	const std::string inputFilename = "input.txt";
 
+	//test_Gion();
 	//test_bicubicInterpolation();
 
 	Main main;
