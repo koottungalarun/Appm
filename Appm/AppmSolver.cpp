@@ -584,15 +584,12 @@ void AppmSolver::setInelasticCollisions(const std::vector<std::string>& list)
 		const int idxA = getSpeciesIndex(tagAtom);
 		const int idxI = getSpeciesIndex(tagIon);
 
-		std::stringstream ss;
-		ss << "collisions/inelastic/" << tag << ".dat";
-
-		const std::string filename = ss.str();
 		const std::string folderPath = "collisions/inelastic/";
 		InelasticCollision * inelasticCollision = new InelasticCollision(folderPath, idxE, idxA, idxI, scalingParameters);
 		const double electronMassRatio = getSpecies(idxE).getMassRatio();
 		inelasticCollisions.push_back(inelasticCollision);
 	}
+	std::cout << "Number of inelastic collisions: " << inelasticCollisions.size() << std::endl;
 }
 
 void AppmSolver::setScalingParameters(const std::string & filename)
@@ -2631,7 +2628,6 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 	std::vector<T> triplets;
 
 	const int nCollisions = inelasticCollisions.size();
-	std::cout << "Number of inelastic collisions: " << nCollisions << std::endl;
 
 	// For all collisions ...
 	for (int collIdx = 0; collIdx < nCollisions; collIdx++) {
@@ -2694,19 +2690,22 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 */
 Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 {
+	const bool showOutput = false;
 	const int nFluids = getNFluids();
 	const int n = dualMesh.getNumberFluidCells();
 	Eigen::MatrixXd src(5 * nFluids, n);
 	src.setZero();
 
 	const int nCollisions = inelasticCollisions.size();
-	std::cout << "Number of inelastic collisions: " << nCollisions << std::endl;
 	for (int collIdx = 0; collIdx < nCollisions; collIdx++) {
 		const InelasticCollision * collision = inelasticCollisions[collIdx];
+
+		// fluid indices
 		const int fidxA = collision->getAtomFluidx();
 		const int fidxE = collision->getElectronFluidx();
 		const int fidxI = collision->getIonFluidx();
 
+		// mass ratios
 		const double mA = getSpecies(fidxA).getMassRatio();
 		const double mE = getSpecies(fidxE).getMassRatio();
 		const double mI = getSpecies(fidxI).getMassRatio();
@@ -2716,6 +2715,7 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 
 		/* Ionization energy */
 		const double E_ion = collision->getIonizationEnergyScaled();
+		//const double E_ion = 0;
 
 		// Fluid states of species (A = neutral atoms, E = electrons, I = ions)
 		const Eigen::MatrixXd statesA = getStates(fidxA, n);
@@ -2760,24 +2760,12 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 		// Thermal velocity of electrons
 		const Eigen::VectorXd vthE = ((8. / M_PI) * 1. / mE * TeVec).array().sqrt();
 
-		// Ratio of 
+		// Ratio of ionization energy to electron thermal energy
 		const Eigen::VectorXd xStar = E_ion * TeVec.array().inverse();
 
-		int i = 0;
-		std::cout << "i = " << i << std::endl;
-		std::cout << "nE: " << nE(i) << std::endl;
-		std::cout << "nA: " << nA(i) << std::endl;
-		std::cout << "vthE: " << vthE(i) << std::endl;
-		std::cout << "lambdaIon: " << lambdaIon(i) << std::endl;
-		std::cout << "Te: " << TeVec(i) << std::endl;
-		std::cout << "Ti: " << TiVec(i) << std::endl;
-		std::cout << "Ta: " << TaVec(i) << std::endl;
-
-
+		// Coefficients in Le & Cambier (2016), in scale-free numbers
 		const Eigen::VectorXd Gion = collision->getGion(nE, nA, vthE, TeVec, lambdaIon);
-		std::cout << "Gion: " << Gion(i) << std::endl;
 		const Eigen::VectorXd Grec = collision->getGrec(nI, nE, vthE, xStar, mE, TeVec, lambdaRec);
-		std::cout << "Grec: " << Grec(i) << std::endl;
 		const Eigen::VectorXd R0ion = collision->getR0ion(nE, nA, vthE, TeVec, lambdaIon);
 		const Eigen::VectorXd R1rec = collision->getR1rec(nE, nI, vthE, xStar, TeVec, lambdaRec);
 		const Eigen::VectorXd R2rec = collision->getR2rec(nE, nI, vthE, xStar, TeVec, lambdaRec);
@@ -2795,12 +2783,24 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 		assert(J22rec.allFinite());
 		assert(J12rec.allFinite());
 
+		if (showOutput) {
+			int i = 0;
+			std::cout << "i = " << i << std::endl;
+			std::cout << "nE: " << nE(i) << std::endl;
+			std::cout << "nA: " << nA(i) << std::endl;
+			std::cout << "vthE: " << vthE(i) << std::endl;
+			std::cout << "lambdaIon: " << lambdaIon(i) << std::endl;
+			std::cout << "Te: " << TeVec(i) << std::endl;
+			std::cout << "Ti: " << TiVec(i) << std::endl;
+			std::cout << "Ta: " << TaVec(i) << std::endl;
+			std::cout << "Gion: " << Gion(i) << std::endl;
+			std::cout << "Grec: " << Grec(i) << std::endl;
+		}
+
 		for (int i = 0; i < n; i++) {
 			const double Ta = TaVec(i);
 			const double Te = TeVec(i);
 			const double Ti = TiVec(i);
-
-			//std::cout << "k = " << k << std::endl;
 
 			const Eigen::VectorXd stateA = statesA.col(i);
 			const Eigen::VectorXd stateE = statesE.col(i);
@@ -2856,28 +2856,34 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 
 			// Total energy sources
 			srcA(4) += -(Gion(i) * etot_i_com - Grec(i) * etot_r_com) 
-				+ 1./(1. + 1./mE) * (-pow(Ta - Te,2) / Te * W_ion + pow(Ti - Te,2) / Te * W_rec - 2 * (Ta - Te) * J_ion) 
+				+ 1. / (1. + 1./mE) * (-pow(Ta - Te,2) / Te * W_ion + pow(Ti - Te,2) / Te * W_rec - 2 * (Ta - Te) * J_ion) 
 				+ mE * ((Ta - Te)/Te * K_ion * w0.dot(U0) + (Ti - Te)/Te * K_rec * w1.dot(U1) + R_ion * w0.dot(U0));
 
 			srcE(4) += (Grec(i) - Gion(i)) * E_ion
-				+ 2. / (1 + 1. / mE) * ((Ta - Te) * J_ion + (Ti - Te) * J_rec)
+				+ 2. / (1. + 1. / mE) * ((Ta - Te) * J_ion + (Ti - Te) * J_rec)
 				- mE * (R_ion * w0.dot(U0) + R_rec * w1.dot(U1));
 
 			srcI(4) += Gion(i) * etot_i_com - Grec(i) * etot_r_com
-				+ 1. / (1 + mE) * (pow(Ta - Te, 2) / Te * W_ion - pow(Ti - Te, 2) / Te * W_rec - 2 * (Ti - Te) * J_rec)
-				+ mE * (-(Ta - Te) / Te * K_ion * w0.dot(U0) + (Ti - Te) / Te * K_rec * w1.dot(U1) + R_ion * w0.dot(U0));
+				+ 1. / (1. + 1./mE) * (pow(Ta - Te, 2) / Te * W_ion - pow(Ti - Te, 2) / Te * W_rec - 2 * (Ti - Te) * J_rec)
+				+ mE * (-(Ta - Te) / Te * K_ion * w0.dot(U0) - (Ti - Te) / Te * K_rec * w1.dot(U1) + R_rec * w1.dot(U1));
 				
-			// Scaling of momentum and energy sources because they are divided by mass fraction
-			srcE.segment(1, 3) *= 1. / mE;
-			srcI.segment(1, 3) *= 1. / mI;
-
-			if (i == 0) {
+			if (i == 0 && showOutput) {
 				std::cout << "Gion, Grec: " << Gion(i) << ", " << Grec(i) << std::endl;
 				std::cout << "srcA: " << srcA.transpose() << std::endl;
 				std::cout << "srcE: " << srcE.transpose() << std::endl;
 				std::cout << "srcI: " << srcI.transpose() << std::endl;
+
+				Eigen::Matrix3Xd data(3, 5);
+				data.row(0) = srcA.transpose();
+				data.row(1) = srcE.transpose();
+				data.row(2) = srcI.transpose();
+				//std::ofstream("output.dat") << std::scientific << std::setprecision(20) << data << std::endl;
 			}			
 			
+			// Scaling of momentum and energy sources because they are divided by mass fraction
+			srcE.segment(1, 4) *= 1. / mE;
+			srcI.segment(1, 4) *= 1. / mI;
+
 			// Update data structure with local species sources
 			Eigen::VectorXd localSrc(5 * nFluids);
 			localSrc.setZero();

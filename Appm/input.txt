@@ -38,10 +38,10 @@ initFluidState: INIT_FILE
 initEfield: 0 0 0
 #
 ### Simulation controls
-maxTime: 2.5
-maxIterations: 1
+maxTime: -1
+maxIterations: 2500
 timestepSizeFactor: 1
-outputFrequency: 10
+outputFrequency: 50
 #
 ### numerics
 #
@@ -57,8 +57,8 @@ isEulerSourcesImplicit: 0
 ### SPECIES
 ######################
 # Format: Symbol, name, massRatio, charge
-species: e, Electron, 1e-3, -1
-species: Ar+, Ion, 0.999, 1
+species: e, Electron, 1e-1, -1
+species: Ar+, Ion, 0.9, 1
 species: Ar, Argon, 1, 0
 #
 #
