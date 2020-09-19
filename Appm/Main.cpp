@@ -175,6 +175,9 @@ void Main::readInputFile()
 		if (tag == "maxTime") {
 			double maxTime = 0;
 			std::istringstream(value) >> maxTime;
+			if (maxTime < 0) {
+				maxTime = std::numeric_limits<int>::max();
+			}
 			this->solverParameters.setMaxTime(maxTime);
 		}
 		if (tag == "maxIterations") {
