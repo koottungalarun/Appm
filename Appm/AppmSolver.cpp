@@ -2690,7 +2690,7 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 */
 Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 {
-	const bool showOutput = false;
+	const bool showOutput = true;
 	const int nFluids = getNFluids();
 	const int n = dualMesh.getNumberFluidCells();
 	Eigen::MatrixXd src(5 * nFluids, n);
@@ -2744,7 +2744,7 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 
 		// Relative velocities in collisions
 		const Eigen::Matrix3Xd w0mat = uEmat - uAmat; 
-		const Eigen::Matrix3Xd w1mat = mI * w0mat;
+		const Eigen::Matrix3Xd w1mat = mI * (uEmat - uImat);
 
 		// Get ratio of kinetic energy to thermal energy
 		Eigen::VectorXd lambdaIon = Eigen::VectorXd::Zero(TeVec.size());
@@ -3286,7 +3286,8 @@ void AppmSolver::writeOutput(const int iteration, const double time)
 	outputIterations.push_back(iteration);
 	timeStamps.push_back(time);
 
-	const std::string filename = (std::stringstream() << "appm-" << iteration << ".h5").str();
+
+	const std::string filename = (std::stringstream() << "appm-" << std::setfill('0') << std::setw(5) << iteration << ".h5").str();
 
 	const int nPrimalFaces = primalMesh.getNumberOfFaces();
 	const int nDualEdges = dualMesh.getNumberOfEdges();
