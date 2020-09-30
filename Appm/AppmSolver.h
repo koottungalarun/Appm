@@ -396,6 +396,9 @@ private:
 	const double getReducedMass(const int alpha, const int beta) const;
 	const Eigen::MatrixXd getStates(const int fidx, const int nCols) const;
 
+
+	const int getLinearIndexInJacobian(const int fluidIdx, const int cellidx) const;
+
 };
 
 /**

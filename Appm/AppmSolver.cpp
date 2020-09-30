@@ -2803,10 +2803,10 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 			/*
 			* Energy sources
 			*/
-			// TODO the index must depend on cell index k
-			const int idxEE = 5 * fidxE + 4; // row index for Energy source in Electron fluid
-			const int idxEI = 5 * fidxI + 4; // row index for Energy sourcce in Ion fluid
-			const int idxEA = 5 * fidxA + 4; // row index for Energy source in Atom (Neutral) fluid
+			const int idxEE = getLinearIndexInJacobian(fidxE, k) + 4; // row index for Energy source in Electron fluid
+			const int idxEI = getLinearIndexInJacobian(fidxI, k) + 4; // row index for Energy sourcce in Ion fluid
+			const int idxEA = getLinearIndexInJacobian(fidxA, k) + 4; // row index for Energy source in Atom (Neutral) fluid
+
 			// electron fluid
 			{
 				double tempE = 0;
@@ -2822,86 +2822,78 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 
 				// TODO add these terms to implicit system
 				
-				// (Tn - Te) * Jion 
-				{
-					const double Qee_Jion = (-1) * 2. / (1. + 1. / mE) * psi_Jion(k) * nA(k) * (gamma - 1) * mE;
-					for (int j = 1; j <= 3; j++) {
-						const int col = 5 * fidxE + j;
-						const double value = Qee_Jion * (-1.) / (2 * nE(k)) * statesE(j, k);
-						triplets.push_back(T(rowE, col, value));
-					}
-					int col = 5 * fidxE + 4;
-					triplets.push_back(T(rowE, col, Qee_Jion));
-
-					const double Qea_Jion = 2. / (1. + 1. / mE) * psi_Jion(k) * nE(k) * (gamma-1) * mE;
-					for (int j = 1; j <= 3; j++) {
-						const int col = 5 * fidxA + j;
-						const double value = Qea_Jion * (-1.) / (2. * nA(k)) * statesA(j, k);
-						triplets.push_back(T(rowE, col, value));
-					}
-					col = 5 * fidxA + 4;
-					triplets.push_back(T(rowE, col, Qea_Jion));
-				}
-
-				// (Ti - Te) * Jrec
-				{
-					const double Qee_Jrec = (-1) * 2. / (1. + 1. / mE) * psi_Jrec(k) * (gamma - 1) * mE;
-					for (int j = 1; j <= 3; j++) {
-						const int col = 5 * fidxE + j;
-						const double value = Qee_Jrec * (-1.) / (2.*nE(k)) * statesE(j, k);
-						triplets.push_back(T(rowE, col, value));
-					}
-					int col = 5 * fidxE + 4;
-					triplets.push_back(T(rowE, col, Qee_Jrec));
-
-					const double Qei_Jrec = 2. / (1. + 1./mE) * psi_Jrec(k) * (gamma - 1.) * mE;
-					for (int j = 1; j <= 3; j++) {
-						const int col = 5 * fidxI + j;
-						const double value = Qei_Jrec * (-1.) / (2.* nI(k)) * statesI(j, k);
-						triplets.push_back(T(rowE, col, value));
-					}
-					col = 5 * fidxI + 4;
-					triplets.push_back(T(rowE, col, Qei_Jrec));
-				}
-
-				// Rion * w0 * U0
-				{
-					const double sme = -mE * psi_Rion(k) * nA(k); // scalar prefactor for (nu)_e^(m+1) 
-					const double sma = +mE * psi_Rion(k) * nE(k); // scalar prefactor for (nu)_n^(m+1)
-					const Eigen::Vector3d a = 1. / (1 + 1. / mE) * 1. / nE(k) * statesE.col(k).segment(1, 3);
-					const Eigen::Vector3d b = 1. / (1. + 1 + mE) * 1. / nA(k) * statesA.col(k).segment(1, 3);
-					const Eigen::Vector3d ce = sme * (a + b); // vector-data at timestep m
-					const Eigen::Vector3d ca = sma * (a + b);
-					for (int j = 1; j <= 3; j++) {
-						const int col = 5 * fidxE + j;
-						const double value = ce(j-1);
-						triplets.push_back(T(rowE, col, value));
-					}
-					for (int j = 1; j <= 3; j++) {
-						const int col = 5 * fidxA + j;
-						const double value = ca(j - 1);
-						triplets.push_back(T(rowE, col, value));
+				{	
+					// 2 / (1 + 1 / mE) * (Tn - Te) * Jion 
+					const double c = 2. / (1. + 1. / mE) * psi_Jion(k); // common factor ...
+					const double cA = +c * nE(k) * (gamma - 1) * mA; // ... factor in front of (nT)_n^{m+1}
+					const double cE = -c * nA(k) * (gamma - 1) * mE; // ... factor in front of (nT)_e^{m+1}
+					const int colA = getLinearIndexInJacobian(fidxA, k);
+					const int colE = getLinearIndexInJacobian(fidxE, k);
+					for (int j = 1; j < 5; j++) {
+						if (j < 4) { // ... kinetic energy terms
+							const double valueA = cA * (-0.5) / nA(k) * statesA(j, k) ;
+							triplets.push_back(T(idxEE, colA + j, +valueA)); // add to electron fluid
+							triplets.push_back(T(idxEA, colA + j, -valueA)); // subtract from neutral fluid
+							const double valueE = cE * (-0.5) / nE(k) * statesE(j, k);
+							triplets.push_back(T(idxEE, colE + j, +valueE)); // add to electron fluid
+							triplets.push_back(T(idxEA, colE + j, -valueE)); // subtract from neutral fluid
+						}
+						else { // ... thermal energy terms
+							triplets.push_back(T(idxEE, colA + j, +cA)); // add to electron fluid
+							triplets.push_back(T(idxEA, colA + j, -cA)); // subtract from neutral fluid
+							triplets.push_back(T(idxEE, colE + j, +cE)); // add to electron fluid
+							triplets.push_back(T(idxEA, colE + j, -cE)); // subtract from neutral fluid
+						}
 					}
 				}
 
-				// Rrec * w1 * U1
 				{
-					const double sme = +mI * psi_Rrec(k) * nE(k) * nI(k);
-					const double smi = -mI * psi_Rrec(k) * pow(nE(k), 2);
-					const Eigen::Vector3d a = 2. / (1. + 1. / mE) * 1. / nE(k) * statesE.col(k).segment(1, 3);
-					const Eigen::Vector3d b = mI / (1. + mE) * 1. / nI(k) * statesI.col(k).segment(1, 3);
-					const Eigen::Vector3d ce = sme * (a + b);
-					const Eigen::Vector3d ci = smi * (a + b);
-					for (int j = 1; j <= 3; j++) {
-						const int col = 5 * fidxE + j;
-						const double value = ce(j-1);
-						triplets.push_back(T(rowE, col, value));
+					// 2 / (1 + 1/mE) * (Ti - Te) * Jrec
+					const double c = 2. / (1. + 1. / mE) * psi_Jrec(k); // common factor ...
+					const double cI = +c * pow(nE(k),2) * (gamma - 1) * mI; // ... factor in front of (nT)_i^{m+1}
+					const double cE = -c * nE(k) * nI(k) * (gamma - 1) * mE; // ... factor in front of (nT)_e^{m+1}
+					const int colI = getLinearIndexInJacobian(fidxI, k);
+					const int colE = getLinearIndexInJacobian(fidxE, k);
+					for (int j = 1; j < 5; j++) {
+						if (j < 4) { // ... kinetic energy terms
+							const double valueI = cI * (-0.5) / nI(k) * statesI(j, k);
+							triplets.push_back(T(idxEE, colI + j, +valueI)); // add to electron fluid
+							triplets.push_back(T(idxEI, colI + j, -valueI)); // subtract from ion fluid
+							const double valueE = cE * (-0.5) / nE(k) * statesE(j, k);
+							triplets.push_back(T(idxEE, colE + j, +valueE)); // add to electron fluid
+							triplets.push_back(T(idxEI, colE + j, -valueE)); // subtract from ion fluid
+						}
+						else { // ... thermal energy terms
+							triplets.push_back(T(idxEE, colI + j, +cI)); // add to electron fluid
+							triplets.push_back(T(idxEI, colI + j, -cI)); // subtract from ion fluid
+							triplets.push_back(T(idxEE, colE + j, +cE)); // add to electron fluid
+							triplets.push_back(T(idxEI, colE + j, -cE)); // subtract from ion fluid
+						}
 					}
-					for (int j = 1; j <= 3; j++) {
-						const int col = 5 * fidxI + j;
-						const double value = ci(j - 1);
-						triplets.push_back(T(rowE, col, value));
+				}
+
+				{
+					//  mE * Rion * w0 * U0
+					const double c = mE * psi_Rion(k); // common factor ...
+					const Eigen::Vector3d vE = 1. / (1. + 1. / mE) * 1. / nE(k) * statesE.col(k).segment(1, 3);
+					const Eigen::Vector3d vA = 1. / (1. + mE) *  1. / nA(k) * statesA.col(k).segment(1, 3);
+					const Eigen::Vector3d v = vA + vE; // ... vector in dot-product at timestep m
+					const Eigen::Vector3d cA = -nE(k) * c * v; // ... factor in front of (nu)_n^{m+1}
+					const Eigen::Vector3d cE = +nA(k) * c * v; // ... factor in front of (nu)_e^{m+1}
+					
+					const int colA = getLinearIndexInJacobian(fidxA, k);
+					const int colE = getLinearIndexInJacobian(fidxE, k);
+					for (int j = 1; j < 4; j++) {
+						triplets.push_back(T(idxEA, colE + j, +cE(j - 1))); // add to neutral fluid
+						triplets.push_back(T(idxEA, colA + j, +cA(j - 1))); // add to neutral fluid 
+						triplets.push_back(T(idxEE, colE + j, -cE(j - 1))); // subtract from electron fluid 
+						triplets.push_back(T(idxEE, colA + j, -cA(j - 1))); // subtract from electron fluid 
 					}
+				}
+
+				{
+					// Rrec * w1 * U1
+
 				}
 
 			}
@@ -5403,6 +5395,19 @@ const Eigen::MatrixXd AppmSolver::getStates(const int fidx, const int nCols) con
 	assert(fidx >= 0);
 	assert(fidx < nFluids);
 	return fluidStates.block(5*fidx, 0, 5, nCols);
+}
+
+const int AppmSolver::getLinearIndexInJacobian(const int fluidIdx, const int cellidx) const
+{
+	const int nFluids = getNFluids();
+	const int nFluidCells = dualMesh.getNumberFluidCells();
+	assert(fluidIdx >= 0);
+	assert(fluidIdx < nFluids);
+	assert(cellidx >= 0);
+	assert(cellidx < nFluidCells);
+
+	int idx = 5 * (nFluids * cellidx + fluidIdx);
+	return idx;
 }
 
 std::ostream & operator<<(std::ostream & os, const AppmSolver::MaxwellSolverType & obj)
