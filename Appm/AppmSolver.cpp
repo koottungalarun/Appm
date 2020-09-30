@@ -2779,7 +2779,7 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 
 			// neutral fluid
 			{
-				double tempE = -(1. + mE) * (psi_Gion(k) * nA(k) / (1. + 1. / mE) - psi_Grec(k) * 2. * nE(k) * nI(k) / (1. + 1./mE));
+				double tempE = -(1. + mE) * (psi_Gion(k) * nA(k) / (1. + 1. / mE) - psi_Grec(k) * 2. * nE(k) * nI(k) / (1. + 1. / mE));
 				double tempI = -(1. + mE) * -1 * psi_Grec(k) * mI / (1. + mE) * pow(nE(k), 2);
 				double tempA = -(1. + mE) * psi_Gion(k) * nE(k) / (1. + mE);
 				// scalar factors in mE * (-(Tn/Te - 1) * Kion * w0)
@@ -2818,11 +2818,11 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 				tempE += E_ion * (psi_Grec(k) * 2 * nE(k) * nI(k) - psi_Gion(k) * nA(k));
 				tempI += E_ion * psi_Grec(k) * pow(nE(k), 2);
 				tempA -= E_ion * psi_Gion(k) * nE(k);
-				tempRhs += E_ion * (psi_Gion(k) * (-2) * pow(nE(k),2) * nI(k) - psi_Gion(k) * nE(k) * nI(k)); // check sign (is it A*x+b=0 or A*x-b=0?)
+				tempRhs += E_ion * (psi_Gion(k) * (-2) * pow(nE(k), 2) * nI(k) - psi_Gion(k) * nE(k) * nI(k)); // check sign (is it A*x+b=0 or A*x-b=0?)
 
 				// TODO add these terms to implicit system
-				
-				{	
+
+				{
 					// 2 / (1 + 1 / mE) * (Tn - Te) * Jion 
 					const double c = 2. / (1. + 1. / mE) * psi_Jion(k); // common factor ...
 					const double cA = +c * nE(k) * (gamma - 1) * mA; // ... factor in front of (nT)_n^{m+1}
@@ -2831,7 +2831,7 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 					const int colE = getLinearIndexInJacobian(fidxE, k);
 					for (int j = 1; j < 5; j++) {
 						if (j < 4) { // ... kinetic energy terms
-							const double valueA = cA * (-0.5) / nA(k) * statesA(j, k) ;
+							const double valueA = cA * (-0.5) / nA(k) * statesA(j, k);
 							triplets.push_back(T(idxEE, colA + j, +valueA)); // add to electron fluid
 							triplets.push_back(T(idxEA, colA + j, -valueA)); // subtract from neutral fluid
 							const double valueE = cE * (-0.5) / nE(k) * statesE(j, k);
@@ -2850,7 +2850,7 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 				{
 					// 2 / (1 + 1/mE) * (Ti - Te) * Jrec
 					const double c = 2. / (1. + 1. / mE) * psi_Jrec(k); // common factor ...
-					const double cI = +c * pow(nE(k),2) * (gamma - 1) * mI; // ... factor in front of (nT)_i^{m+1}
+					const double cI = +c * pow(nE(k), 2) * (gamma - 1) * mI; // ... factor in front of (nT)_i^{m+1}
 					const double cE = -c * nE(k) * nI(k) * (gamma - 1) * mE; // ... factor in front of (nT)_e^{m+1}
 					const int colI = getLinearIndexInJacobian(fidxI, k);
 					const int colE = getLinearIndexInJacobian(fidxE, k);
@@ -2880,7 +2880,7 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 					const Eigen::Vector3d v = vA + vE; // ... vector in dot-product at timestep m
 					const Eigen::Vector3d cA = -nE(k) * c * v; // ... factor in front of (nu)_n^{m+1}
 					const Eigen::Vector3d cE = +nA(k) * c * v; // ... factor in front of (nu)_e^{m+1}
-					
+
 					const int colA = getLinearIndexInJacobian(fidxA, k);
 					const int colE = getLinearIndexInJacobian(fidxE, k);
 					for (int j = 1; j < 4; j++) {
@@ -2897,16 +2897,6 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 				}
 
 			}
-			// ion fluid
-			{
-				// TODO
-			}
-			// neutral fluid
-			{
-				// TODO
-			}
-
-
 
 			{
 				// energy term Gion*Eion
@@ -2923,7 +2913,7 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 				const double an = +a * nE(k) * (gamma - 1.) * mA; // factor in front of implicit term (nT)_n^{m+1}
 				for (int j = 1; j < 4; j++) {
 					const int col = 5 * fidxA + j;
-					const double value = an * (-1.) / (2*nE(k)) * statesA(j, k);
+					const double value = an * (-1.) / (2 * nE(k)) * statesA(j, k);
 					triplets.push_back(T(idxEI, col, +value)); // add to ion fluid
 					triplets.push_back(T(idxEA, col, -value)); // subtract from atom fluid
 				}
@@ -2935,7 +2925,7 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 				const double ae = -a * nA(k) * (gamma - 1.) * mE; // factor in front of implicit term (nT)_e^{m+1}
 				for (int j = 1; j < 4; j++) {
 					const int col = 5 * fidxE + j;
-					const double value = ae * (-1.) / (2 * nE(k)) * statesE(j, k); 
+					const double value = ae * (-1.) / (2 * nE(k)) * statesE(j, k);
 					triplets.push_back(T(idxEI, col, +value)); // add to ion fluid
 					triplets.push_back(T(idxEA, col, -value)); // subtract from atom fluid
 				}
@@ -2963,12 +2953,111 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 				triplets.push_back(T(0, col, -value)); // subtract from ...
 			}
 
-			// energy term Jion
-			// energy term Jrec
-			// energy term Kion
-			// energy term Krec
-			// energy term Rion
-			// energy term Rrec
+			{
+				// energy term Jion
+				// TODO
+			}
+			{
+				// 2 / (1 + 1/mE) * (Ti - Te) * Jrec
+				const double c = 2. / (1. + 1. / mE) * psi_Jrec(k);
+				const double ce = -c * nE(k) * nI(k) * (gamma - 1) * mE; // factor in front of implicit term (nT)_e^{m+1}
+				const double ci = +c * pow(nE(k), 2) * (gamma - 1) * mI; // factor in front of implicit term (nT)_i^{m+1}
+
+				const int colE = getLinearIndexInJacobian(fidxE, k);
+				const int colI = getLinearIndexInJacobian(fidxI, k);
+				for (int j = 1; j < 5; j++) {
+					if (j < 4) {
+						const double valueE = ce * -0.5 / nE(k) * statesE(j, k);
+						const double valueI = ci * -0.5 / nI(k) * statesI(j, k);
+						triplets.push_back(T(idxEE, colE + j, +valueE)); // add to electron fluid
+						triplets.push_back(T(idxEI, colE + j, -valueE)); // subtract from ion fluid
+						triplets.push_back(T(idxEE, colI + j, +valueI)); // add to electron fluid
+						triplets.push_back(T(idxEI, colI + j, -valueI)); // subtract from ion fluid
+					}
+					else {
+						triplets.push_back(T(idxEE, colE + j, +ce)); // add to electron fluid
+						triplets.push_back(T(idxEI, colE + j, -ce)); // subtract from ion fluid
+						triplets.push_back(T(idxEE, colI + j, +ci)); // add to electron fluid
+						triplets.push_back(T(idxEI, colI + j, -ci)); // subtract from ion fluid
+					}
+				}
+			}
+			{
+				// mE * (Tn / Te - 1) * Kion * w0 * U0
+				const double c = mE * psi_Rion(k);
+				const Eigen::Vector3d ve = 1. / (1. + 1. / mE) * 1. / nE(k) * statesE.col(k).segment(1, 3);
+				const Eigen::Vector3d vn = 1. / (1. + mE) * 1. / nA(k) * statesA.col(k).segment(1, 3);
+				const Eigen::Vector3d v = ve + vn; // vector in dot-product at timestep m
+
+				const Eigen::Vector3d ce = +c * nA(k) * v; // factors in front of implicit term (nu)_e^{m+1}
+				const Eigen::Vector3d cn = -c * nE(k) * v; // factors in front of implicit term (nu)_n^{m+1}
+
+				const int colE = getLinearIndexInJacobian(fidxE, k);
+				const int colA = getLinearIndexInJacobian(fidxA, k);
+				for (int j = 1; j < 4; j++) {
+					triplets.push_back(T(idxEA, colE + j, +ce(j - 1))); // add to neutral fluid
+					triplets.push_back(T(idxEA, colA + j, +cn(j - 1))); // add to neutral fluid
+					triplets.push_back(T(idxEI, colE + j, -ce(j - 1))); // subtract from ion fluid
+					triplets.push_back(T(idxEI, colA + j, -cn(j - 1))); // subtract from ion fluid
+				}
+			}
+			{
+				// mE * (Ti/Te - 1) * Krec * w1 * U1
+				const double c = mE * psi_Krec(k) * mI * (Ti(k) / Te(k) - 1.);
+				const Eigen::Vector3d ve = 2. / (1. + 1./mE) * 1./ nE(k) * statesE.col(k).segment(1,3);
+				const Eigen::Vector3d vi = mI / (1. + mE) * 1./nI(k) * statesI.col(k).segment(1,3);
+				const Eigen::Vector3d v = ve + vi; // vector in dot-product at timestep m
+
+				const Eigen::Vector3d ce = +c * nE(k) * nI(k) * v; // factor in front of (nu)_e^{m+1}
+				const Eigen::Vector3d ci = -c * pow(nE(k), 2) * v; // factor in front of (nu)_i^{m+1}
+
+				const int colE = getLinearIndexInJacobian(fidxE, k);
+				const int colI = getLinearIndexInJacobian(fidxI, k);
+				for (int j = 1; j < 4; j++) {
+					triplets.push_back(T(idxEI, colE + j, -ce(j-1))); // subtract from ion fluid
+					triplets.push_back(T(idxEI, colI + j, -ci(j-1))); // subtract from ion fluid
+					triplets.push_back(T(idxEA, colE + j, +ce(j-1))); // add to neutral fluid
+					triplets.push_back(T(idxEA, colI + j, +ci(j-1))); // add to neutral fluid
+				}
+			}
+			{
+				// mE * Rion * w0 * U0
+				const double c = mE * psi_Rion(k);
+				const Eigen::Vector3d ve = 1./(1. + 1./mE) * 1./nE(k) * statesE.col(k).segment(1,3); 
+				const Eigen::Vector3d vn = 1./(1. + mE) * 1./nA(k) * statesA.col(k).segment(1,3);
+				const Eigen::Vector3d v = ve + vn; // vector in dot-product at timestep m
+
+				const Eigen::Vector3d ce = +c * nA(k) * v; // factor in dot-product with (nu)_e^{m+1}
+				const Eigen::Vector3d cn = -c * nE(k) * v; // factor in dot-product with (nu)_n^{m+1}
+				
+				const int colE = getLinearIndexInJacobian(fidxE, k);
+				const int colN = getLinearIndexInJacobian(fidxA, k);
+				for (int j = 1; j < 4; j++) {
+					triplets.push_back(T(idxEE, colE + j, -ce(j-1))); // subtract from electron fluid
+					triplets.push_back(T(idxEE, colN + j, -cn(j-1))); // subtract from electron fluid
+					triplets.push_back(T(idxEA, colE + j, +ce(j-1))); // add to neutral fluid
+					triplets.push_back(T(idxEA, colN + j, +cn(j-1))); // add to neutral fluid
+				}
+			}			
+			{
+				// mE * Rrec * w1 * U1
+				const double c = mE * mI * psi_Rrec(k);
+				const Eigen::Vector3d ve = 2./(1.+1./mE) * 1./nE(k) * statesE.col(k).segment(1,3); 
+				const Eigen::Vector3d vi = mI / (1 + mE) * 1./nI(k) * statesI.col(k).segment(1,3);
+				const Eigen::Vector3d v = ve + vi; // vector in dot-product at timestep m
+
+				const Eigen::Vector3d ce = +c * nE(k) * nI(k) * v; // factors in dot-product with (nu)_e^{m+1}
+				const Eigen::Vector3d ci = -c * pow(nE(k),2) * v; // factors in dot-product of (nu)_i^{m+1}
+
+				const int colE = getLinearIndexInJacobian(fidxE, k);
+				const int colI = getLinearIndexInJacobian(fidxI, k);
+				for (int j = 1; j < 4; j++) {					
+					triplets.push_back(T(idxEE, colE + j, -ce(j - 1))); // subtract from electron fluid
+					triplets.push_back(T(idxEE, colI + j, -ci(j - 1))); // subtract from electron fluid
+					triplets.push_back(T(idxEI, colE + j, +ce(j - 1))); // add to ion fluid
+					triplets.push_back(T(idxEI, colI + j, +ci(j - 1))); // add to ion fluid
+				}
+			}
 
 		}
 	}
