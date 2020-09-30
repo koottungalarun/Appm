@@ -2620,12 +2620,14 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceElasticCollisions(
 	return M;
 }
 
-Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollisions() const
+Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollisions(Eigen::VectorXd & rhs) const
 {
-	const int nFluidCells = dualMesh.getNumberFluidCells();
+	const int n = dualMesh.getNumberFluidCells();
 	const int nFluids = getNFluids();
 	typedef Eigen::Triplet<double> T;
 	std::vector<T> triplets;
+
+	rhs.setZero();
 
 	const int nCollisions = inelasticCollisions.size();
 
@@ -2644,42 +2646,345 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 		const double mI = getSpecies(fidxI).getMassRatio();
 
 		// Species states
-		const Eigen::MatrixXd & statesA = getStates(fidxA, nFluidCells);
-		const Eigen::MatrixXd & statesE = getStates(fidxE, nFluidCells);
-		const Eigen::MatrixXd & statesI = getStates(fidxI, nFluidCells);
+		const Eigen::MatrixXd & statesA = getStates(fidxA, n);
+		const Eigen::MatrixXd & statesE = getStates(fidxE, n);
+		const Eigen::MatrixXd & statesI = getStates(fidxI, n);
 
 		// Species number density
-		Eigen::VectorXd nA = statesA.row(0);
-		Eigen::VectorXd nE = statesE.row(0);
-		Eigen::VectorXd nI = statesI.row(0);
+		const Eigen::VectorXd nA = statesA.row(0);
+		const Eigen::VectorXd nE = statesE.row(0);
+		const Eigen::VectorXd nI = statesI.row(0);
 
 		// Electron temperature
-		Eigen::VectorXd Te = Physics::getTemperature(statesE, mE);
+		const Eigen::VectorXd Ta = Physics::getTemperature(statesA, mA);
+		const Eigen::VectorXd Te = Physics::getTemperature(statesE, mE);
+		const Eigen::VectorXd Ti = Physics::getTemperature(statesI, mI);
+		const Eigen::VectorXd vthE = ((8. / M_PI) * 1. / mE * Te).array().sqrt();
 
-		// Reaction rates and species production rates
-		//Eigen::VectorXd ki = collision->getIonizationRate(Te);
-		//Eigen::VectorXd kr = collision->getRecombinationRate_Saha(ki, Te);
-		//Eigen::VectorXd wi = ki.array() * nA.array() * nE.array();
-		//Eigen::VectorXd wr = kr.array() * nI.array() * nE.array().pow(2);
-		//Eigen::VectorXd w_net = wi - wr; // net species production rate
+		// Auxiliary vector with unit values
+		const Eigen::VectorXd ones = Eigen::VectorXd::Ones(nA.size());
 
-		int i, j;
+		// Coefficients 
+		const Eigen::MatrixXd uAmat = Physics::getVelocity(statesA);
+		const Eigen::MatrixXd uEmat = Physics::getVelocity(statesE);
+		const Eigen::MatrixXd uImat = Physics::getVelocity(statesI);
+		const Eigen::Matrix3Xd w0mat = uEmat - uAmat;
+		const Eigen::Matrix3Xd w1mat = mI * (uEmat - uImat);
+
+		Eigen::VectorXd lambdaIon = Eigen::VectorXd::Zero(nA.size());
+		Eigen::VectorXd lambdaRec = Eigen::VectorXd::Zero(nA.size());
+		for (int i = 0; i < n; i++) {
+			const Eigen::VectorXd w0 = w0mat.col(i);
+			const Eigen::VectorXd w1 = w1mat.col(i);
+			lambdaIon(i) = 0.5 * mE / Te(i) * w0.squaredNorm();
+			lambdaRec(i) = 0.5 * mE / Te(i) * w1.squaredNorm();
+		}
+		const double E_ion = collision->getIonizationEnergyScaled();
+		const Eigen::VectorXd xStar = E_ion * Te.array().inverse();
+
+		const Eigen::VectorXd psi_Gion = collision->getGion(ones, ones, vthE, Te, lambdaIon);
+		const Eigen::VectorXd psi_Grec = collision->getGrec(ones, ones, vthE, xStar, mE, lambdaRec);
+		const Eigen::VectorXd psi_R0ion = collision->getR0ion(ones, ones, vthE, Te, lambdaIon);
+		const Eigen::VectorXd psi_R1rec = collision->getR1rec(ones, ones, vthE, xStar, Te, lambdaRec);
+		const Eigen::VectorXd psi_R2rec = collision->getR2rec(ones, ones, vthE, xStar, Te, lambdaRec);
+		const Eigen::VectorXd psi_J00ion = collision->getJ00ion(ones, ones, vthE, Te, lambdaIon);
+		const Eigen::VectorXd psi_J11rec = collision->getJ11rec(ones, ones, vthE, xStar, Te, lambdaRec);
+		const Eigen::VectorXd psi_J22rec = collision->getJ22rec(ones, ones, vthE, xStar, Te, lambdaRec);
+		const Eigen::VectorXd psi_J12rec = collision->getJ12rec(ones, ones, vthE, xStar, Te, lambdaRec);
+
+		const Eigen::VectorXd psi_Rion = psi_R0ion;
+		const Eigen::VectorXd psi_Rrec = psi_R1rec + psi_R2rec;
+		const Eigen::VectorXd psi_Kion = psi_Gion - psi_R0ion;
+		const Eigen::VectorXd psi_Krec = 2 * psi_Grec - psi_R1rec - psi_R2rec;
+		const Eigen::VectorXd psi_Wion = psi_J00ion.array() - 2 * lambdaIon.array() * psi_R0ion.array() + lambdaIon.array() * psi_Gion.array();
+		const Eigen::VectorXd psi_Wrec = psi_J11rec.array() + psi_J22rec.array() + 2 * psi_J12rec.array() + 4 * lambdaRec.array() * (psi_Gion.array() - psi_R1rec.array() - psi_R2rec.array());
+		const Eigen::VectorXd psi_Jion = psi_J00ion.array() - lambdaIon.array() * psi_R0ion.array();
+		const Eigen::VectorXd psi_Jrec = psi_J11rec.array() + psi_J22rec.array() + 2 * psi_J12rec.array() - 2 * lambdaRec.array() * (psi_R1rec.array() + psi_R2rec.array());
+
+		const double gamma = Physics::gamma;
+		
 		// Define Jacobian matrix for inelastic sources
-		for (int k = 0; k < nFluidCells; k++) {
-			// Species sources
+		for (int k = 0; k < n; k++) {
+			/*
+			* Species sources
+			*/
+			assert(false); // the row/column index is wrong in many statements below: 5*fidxE does not depend on cell index k!
+
+			// Species source in electron fluid
+			triplets.push_back(T(5 * fidxE, 5 * fidxE, psi_Gion(k) * nI(k)));
+			triplets.push_back(T(5 * fidxE, 5 * fidxI, psi_Gion(k) * nE(k)));
+			rhs(5 * fidxE) += psi_Gion(k) * nI(k) * nE(k);
+			triplets.push_back(T(5 * fidxE, 5 * fidxE, 2 * psi_Grec(k) * nE(k) * nI(k)));
+			triplets.push_back(T(5 * fidxE, 5 * fidxI, psi_Grec(k) * pow(nE(k), 2) * nI(k)));
+			rhs(5 * fidxE) += 2 * psi_Grec(k) * nI(k) * pow(nE(k), 2);
+
+			// Species source in ion fluid
+			triplets.push_back(T(5 * fidxI, 5 * fidxE, psi_Gion(k) * nI(k)));
+			triplets.push_back(T(5 * fidxI, 5 * fidxI, psi_Gion(k) * nE(k)));
+			rhs(5 * fidxI) += psi_Gion(k) * nI(k) * nE(k);
+			triplets.push_back(T(5 * fidxI, 5 * fidxE, 2 * psi_Grec(k) * nE(k) * nI(k)));
+			triplets.push_back(T(5 * fidxI, 5 * fidxI, psi_Grec(k) * pow(nE(k), 2) * nI(k)));
+			rhs(5 * fidxI) += 2 * psi_Grec(k) * nI(k) * pow(nE(k), 2);
+
+			// Species source in neutral fluid
+			triplets.push_back(T(5 * fidxA, 5 * fidxE, -1 * psi_Gion(k) * nI(k)));
+			triplets.push_back(T(5 * fidxA, 5 * fidxI, -1 * psi_Gion(k) * nE(k)));
+			rhs(5 * fidxA) -= psi_Gion(k) * nI(k) * nE(k);
+			triplets.push_back(T(5 * fidxA, 5 * fidxE, -2 * psi_Grec(k) * nE(k) * nI(k)));
+			triplets.push_back(T(5 * fidxA, 5 * fidxI, -1 * psi_Grec(k) * pow(nE(k), 2) * nI(k)));
+			rhs(5 * fidxA) -= 2 * psi_Grec(k) * nI(k) * pow(nE(k), 2);
+
+			/*
+			* Momentum sources
+			*/
+			// electron fluid
+			{
+				// temp* is the scalar factor in front of u* at new timestep 
+				double tempE, tempI, tempA;
+				tempE = -mE * (psi_Rion(k) * nA(k) + psi_Rrec(k) * mI * nE(k) * nI(k));
+				tempI = -mE * -1 * psi_Rrec(k) * mI * pow(nE(k), 2);
+				tempA = -mE * -1 * psi_Rion(k) * nE(k);
+				// apply these factors to triplets 
+				const int offset = 5 * fidxE + 1;
+				for (int i = 0; i < 3; i++) {
+					triplets.push_back(T(offset + i, 5 * fidxE + 1 + i, tempE));
+					triplets.push_back(T(offset + i, 5 * fidxI + 1 + i, tempI));
+					triplets.push_back(T(offset + i, 5 * fidxA + 1 + i, tempA));
+				}
+			}
+
+			// ion fluid
+			{
+				// scalar factors in Ri = (1 + mE) * (Gion*U0 - Grec*U1)
+				double tempE = (1. + mE) * (psi_Gion(k) * nA(k) / (1 + 1. / mE) - psi_Grec(k) * 2 * nE(k) * nI(k) / (1. + 1. / mE));
+				double tempI = -1 * (1. + mE) * psi_Grec(k) * mI / (1. + mE) * pow(nE(k), 2);
+				double tempA = (1. + mE) * psi_Gion(k) * nE(k) / (1. + mE);
+				// scalar factors in Ri = +mE * (Tn/Te - 1) * Kion * w0
+				tempE += mE * psi_Kion(k) * (Ta(k) / Te(k) - 1.) * nA(k);
+				tempA -= mE * psi_Kion(k) * (Ta(k) / Te(k) - 1.) * nE(k);
+				// scalar factors in Ri = -mE * (Ti/Te - 1) * Krec * w1
+				tempE -= mE * mI * psi_Krec(k) * (Ti(k) / Te(k) - 1) * nE(k) * nI(k);
+				tempI += mE * mI * psi_Krec(k) * (Ti(k) / Te(k) - 1) * pow(nE(k), 2);
+				// scalar factors in Ri = +mE * Rrec * w1
+				tempE += mE * mI * psi_Grec(k) * nE(k) * nI(k);
+				tempI -= mE * mI * psi_Grec(k) * pow(nE(k), 2);
+				// apply these factors to triplets
+				const int offset = 5 * fidxI + 1;
+				for (int i = 0; i < 3; i++) {
+					triplets.push_back(T(offset + i, 5 * fidxE + 1 + i, tempE));
+					triplets.push_back(T(offset + i, 5 * fidxI + 1 + i, tempI));
+					triplets.push_back(T(offset + i, 5 * fidxA + 1 + i, tempA));
+				}
+			}
+
+			// neutral fluid
+			{
+				double tempE = -(1. + mE) * (psi_Gion(k) * nA(k) / (1. + 1. / mE) - psi_Grec(k) * 2. * nE(k) * nI(k) / (1. + 1./mE));
+				double tempI = -(1. + mE) * -1 * psi_Grec(k) * mI / (1. + mE) * pow(nE(k), 2);
+				double tempA = -(1. + mE) * psi_Gion(k) * nE(k) / (1. + mE);
+				// scalar factors in mE * (-(Tn/Te - 1) * Kion * w0)
+				tempE -= psi_Kion(k) * (Ta(k) / Te(k) - 1.) * nA(k);
+				tempA += psi_Kion(k) * (Ta(k) / Te(k) - 1.) * nE(k);
+				// scalar factors in mE * (Ti/Te - 1) * Krec * w1
+				tempE += psi_Krec(k) * mI * (Ti(k) / Te(k) - 1.) * nE(k) * nI(k);
+				tempI -= psi_Krec(k) * mI * (Ti(k) / Te(k) - 1.) * pow(nE(k), 2);
+				// scalar factors in mE * Rion * w0
+				tempE += mE * psi_Rion(k) * nA(k);
+				tempA -= mE * psi_Rion(k) * nE(k);
+				// apply these factors to triplets
+				const int offset = 5 * fidxA + 1;
+				for (int i = 0; i < 3; i++) {
+					triplets.push_back(T(offset + i, 5 * fidxE + 1 + i, tempE));
+					triplets.push_back(T(offset + i, 5 * fidxI + 1 + i, tempI));
+					triplets.push_back(T(offset + i, 5 * fidxA + 1 + i, tempA));
+				}
+			}
+
+			/*
+			* Energy sources
+			*/
+			// TODO the index must depend on cell index k
+			const int idxEE = 5 * fidxE + 4; // row index for Energy source in Electron fluid
+			const int idxEI = 5 * fidxI + 4; // row index for Energy sourcce in Ion fluid
+			const int idxEA = 5 * fidxA + 4; // row index for Energy source in Atom (Neutral) fluid
+			// electron fluid
+			{
+				double tempE = 0;
+				double tempI = 0;
+				double tempA = 0;
+				double tempRhs = 0;
+
+				// ionization 
+				tempE += E_ion * (psi_Grec(k) * 2 * nE(k) * nI(k) - psi_Gion(k) * nA(k));
+				tempI += E_ion * psi_Grec(k) * pow(nE(k), 2);
+				tempA -= E_ion * psi_Gion(k) * nE(k);
+				tempRhs += E_ion * (psi_Gion(k) * (-2) * pow(nE(k),2) * nI(k) - psi_Gion(k) * nE(k) * nI(k)); // check sign (is it A*x+b=0 or A*x-b=0?)
+
+				// TODO add these terms to implicit system
+				
+				// (Tn - Te) * Jion 
+				{
+					const double Qee_Jion = (-1) * 2. / (1. + 1. / mE) * psi_Jion(k) * nA(k) * (gamma - 1) * mE;
+					for (int j = 1; j <= 3; j++) {
+						const int col = 5 * fidxE + j;
+						const double value = Qee_Jion * (-1.) / (2 * nE(k)) * statesE(j, k);
+						triplets.push_back(T(rowE, col, value));
+					}
+					int col = 5 * fidxE + 4;
+					triplets.push_back(T(rowE, col, Qee_Jion));
+
+					const double Qea_Jion = 2. / (1. + 1. / mE) * psi_Jion(k) * nE(k) * (gamma-1) * mE;
+					for (int j = 1; j <= 3; j++) {
+						const int col = 5 * fidxA + j;
+						const double value = Qea_Jion * (-1.) / (2. * nA(k)) * statesA(j, k);
+						triplets.push_back(T(rowE, col, value));
+					}
+					col = 5 * fidxA + 4;
+					triplets.push_back(T(rowE, col, Qea_Jion));
+				}
+
+				// (Ti - Te) * Jrec
+				{
+					const double Qee_Jrec = (-1) * 2. / (1. + 1. / mE) * psi_Jrec(k) * (gamma - 1) * mE;
+					for (int j = 1; j <= 3; j++) {
+						const int col = 5 * fidxE + j;
+						const double value = Qee_Jrec * (-1.) / (2.*nE(k)) * statesE(j, k);
+						triplets.push_back(T(rowE, col, value));
+					}
+					int col = 5 * fidxE + 4;
+					triplets.push_back(T(rowE, col, Qee_Jrec));
+
+					const double Qei_Jrec = 2. / (1. + 1./mE) * psi_Jrec(k) * (gamma - 1.) * mE;
+					for (int j = 1; j <= 3; j++) {
+						const int col = 5 * fidxI + j;
+						const double value = Qei_Jrec * (-1.) / (2.* nI(k)) * statesI(j, k);
+						triplets.push_back(T(rowE, col, value));
+					}
+					col = 5 * fidxI + 4;
+					triplets.push_back(T(rowE, col, Qei_Jrec));
+				}
+
+				// Rion * w0 * U0
+				{
+					const double sme = -mE * psi_Rion(k) * nA(k); // scalar prefactor for (nu)_e^(m+1) 
+					const double sma = +mE * psi_Rion(k) * nE(k); // scalar prefactor for (nu)_n^(m+1)
+					const Eigen::Vector3d a = 1. / (1 + 1. / mE) * 1. / nE(k) * statesE.col(k).segment(1, 3);
+					const Eigen::Vector3d b = 1. / (1. + 1 + mE) * 1. / nA(k) * statesA.col(k).segment(1, 3);
+					const Eigen::Vector3d ce = sme * (a + b); // vector-data at timestep m
+					const Eigen::Vector3d ca = sma * (a + b);
+					for (int j = 1; j <= 3; j++) {
+						const int col = 5 * fidxE + j;
+						const double value = ce(j-1);
+						triplets.push_back(T(rowE, col, value));
+					}
+					for (int j = 1; j <= 3; j++) {
+						const int col = 5 * fidxA + j;
+						const double value = ca(j - 1);
+						triplets.push_back(T(rowE, col, value));
+					}
+				}
+
+				// Rrec * w1 * U1
+				{
+					const double sme = +mI * psi_Rrec(k) * nE(k) * nI(k);
+					const double smi = -mI * psi_Rrec(k) * pow(nE(k), 2);
+					const Eigen::Vector3d a = 2. / (1. + 1. / mE) * 1. / nE(k) * statesE.col(k).segment(1, 3);
+					const Eigen::Vector3d b = mI / (1. + mE) * 1. / nI(k) * statesI.col(k).segment(1, 3);
+					const Eigen::Vector3d ce = sme * (a + b);
+					const Eigen::Vector3d ci = smi * (a + b);
+					for (int j = 1; j <= 3; j++) {
+						const int col = 5 * fidxE + j;
+						const double value = ce(j-1);
+						triplets.push_back(T(rowE, col, value));
+					}
+					for (int j = 1; j <= 3; j++) {
+						const int col = 5 * fidxI + j;
+						const double value = ci(j - 1);
+						triplets.push_back(T(rowE, col, value));
+					}
+				}
+
+			}
+			// ion fluid
+			{
+				// TODO
+			}
+			// neutral fluid
+			{
+				// TODO
+			}
 
 
-			// Momentum sources
 
-			// Energy sources
+			{
+				// energy term Gion*Eion
+
+			}
+			{
+				// energy term Grec*Erec
+
+			}
+
+			{
+				// energy term (Tn - Te)^2 / Te * Wion
+				const double a = 1. / (1. + 1. / mE) * psi_Wion(k) * (Ta(k) / Te(k) - 1.);
+				const double an = +a * nE(k) * (gamma - 1.) * mA; // factor in front of implicit term (nT)_n^{m+1}
+				for (int j = 1; j < 4; j++) {
+					const int col = 5 * fidxA + j;
+					const double value = an * (-1.) / (2*nE(k)) * statesA(j, k);
+					triplets.push_back(T(idxEI, col, +value)); // add to ion fluid
+					triplets.push_back(T(idxEA, col, -value)); // subtract from atom fluid
+				}
+				int col = 5 * fidxA + 4;
+				double value = an;
+				triplets.push_back(T(idxEI, col, +value)); // add to ion fluid
+				triplets.push_back(T(idxEA, col, -value)); // subtract from atom fluid
+
+				const double ae = -a * nA(k) * (gamma - 1.) * mE; // factor in front of implicit term (nT)_e^{m+1}
+				for (int j = 1; j < 4; j++) {
+					const int col = 5 * fidxE + j;
+					const double value = ae * (-1.) / (2 * nE(k)) * statesE(j, k); 
+					triplets.push_back(T(idxEI, col, +value)); // add to ion fluid
+					triplets.push_back(T(idxEA, col, -value)); // subtract from atom fluid
+				}
+				col = 5 * fidxA + 4;
+				value = ae;
+				triplets.push_back(T(idxEI, col, +value)); // add to ion fluid
+				triplets.push_back(T(idxEA, col, -value)); // subtract from atom fluid
+			}
+			{
+				// energy term (Ti - Te)^2 / Te * Wrec
+				const double a = 0;
+				const double ai = 0; // factor in front of implicit term (nT)_i^{m+1}
+				for (int j = 1; j < 4; j++) {
+
+				}
+				int col = 5 * 0 + 4; // TODO
+				double value = 0; // TODO
+				triplets.push_back(T(0, col, +value)); // add to ...
+				triplets.push_back(T(0, col, -value)); // subtract from ...
+
+				const double ae = 0; // factor in front of implicit term (nT)_e^{m+1}
+				col = 5 * 0 + 4; // TODO
+				double value = 0; // TODO
+				triplets.push_back(T(0, col, +value)); // add to ...
+				triplets.push_back(T(0, col, -value)); // subtract from ...
+			}
+
+			// energy term Jion
+			// energy term Jrec
+			// energy term Kion
+			// energy term Krec
+			// energy term Rion
+			// energy term Rrec
+
 		}
 	}
 
 
 	// Create Jacobian matrix from triplets
-	assert(triplets.empty()); // the source terms are not yet implemented
-	const int n = 5 * nFluidCells * nFluids;
-	Eigen::SparseMatrix<double> M(n, n);
+	const int mSize = 5 * n * nFluids;
+	Eigen::SparseMatrix<double> M(mSize, mSize);
 	M.setFromTriplets(triplets.begin(), triplets.end());
 	M.makeCompressed();
 	return M;

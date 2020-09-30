@@ -324,7 +324,7 @@ private:
 	void setImplicitMassFluxTerms(const double dt);
 	void updateFluidStates(const double dt, const bool isImplicitSources);
 	Eigen::SparseMatrix<double> getJacobianEulerSourceElasticCollisions() const;
-	Eigen::SparseMatrix<double> getJacobianEulerSourceInelasticCollisions() const;
+	Eigen::SparseMatrix<double> getJacobianEulerSourceInelasticCollisions(Eigen::VectorXd & rhs) const;
 	Eigen::MatrixXd getInelasticSourcesExplicit();
 
 	void solveMaxwellSystem(const double time, const double dt, const double dt_previous, const Eigen::SparseMatrix<double> & Msigma);
