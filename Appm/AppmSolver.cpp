@@ -2954,8 +2954,29 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 			}
 
 			{
-				// energy term Jion
-				// TODO
+				// 2 / (1 + 1/mE) * (Tn - Te) * Jion
+				const double c = 2. / (1. + 1. / mE) * psi_Jion(k);
+				const double ce = -c * nA(k) * (gamma - 1) * mE; // factor in front of implicit term (nT)_e^{m+1}
+				const double cn = +c * nE(k) * (gamma - 1) * mA; // factor in front of implicit term (nT)_n^{m+1}
+
+				const int colE = getLinearIndexInJacobian(fidxE, k);
+				const int colA = getLinearIndexInJacobian(fidxA, k);
+				for (int j = 1; j < 5; j++) {
+					if (j < 4) {
+						const double valueE = ce * -0.5 / nE(k) * statesE(j, k);
+						const double valueN = cn * -0.5 / nA(k) * statesA(j, k);
+						triplets.push_back(T(idxEE, colE + j, +ce)); // add to electron fluid
+						triplets.push_back(T(idxEA, colE + j, -ce)); // subtract from neutral fluid
+						triplets.push_back(T(idxEE, colA + j, +cn)); // add to electron fluid
+						triplets.push_back(T(idxEA, colA + j, -ce)); // subtract from neutral fluid
+					}
+					else {
+						triplets.push_back(T(idxEE, colE + j, +ce)); // add to electron fluid
+						triplets.push_back(T(idxEA, colE + j, -ce)); // subtract from neutral fluid
+						triplets.push_back(T(idxEE, colA + j, +cn)); // add to electron fluid
+						triplets.push_back(T(idxEA, colA + j, -cn)); // subtract from neutral fluid
+					}
+				}
 			}
 			{
 				// 2 / (1 + 1/mE) * (Ti - Te) * Jrec
