@@ -2705,209 +2705,186 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 		
 		// Define Jacobian matrix for inelastic sources
 		for (int k = 0; k < n; k++) {
-			/*
-			* Species sources
-			*/
-			assert(false); // the row/column index is wrong in many statements below: 5*fidxE does not depend on cell index k!
-
-			// Species source in electron fluid
-			triplets.push_back(T(5 * fidxE, 5 * fidxE, psi_Gion(k) * nI(k)));
-			triplets.push_back(T(5 * fidxE, 5 * fidxI, psi_Gion(k) * nE(k)));
-			rhs(5 * fidxE) += psi_Gion(k) * nI(k) * nE(k);
-			triplets.push_back(T(5 * fidxE, 5 * fidxE, 2 * psi_Grec(k) * nE(k) * nI(k)));
-			triplets.push_back(T(5 * fidxE, 5 * fidxI, psi_Grec(k) * pow(nE(k), 2) * nI(k)));
-			rhs(5 * fidxE) += 2 * psi_Grec(k) * nI(k) * pow(nE(k), 2);
-
-			// Species source in ion fluid
-			triplets.push_back(T(5 * fidxI, 5 * fidxE, psi_Gion(k) * nI(k)));
-			triplets.push_back(T(5 * fidxI, 5 * fidxI, psi_Gion(k) * nE(k)));
-			rhs(5 * fidxI) += psi_Gion(k) * nI(k) * nE(k);
-			triplets.push_back(T(5 * fidxI, 5 * fidxE, 2 * psi_Grec(k) * nE(k) * nI(k)));
-			triplets.push_back(T(5 * fidxI, 5 * fidxI, psi_Grec(k) * pow(nE(k), 2) * nI(k)));
-			rhs(5 * fidxI) += 2 * psi_Grec(k) * nI(k) * pow(nE(k), 2);
-
-			// Species source in neutral fluid
-			triplets.push_back(T(5 * fidxA, 5 * fidxE, -1 * psi_Gion(k) * nI(k)));
-			triplets.push_back(T(5 * fidxA, 5 * fidxI, -1 * psi_Gion(k) * nE(k)));
-			rhs(5 * fidxA) -= psi_Gion(k) * nI(k) * nE(k);
-			triplets.push_back(T(5 * fidxA, 5 * fidxE, -2 * psi_Grec(k) * nE(k) * nI(k)));
-			triplets.push_back(T(5 * fidxA, 5 * fidxI, -1 * psi_Grec(k) * pow(nE(k), 2) * nI(k)));
-			rhs(5 * fidxA) -= 2 * psi_Grec(k) * nI(k) * pow(nE(k), 2);
-
-			/*
-			* Momentum sources
-			*/
-			// electron fluid
+			// Species source
 			{
-				// temp* is the scalar factor in front of u* at new timestep 
-				double tempE, tempI, tempA;
-				tempE = -mE * (psi_Rion(k) * nA(k) + psi_Rrec(k) * mI * nE(k) * nI(k));
-				tempI = -mE * -1 * psi_Rrec(k) * mI * pow(nE(k), 2);
-				tempA = -mE * -1 * psi_Rion(k) * nE(k);
-				// apply these factors to triplets 
-				const int offset = 5 * fidxE + 1;
-				for (int i = 0; i < 3; i++) {
-					triplets.push_back(T(offset + i, 5 * fidxE + 1 + i, tempE));
-					triplets.push_back(T(offset + i, 5 * fidxI + 1 + i, tempI));
-					triplets.push_back(T(offset + i, 5 * fidxA + 1 + i, tempA));
+				// Net species sources Gnet = Gion - Grec
+				const double cNet_e = +psi_Gion(k) * nA(k) - 2 * psi_Grec(k) * nE(k) * nI(k); // factors in front of n_e^{m+1}
+				const double cNet_i = -psi_Grec(k) * pow(nE(k), 2); // factors in front of n_i^{m+1}
+				const double cNet_n = +psi_Gion(k) * nE(k); // factors in front of n_n^{m+1}
+				const double cNet_rhs = -psi_Gion(k) * nE(k) * nA(k) + 2 * psi_Grec(k) * pow(nE(k), 2) * nI(k);
+
+				const int idxE = getLinearIndexInJacobian(fidxE, k);
+				const int idxI = getLinearIndexInJacobian(fidxI, k);
+				const int idxN = getLinearIndexInJacobian(fidxA, k);
+
+				triplets.push_back(T(idxE, idxE, +cNet_e)); // add Gnet to electron fluid
+				triplets.push_back(T(idxE, idxN, +cNet_n)); // add Gnet to electron fluid
+				triplets.push_back(T(idxE, idxI, +cNet_i)); // add Gnet to electron fluid
+				
+				triplets.push_back(T(idxI, idxE, +cNet_e)); // add Gnet to ion fluid
+				triplets.push_back(T(idxI, idxN, +cNet_n)); // add Gnet to ion fluid
+				triplets.push_back(T(idxI, idxI, +cNet_i)); // add Gnet to ion fluid
+
+				triplets.push_back(T(idxN, idxE, -cNet_e)); // subtract Gnet from neutral fluid
+				triplets.push_back(T(idxN, idxN, -cNet_n)); // subtract Gnet from neutral fluid
+				triplets.push_back(T(idxN, idxI, -cNet_i)); // subtract Gnet from neutral fluid
+
+				// TODO rhs
+				assert(false);
+			}
+			// Momentum source
+			{
+				// (1 + mE) * (Gion*U0 - Grec*U1)
+				const double c = 1. + mE;
+				const double ce = +c * (psi_Gion(k) * nA(k) - psi_Grec(k) * 2 * nE(k) * nI(k)) / (1 + 1./mE); // factor in front of (nu)_e^{m+1}
+				const double ci = -c * psi_Grec(k) * mI / (1. + mE) * pow(nE(k), 2); // factor in front of (nu)_i^{m+1}
+				const double cn = +c * psi_Gion(k) * 1. / (1. + mE) * nE(k); // factor in front of (nu)_n^{m+1}
+			
+				const int idxE = getLinearIndexInJacobian(fidxE, k);
+				const int idxI = getLinearIndexInJacobian(fidxI, k);
+				const int idxN = getLinearIndexInJacobian(fidxA, k);
+
+				for (int j = 1; j < 4; j++) {
+					triplets.push_back(T(idxI + j, idxE + j, +ce)); // add to ion fluid
+					triplets.push_back(T(idxI + j, idxI + j, +ci)); // add to ion fluid
+					triplets.push_back(T(idxI + j, idxN + j, +cn)); // add to ion fluid
+					
+					triplets.push_back(T(idxN + j, idxE + j, -ce)); // subtract from neutral fluid
+					triplets.push_back(T(idxN + j, idxI + j, -ci)); // subtract from neutral fluid
+					triplets.push_back(T(idxN + j, idxN + j, -cn)); // subtract from neutral fluid
 				}
 			}
-
-			// ion fluid
 			{
-				// scalar factors in Ri = (1 + mE) * (Gion*U0 - Grec*U1)
-				double tempE = (1. + mE) * (psi_Gion(k) * nA(k) / (1 + 1. / mE) - psi_Grec(k) * 2 * nE(k) * nI(k) / (1. + 1. / mE));
-				double tempI = -1 * (1. + mE) * psi_Grec(k) * mI / (1. + mE) * pow(nE(k), 2);
-				double tempA = (1. + mE) * psi_Gion(k) * nE(k) / (1. + mE);
-				// scalar factors in Ri = +mE * (Tn/Te - 1) * Kion * w0
-				tempE += mE * psi_Kion(k) * (Ta(k) / Te(k) - 1.) * nA(k);
-				tempA -= mE * psi_Kion(k) * (Ta(k) / Te(k) - 1.) * nE(k);
-				// scalar factors in Ri = -mE * (Ti/Te - 1) * Krec * w1
-				tempE -= mE * mI * psi_Krec(k) * (Ti(k) / Te(k) - 1) * nE(k) * nI(k);
-				tempI += mE * mI * psi_Krec(k) * (Ti(k) / Te(k) - 1) * pow(nE(k), 2);
-				// scalar factors in Ri = +mE * Rrec * w1
-				tempE += mE * mI * psi_Grec(k) * nE(k) * nI(k);
-				tempI -= mE * mI * psi_Grec(k) * pow(nE(k), 2);
-				// apply these factors to triplets
-				const int offset = 5 * fidxI + 1;
-				for (int i = 0; i < 3; i++) {
-					triplets.push_back(T(offset + i, 5 * fidxE + 1 + i, tempE));
-					triplets.push_back(T(offset + i, 5 * fidxI + 1 + i, tempI));
-					triplets.push_back(T(offset + i, 5 * fidxA + 1 + i, tempA));
+				// mE * Rion * w0 
+				const double c = mE;
+				const double ce = +c * psi_Rion(k) * nA(k); 
+				const double cn = -c * psi_Rion(k) * nE(k);
+				
+				const int idxE = getLinearIndexInJacobian(fidxE, k);
+				const int idxN = getLinearIndexInJacobian(fidxA, k);
+
+				for (int j = 1; j < 4; j++) {
+					triplets.push_back(T(idxE + j, idxE + j, -ce)); // subtract from electron fluid
+					triplets.push_back(T(idxE + j, idxN + j, -cn)); // subtract from electron fluid
+					triplets.push_back(T(idxN + j, idxE + j, +ce)); // add to neutral fluid
+					triplets.push_back(T(idxN + j, idxN + j, -cn)); // add to neutral fluid
+				}
+
+			}
+			{
+				// mE * Rrec * w1
+				const double c = mE;
+				const double ce = +c * mI * psi_Rrec(k) * nE(k) * nI(k);
+				const double ci = -c * psi_Rrec(k) * mI * pow(nE(k), 2);
+
+				const int idxE = getLinearIndexInJacobian(fidxE, k);
+				const int idxI = getLinearIndexInJacobian(fidxI, k);
+
+				for (int j = 1; j < 4; j++) {
+					triplets.push_back(T(idxE + j, idxE + j, -ce)); // subtract from electron fluid
+					triplets.push_back(T(idxE + j, idxI + j, -ci)); // subtract from electron fluid
+					triplets.push_back(T(idxI + j, idxE + j, +ce)); // add to ion fluid
+					triplets.push_back(T(idxI + j, idxI + j, +ci)); // add to ion fluid
 				}
 			}
-
-			// neutral fluid
 			{
-				double tempE = -(1. + mE) * (psi_Gion(k) * nA(k) / (1. + 1. / mE) - psi_Grec(k) * 2. * nE(k) * nI(k) / (1. + 1. / mE));
-				double tempI = -(1. + mE) * -1 * psi_Grec(k) * mI / (1. + mE) * pow(nE(k), 2);
-				double tempA = -(1. + mE) * psi_Gion(k) * nE(k) / (1. + mE);
-				// scalar factors in mE * (-(Tn/Te - 1) * Kion * w0)
-				tempE -= psi_Kion(k) * (Ta(k) / Te(k) - 1.) * nA(k);
-				tempA += psi_Kion(k) * (Ta(k) / Te(k) - 1.) * nE(k);
-				// scalar factors in mE * (Ti/Te - 1) * Krec * w1
-				tempE += psi_Krec(k) * mI * (Ti(k) / Te(k) - 1.) * nE(k) * nI(k);
-				tempI -= psi_Krec(k) * mI * (Ti(k) / Te(k) - 1.) * pow(nE(k), 2);
-				// scalar factors in mE * Rion * w0
-				tempE += mE * psi_Rion(k) * nA(k);
-				tempA -= mE * psi_Rion(k) * nE(k);
-				// apply these factors to triplets
-				const int offset = 5 * fidxA + 1;
-				for (int i = 0; i < 3; i++) {
-					triplets.push_back(T(offset + i, 5 * fidxE + 1 + i, tempE));
-					triplets.push_back(T(offset + i, 5 * fidxI + 1 + i, tempI));
-					triplets.push_back(T(offset + i, 5 * fidxA + 1 + i, tempA));
+				// mE * (Tn / Te - 1) * Kion * w0
+				const double c = mE * psi_Kion(k) * (Ta(k) / Te(k) - 1.);
+				const double ce = +c * nA(k);
+				const double cn = -c * nE(k);
+				const int idxE = getLinearIndexInJacobian(fidxE, k);
+				const int idxI = getLinearIndexInJacobian(fidxI, k);
+				const int idxN = getLinearIndexInJacobian(fidxA, k);
+				for (int j = 1; j < 4; j++) {
+					triplets.push_back(T(idxI + j, idxE + j, +ce)); // add to ion fluid
+					triplets.push_back(T(idxI + j, idxN + j, +cn)); // add to ion fluid
+					triplets.push_back(T(idxN + j, idxE + j, -ce)); // subtract from neutral fluid
+					triplets.push_back(T(idxN + j, idxN + j, -cn)); // subtract from neutral fluid
 				}
 			}
-
-			/*
-			* Energy sources
-			*/
+			{
+				// mE * (Ti / Te - 1) * Krec * w1
+				const double c = mE * psi_Krec(k) * mI * (Ti(k) / Te(k) - 1.);
+				const double ce = +c * nE(k) * nI(k);
+				const double ci = -c * pow(nE(k), 2);
+				const int idxE = getLinearIndexInJacobian(fidxE, k);
+				const int idxI = getLinearIndexInJacobian(fidxI, k);
+				const int idxN = getLinearIndexInJacobian(fidxA, k);
+				for (int j = 1; j < 4; j++) {
+					triplets.push_back(T(idxN + j, idxE + j, +ce)); // add to neutral fluid
+					triplets.push_back(T(idxN + j, idxI + j, +ci)); // add to neutral fluid
+					triplets.push_back(T(idxI + j, idxE + j, -ce)); // subtract from ion fluid
+					triplets.push_back(T(idxI + j, idxI + j, -ci)); // subtract from ion fluid
+				}
+			}
+			// Energy source
 			const int idxEE = getLinearIndexInJacobian(fidxE, k) + 4; // row index for Energy source in Electron fluid
 			const int idxEI = getLinearIndexInJacobian(fidxI, k) + 4; // row index for Energy sourcce in Ion fluid
 			const int idxEA = getLinearIndexInJacobian(fidxA, k) + 4; // row index for Energy source in Atom (Neutral) fluid
 
-			// electron fluid
 			{
-				double tempE = 0;
-				double tempI = 0;
-				double tempA = 0;
-				double tempRhs = 0;
+				// ionization energy source 
+				// (Grec - Gion) * E_ion
+				const double cNet_e = +E_ion * psi_Gion(k) * nA(k) - 2 * psi_Grec(k) * nE(k) * nI(k); // factors in front of n_e^{m+1}
+				const double cNet_i = -E_ion * psi_Grec(k) * pow(nE(k), 2); // factors in front of n_i^{m+1}
+				const double cNet_n = +E_ion * psi_Gion(k) * nE(k); // factors in front of n_n^{m+1}
+				const double cNet_rhs = -E_ion * psi_Gion(k) * nE(k) * nA(k) + 2 * psi_Grec(k) * pow(nE(k), 2) * nI(k);
+				const int idxE = getLinearIndexInJacobian(fidxE, k);
+				const int idxI = getLinearIndexInJacobian(fidxI, k);
+				const int idxN = getLinearIndexInJacobian(fidxA, k);
 
-				// ionization 
-				tempE += E_ion * (psi_Grec(k) * 2 * nE(k) * nI(k) - psi_Gion(k) * nA(k));
-				tempI += E_ion * psi_Grec(k) * pow(nE(k), 2);
-				tempA -= E_ion * psi_Gion(k) * nE(k);
-				tempRhs += E_ion * (psi_Gion(k) * (-2) * pow(nE(k), 2) * nI(k) - psi_Gion(k) * nE(k) * nI(k)); // check sign (is it A*x+b=0 or A*x-b=0?)
-
-				// TODO add these terms to implicit system
-
+				triplets.push_back(T(idxEE, idxE, +cNet_e)); // add to electron fluid
+				triplets.push_back(T(idxEE, idxN, +cNet_n)); // add to electron fluid
+				triplets.push_back(T(idxEE, idxI, +cNet_i)); // add to electron fluid
+				// TODO rhs
+				assert(false);
+			}
+			{
+				// E_net = Gion*Eion - Grec*Erec
+				const int idxE = getLinearIndexInJacobian(fidxE, k);
+				const int idxI = getLinearIndexInJacobian(fidxI, k);
+				const int idxN = getLinearIndexInJacobian(fidxA, k);
 				{
-					// 2 / (1 + 1 / mE) * (Tn - Te) * Jion 
-					const double c = 2. / (1. + 1. / mE) * psi_Jion(k); // common factor ...
-					const double cA = +c * nE(k) * (gamma - 1) * mA; // ... factor in front of (nT)_n^{m+1}
-					const double cE = -c * nA(k) * (gamma - 1) * mE; // ... factor in front of (nT)_e^{m+1}
-					const int colA = getLinearIndexInJacobian(fidxA, k);
-					const int colE = getLinearIndexInJacobian(fidxE, k);
-					for (int j = 1; j < 5; j++) {
-						if (j < 4) { // ... kinetic energy terms
-							const double valueA = cA * (-0.5) / nA(k) * statesA(j, k);
-							triplets.push_back(T(idxEE, colA + j, +valueA)); // add to electron fluid
-							triplets.push_back(T(idxEA, colA + j, -valueA)); // subtract from neutral fluid
-							const double valueE = cE * (-0.5) / nE(k) * statesE(j, k);
-							triplets.push_back(T(idxEE, colE + j, +valueE)); // add to electron fluid
-							triplets.push_back(T(idxEA, colE + j, -valueE)); // subtract from neutral fluid
-						}
-						else { // ... thermal energy terms
-							triplets.push_back(T(idxEE, colA + j, +cA)); // add to electron fluid
-							triplets.push_back(T(idxEA, colA + j, -cA)); // subtract from neutral fluid
-							triplets.push_back(T(idxEE, colE + j, +cE)); // add to electron fluid
-							triplets.push_back(T(idxEA, colE + j, -cE)); // subtract from neutral fluid
-						}
-					}
-				}
+					// kinetic energy term
+					const double c = (1. + mE) / 2.;
+					const Eigen::Vector3d ven = psi_Gion(k) * nA(k) / (1. + 1. / mE) * statesE.col(k).segment(1,3) + nE(k) / (1 + mE) * statesA.col(k).segment(1,3);
+					const Eigen::Vector3d vei = psi_Grec(k) * 2 * nE(k) * nI(k) / (1. + 1./mE) * statesE.col(k).segment(1,3) + mI * pow(nE(k), 2) / (1. + mE) * statesI.col(k).segment(1,3);
 
-				{
-					// 2 / (1 + 1/mE) * (Ti - Te) * Jrec
-					const double c = 2. / (1. + 1. / mE) * psi_Jrec(k); // common factor ...
-					const double cI = +c * pow(nE(k), 2) * (gamma - 1) * mI; // ... factor in front of (nT)_i^{m+1}
-					const double cE = -c * nE(k) * nI(k) * (gamma - 1) * mE; // ... factor in front of (nT)_e^{m+1}
-					const int colI = getLinearIndexInJacobian(fidxI, k);
-					const int colE = getLinearIndexInJacobian(fidxE, k);
-					for (int j = 1; j < 5; j++) {
-						if (j < 4) { // ... kinetic energy terms
-							const double valueI = cI * (-0.5) / nI(k) * statesI(j, k);
-							triplets.push_back(T(idxEE, colI + j, +valueI)); // add to electron fluid
-							triplets.push_back(T(idxEI, colI + j, -valueI)); // subtract from ion fluid
-							const double valueE = cE * (-0.5) / nE(k) * statesE(j, k);
-							triplets.push_back(T(idxEE, colE + j, +valueE)); // add to electron fluid
-							triplets.push_back(T(idxEI, colE + j, -valueE)); // subtract from ion fluid
-						}
-						else { // ... thermal energy terms
-							triplets.push_back(T(idxEE, colI + j, +cI)); // add to electron fluid
-							triplets.push_back(T(idxEI, colI + j, -cI)); // subtract from ion fluid
-							triplets.push_back(T(idxEE, colE + j, +cE)); // add to electron fluid
-							triplets.push_back(T(idxEI, colE + j, -cE)); // subtract from ion fluid
-						}
-					}
-				}
+					const Eigen::Vector3d ve = +c * (nA(k) / (1. + 1./mE) * ven - 2 * nE(k) * nI(k) / (1. + 1./mE) * vei); // vector in dot-product with (nu)_e^{m+1}
+					const Eigen::Vector3d vi = -c * psi_Grec(k) * mI / (1. + mE) * pow(nE(k),2) * vei; // vector in dot-product with (nu)_i^{m+1}
+					const Eigen::Vector3d vn = +c * psi_Gion(k) * nE(k) / (1 + mE) * ven; // vector in dot-product with (nu)_n^{m+1}
 
-				{
-					//  mE * Rion * w0 * U0
-					const double c = mE * psi_Rion(k); // common factor ...
-					const Eigen::Vector3d vE = 1. / (1. + 1. / mE) * 1. / nE(k) * statesE.col(k).segment(1, 3);
-					const Eigen::Vector3d vA = 1. / (1. + mE) *  1. / nA(k) * statesA.col(k).segment(1, 3);
-					const Eigen::Vector3d v = vA + vE; // ... vector in dot-product at timestep m
-					const Eigen::Vector3d cA = -nE(k) * c * v; // ... factor in front of (nu)_n^{m+1}
-					const Eigen::Vector3d cE = +nA(k) * c * v; // ... factor in front of (nu)_e^{m+1}
-
-					const int colA = getLinearIndexInJacobian(fidxA, k);
-					const int colE = getLinearIndexInJacobian(fidxE, k);
 					for (int j = 1; j < 4; j++) {
-						triplets.push_back(T(idxEA, colE + j, +cE(j - 1))); // add to neutral fluid
-						triplets.push_back(T(idxEA, colA + j, +cA(j - 1))); // add to neutral fluid 
-						triplets.push_back(T(idxEE, colE + j, -cE(j - 1))); // subtract from electron fluid 
-						triplets.push_back(T(idxEE, colA + j, -cA(j - 1))); // subtract from electron fluid 
+						triplets.push_back(T(idxI + 4, idxE + j, +ve(j - 1))); // add to ion fluid
+						triplets.push_back(T(idxN + 4, idxE + j, -ve(j - 1))); // subtract from neutral fluid
+						triplets.push_back(T(idxI + 4, idxI + j, +vi(j - 1))); // add to ion fluid
+						triplets.push_back(T(idxN + 4, idxI + j, -vi(j - 1))); // subtract from neutral fluid
+						triplets.push_back(T(idxI + 4, idxN + j, +vn(j - 1))); // add to ion fluid
+						triplets.push_back(T(idxN + 4, idxN + j, -vn(j - 1))); // subtract from neutral fluid
 					}
 				}
-
 				{
-					// Rrec * w1 * U1
-					assert(false);
+					// thermal energy term
+					const double c_ion = +3. / 2. * psi_Gion(k) * nE(k) * (gamma - 1.) * mA;
+					const double c_rec = -3. / 2. * psi_Grec(k) * pow(nE(k), 2) * (gamma - 1.) * mI;
+					const Eigen::Vector3d vn = c_ion * -0.5 / nA(k) * statesA.col(k).segment(1, 3); // vector in dot-product with (nu)_n^{m+1}
+					const Eigen::Vector3d vi = c_rec * -0.5 / nI(k) * statesI.col(k).segment(1, 3); // vector in dot-product with (nu)_i^{m+1}
+					for (int j = 1; j < 5; j++) {
+						if (j < 4) {
+							triplets.push_back(T(idxI + 4, idxN + j, +vn(j - 1))); // add to ion fluid
+							triplets.push_back(T(idxI + 4, idxI + j, +vi(j - 1))); // add to ion fluid
+							triplets.push_back(T(idxN + 4, idxN + j, -vn(j - 1))); // subtract from neutral fluid
+							triplets.push_back(T(idxN + 4, idxI + j, -vi(j - 1))); // subtract from neutral fluid
+						}
+						else {
+							triplets.push_back(T(idxI + 4, idxN + j, +c_ion)); // add to ion fluid
+							triplets.push_back(T(idxI + 4, idxI + j, +c_rec)); // add to ion fluid
+							triplets.push_back(T(idxN + 4, idxN + j, -c_ion)); // subtract from neutral fluid
+							triplets.push_back(T(idxN + 4, idxI + j, -c_rec)); // subtract from neutral fluid
+						}
+					}
 				}
-
 			}
-
-			{
-				// energy term Gion*Eion
-				assert(false);
-			}
-			{
-				// energy term Grec*Erec
-				assert(false);
-
-			}
-
 			{
 				// 1. / (1. + 1./mE) * (Tn - Te)^2 / Te * Wion
 				const double c = 1. / (1. + 1. / mE) * psi_Wion(k) * (Ta(k) / Te(k) - 1.);
