@@ -2348,14 +2348,15 @@ void AppmSolver::updateFluidStates(const double dt, const bool isImplicitSources
 	assert(M_elastic.cols() == n);
 
 	Eigen::SparseMatrix<double> M_inelastic;
-	M_inelastic = getJacobianEulerSourceInelasticCollisions();
-	assert(M_inelastic.nonZeros() == 0); // the Jacobian for inelastic collisions is not yet implemented
+	Eigen::VectorXd rhs_inelastic(n);
+	rhs_inelastic.setZero();
+
+	M_inelastic = getJacobianEulerSourceInelasticCollisions(rhs_inelastic);
 	assert(M_inelastic.rows() == n);
 	assert(M_inelastic.cols() == n);
 
 	Eigen::SparseMatrix<double> M;
-	M = M_elastic; // TODO
-	//M = M_elastic + M_inelastic;
+	M = M_elastic + M_inelastic;
 
 	if (isImplicitSources) {
 		// implicit scheme
@@ -2373,7 +2374,7 @@ void AppmSolver::updateFluidStates(const double dt, const bool isImplicitSources
 
 		// solve sparse system A*x = rhs
 		assert(statesVec.size() == sumOfFluxesVec.size());
-		Eigen::VectorXd rhs = statesVec - dt * sumOfFluxesVec;
+		Eigen::VectorXd rhs = statesVec - dt * sumOfFluxesVec - dt * rhs_inelastic;
 		Eigen::VectorXd x(rhs.size());
 		Eigen::BiCGSTAB<Eigen::SparseMatrix<double>> solver;
 		solver.compute(A);
@@ -2621,12 +2622,12 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceElasticCollisions(
 }
 
 /**
-* Get linearized, implicit system of equations to solve for source terms in fluid model 
+* Get linearized, implicit system of equations to solve for source terms S in fluid model 
 * due to inelastic collisions. 
 *
-* The implicit system is given by A*x - b = 0, where A is the Jacobian, 
+* The implicit system is given by A*x - b = S, where A is the Jacobian, 
 * x is the vector of fluid states at new timestep m+1, and b is the right-hand-side vector with 
-* data at timestep m (e.g., due to the linearization process). 
+* data at timestep m (e.g., due to the linearization process).
 *
 * @param rhs   right-hand side vector
 * @return Jacobian of inelastic collisions in fluid model.
@@ -2753,8 +2754,9 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 				triplets.push_back(T(idxN, idxN, -cNet_n)); // subtract Gnet from neutral fluid
 				triplets.push_back(T(idxN, idxI, -cNet_i)); // subtract Gnet from neutral fluid
 
-				// TODO rhs
-				assert(false);
+				rhs(idxE) -= cNet_rhs; // add terms to rhs-vector
+				rhs(idxI) -= cNet_rhs;
+				rhs(idxN) += cNet_rhs;
 			}
 			// Momentum source
 			{
@@ -2835,8 +2837,8 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 				triplets.push_back(T(idxEE, idxE, +cNet_e)); // add to electron fluid
 				triplets.push_back(T(idxEE, idxN, +cNet_n)); // add to electron fluid
 				triplets.push_back(T(idxEE, idxI, +cNet_i)); // add to electron fluid
-				// TODO rhs
-				assert(false);
+				
+				rhs(idxE + 4) -= cNet_rhs; // add terms to rhs vector
 			}
 			{
 				// E_net = Gion*Eion - Grec*Erec
@@ -3034,7 +3036,6 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 			}
 		}
 	}
-
 
 	// Create Jacobian matrix from triplets
 	const int mSize = 5 * n * nFluids;
