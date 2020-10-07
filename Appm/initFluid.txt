@@ -1,0 +1,17 @@
+# Initial conditions for fluid species
+#
+#
+Electron: 
+n: 1
+T: 1  
+u: 1
+
+Ion:
+n: 1
+T: 1
+u: 0
+
+Argon:
+n: 1
+T: 1
+u: 0
