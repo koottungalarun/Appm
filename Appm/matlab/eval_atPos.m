@@ -10,9 +10,19 @@ x = dualMesh.cellCenter - x0;
 dist = vecnorm(x')';
 [d,idx0] = min(dist); % idx0 is the cell index
 
-%% get list of output files
+%% get list of output files and sort by their timestamps
 filenameList = dir('appm-*.h5');
-iterMax = length(filenameList);
+[~,idx] = sort([filenameList.datenum]);
+filenameList = filenameList(idx);
+
+% check if time values in *.h5 files are sorted (increasing)
+clear time
+time = zeros(size(filenameList));
+for i = 1 : length(filenameList)
+    time(i) = h5read(filenameList(i).name, '/time');
+end
+assert(all(diff(time) > 0 ))
+clear time
 
 %%
 fluidNames = [
@@ -33,10 +43,11 @@ assert(isfile(filename));
 info = h5info(filename);
 
 i = 0;
+iterMax = length(filenameList);
 for idx = 1 : iterMax
-    i = i + 100;
-    filename = sprintf('appm-%05d.h5', i);
-%     filename = filenameList(idx).name;
+%     i = i + 100;
+%     filename = sprintf('appm-%05d.h5', i);
+    filename = filenameList(idx).name;
     if ~isfile(filename)
         warning("File not found: %s", filename)
         break
@@ -108,19 +119,12 @@ title('Temperature')
 legend(fluidNames)
 
 
-
-% semilogy(time, stateE)
-% grid on
-% xlabel('t')
-% ylabel('stateE')
-% legend(fluidNames)
-% 
-% % subplot(3,1,2)
-% figure(2)
-% plot(time, p)
-% grid on
-% xlabel('t')
-% ylabel('p')
-% legend(fluidNames)
+figure(2)
+for i = 1 : 3
+    subplot(3,1,i)
+    plot(time, u(:,i))
+    grid on
+    legend(fluidNames(i))
+end
 
 
