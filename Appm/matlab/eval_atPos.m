@@ -12,19 +12,31 @@ dist = vecnorm(x')';
 
 %% get list of output files and sort by their timestamps
 filenameList = dir('appm-*.h5');
-[~,idx] = sort([filenameList.datenum]);
-filenameList = filenameList(idx);
+% [~,idx] = sort([filenameList.datenum]);
+% filenameList = filenameList(idx);
 
-% check if time values in *.h5 files are sorted (increasing)
 clear time
 time = zeros(size(filenameList));
 for i = 1 : length(filenameList)
     time(i) = h5read(filenameList(i).name, '/time');
 end
-assert(all(diff(time) > 0 ))
-clear time
+[time,idx] = sort(time);
+filenameList = filenameList(idx);
+
+if ~any(diff(time) <= 0)
+    time2 = zeros(size(filenameList));
+    for i = 1 : length(filenameList)
+        time2(i) = h5read(filenameList(i).name, '/time');
+    end
+else 
+    time2 = time;
+end
+% check if time values in *.h5 files are sorted (increasing)
+assert(all(diff(time2) > 0 ))
+
 
 %%
+clear time time2
 fluidNames = [
     "Electron"
     "Ion"
@@ -79,7 +91,7 @@ for idx = 1 : iterMax
     end
 end
 
-%%
+%% Plot data as figures
 close all
 pos = [50 50 1400 800]; % left bottom width height
 figure('Position', pos);
@@ -97,7 +109,9 @@ hold off
 grid on
 xlabel('t')
 ylabel('n')
-legend(fluidNames)
+fluidNames_N = fluidNames;
+fluidNames_N(3) = "1 - " + fluidNames(3);
+legend(fluidNames_N)
 title('Number density')
 
 idx = idx + 1;
