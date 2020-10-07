@@ -92,7 +92,7 @@ subplot(rows, cols, idx)
 plot(time, n(:,1), '-')
 hold on
 plot(time, n(:,2), '--')
-plot(time, n(:,3), '-.')
+plot(time, 1 - n(:,3), '-.')
 hold off
 grid on
 xlabel('t')
@@ -125,6 +125,20 @@ for i = 1 : 3
     plot(time, u(:,i))
     grid on
     legend(fluidNames(i))
+    if i == 1
+        title('Velocity')
+    end
+end
+
+figure(3)
+for i = 1 : 3
+    subplot(3,1,i)
+    plot(time, n(:,i))
+    grid on
+    legend(fluidNames(i))
+    if i == 1
+        title('Number density')
+    end
 end
 
 

@@ -2,16 +2,16 @@
 #
 #
 Electron: 
-n: 1
-T: 1  
-u: 1
+n: 1e-3
+T: 3  
+u: 0
 
 Ion:
-n: 1
-T: 1
+n: 1e-3
+T: 3
 u: 0
 
 Argon:
-n: 1
-T: 1
+n: 0.999
+T: 3
 u: 0
