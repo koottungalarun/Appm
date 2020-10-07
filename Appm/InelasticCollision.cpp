@@ -88,7 +88,36 @@ const Eigen::VectorXd InelasticCollision::getGrec(const Eigen::VectorXd & nI, co
 	const Eigen::VectorXd factor2 = (-2 * lambdaVec).array().exp() * xStar.array().exp();
 	const Eigen::VectorXd I_Grec = getGrecInterpolated(Te, lambdaVec);
 	const Eigen::VectorXd Grec = factor0 * factor1.array() * factor2.array() * I_Grec.array();
-	assert(Grec.allFinite());
+	const bool isGrecFinite = Grec.allFinite();
+	if (!isGrecFinite) {
+		std::cout << "is factor0 finite: " << std::isfinite(factor0) << std::endl;
+		std::cout << "is factor1 finite: " << factor1.allFinite() << std::endl;
+		std::cout << "is factor2 finite: " << factor2.allFinite() << std::endl;
+		std::cout << "is I_Grec finite: " << I_Grec.allFinite() << std::endl;
+
+		const int rows = nI.size();
+		Eigen::MatrixXd data(rows, 4);
+		data.col(0) = factor1;
+		data.col(1) = factor2;
+		data.col(2) = I_Grec;
+		data.col(3) = Grec;
+		std::ofstream("temp.dat") << data << std::endl;
+
+		std::cout << "Data for cell idx = 0" << std::endl;
+		std::cout << "nI: " << nI(0) << std::endl;
+		std::cout << "nE: " << nE(0) << std::endl;
+		std::cout << "vthE: " << vthE(0) << std::endl;
+		std::cout << "xStar: " << xStar(0) << std::endl;
+		std::cout << "mE: " << mE << std::endl;
+		std::cout << "Te: " << Te(0) << std::endl;
+		std::cout << "lambdaVec: " << lambdaVec(0) << std::endl;
+		std::cout << "factor0: " << factor0 << std::endl;
+		std::cout << "factor1: " << factor1(0) << std::endl;
+		std::cout << "factor2: " << factor2(0) << std::endl;
+		std::cout << "I_Grec: " << I_Grec(0) << std::endl;
+		std::cout << "Grec: " << Grec(0) << std::endl;
+	}
+	assert(isGrecFinite);
 	return Grec;
 }
 
