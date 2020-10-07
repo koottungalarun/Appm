@@ -96,6 +96,8 @@ private:
 
 	void writeCsvFile(const std::string & filename);
 
+	bool isSorted(const Eigen::VectorXd & data);
+
 	template<class T>
 	T applyTransform(const T array, const DataTransform & trans);
 };
