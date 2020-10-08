@@ -226,23 +226,9 @@ void AppmSolver::run()
 				setFluidFaceFluxes();
 			}
 
-
 			// Affine-linear function for implicit-consistent formulation of current density J_h = Msigma * E_h + Jaux
 			Eigen::SparseMatrix<double> Msigma;
 			Msigma = get_Msigma_spd(J_h_aux, dt, time);
-			//std::cout << "Analyze Msigma:" << std::endl;
-			//Eigen::isSymmetricPositiveDefinite(Msigma, true);
-			//const int nEdges = primalMesh.getNumberOfEdges();
-			//Eigen::SparseMatrix<double> Msigma_inner = Msigma.topLeftCorner(nEdges, nEdges);
-			//std::cout << "Analyze Msigma inner:" << std::endl;
-			//Eigen::isSymmetricPositiveDefinite(Msigma_inner, true);
-			//{
-			//	std::stringstream ss;
-			//	ss << "Msigma-" << iteration << ".h5";
-			//	const std::string filename = ss.str();
-			//	H5Writer MsigmaWriter(filename);
-			//	Eigen::sparseMatrixToFile(Msigma_inner, "/MsigmaInner", MsigmaWriter);
-			//}
 
 			// Maxwell equations
 			if (solverParams.getMaxwellEnabled()) {
@@ -2307,40 +2293,6 @@ const Eigen::Vector3d AppmSolver::getSpeciesFaceFluxAtCathode(const Face * face,
 	return flux;
 }
 
-//void AppmSolver::setFluidSourceTerm()
-//{
-//	const int nCells = dualMesh.getNumberOfCells();
-//	const int nFluids = getNFluids();
-//
-//	// Set source term
-//	for (int cIdx = 0; cIdx < nCells; cIdx++) {
-//		const Cell * cell = dualMesh.getCell(cIdx);
-//
-//		// Skip cell that ore not of type Fluid
-//		if (cell->getType() != Cell::Type::FLUID) {
-//			continue;
-//		}
-//		// For all fluids ... 
-//		for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-//			Eigen::VectorXd srcLocal(5);
-//			srcLocal.setZero();
-//
-//			//srcLocal = testcase_001_FluidSourceTerm(time, cell, fluidIdx);
-//
-//			if (appmParams.isLorentzForceElectricEnabled) {
-//				srcLocal.segment(1, 3) += LorentzForce_electric.col(cIdx).segment(3 * fluidIdx, 3);
-//			}
-//			if (appmParams.isLorentzForceMagneticEnabled) {
-//				srcLocal.segment(1, 3) += LorentzForce_magnetic.col(cIdx).segment(3 * fluidIdx, 3);
-//			}
-//
-//			// TODO: reaction source terms
-//
-//			fluidSources.col(cIdx).segment(5 * fluidIdx, 5) += srcLocal;
-//		}
-//	}
-//	std::cout << "fluid sources maxCoeff: " << fluidSources.cwiseAbs().maxCoeff() << std::endl;
-//}
 
 /** 
 * Update to next timestep: U(m+1) = U(m) - dt / volume * sum(fluxes) + dt * source.
@@ -2415,26 +2367,17 @@ void AppmSolver::updateFluidStates(const double dt, const bool isImplicitSources
 		// Get sources in vector format
 		assert(M.cols() == statesVec.size());
 		assert(statesVec.allFinite());
-		Eigen::VectorXd srcVec = M * statesVec; // src = M * state
+		Eigen::VectorXd srcVec = M * statesVec; 
 		assert(srcVec.allFinite());
 
 		// Reshape source vector to matrix format
 		Eigen::Map<Eigen::MatrixXd> src_as_matrix(srcVec.data(), fluidSources.rows(), nFluidCells);
 		fluidSources.leftCols(nFluidCells) = src_as_matrix;
 
-		Eigen::MatrixXd inelasticSources = getInelasticSourcesExplicit();
-		fluidSources.leftCols(nFluidCells) += inelasticSources;
-
-		std::cout << "max of sources: " << fluidSources.cwiseAbs().maxCoeff() << std::endl;
-
 		// Update states
 		fluidStates.leftCols(nFluidCells) += 
 			- dt * sumOfFaceFluxes.leftCols(nFluidCells) 
 			+ dt * fluidSources.leftCols(nFluidCells);
-
-		const int idxE = getSpeciesIndex("e");
-		const Eigen::VectorXd electronState = fluidStates.col(0).segment(5 * idxE, 5);
-		std::cout << "electron state: " << electronState.transpose() << std::endl;
 	}
 }
 

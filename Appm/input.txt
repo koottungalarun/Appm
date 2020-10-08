@@ -32,9 +32,9 @@ initEfield: 0 0 0
 #
 ### Simulation controls
 maxTime: 10
-maxIterations: 0
+maxIterations: 10
 timestepSizeFactor: 1
-outputFrequency: 10
+outputFrequency: 1
 #
 ### numerics
 #
