@@ -4495,9 +4495,9 @@ const std::string AppmSolver::xdmf_GridPrimalEdges(const int iteration) const
 }
 const std::string AppmSolver::xdmf_GridPrimalFaces(const int iteration) const
 {
-	const std::string datafilename = primalMesh.getMeshDataFilename();
+	const std::string meshFilename = primalMesh.getMeshDataFilename();
 	H5Reader h5reader;
-	h5reader = H5Reader(datafilename);
+	h5reader = H5Reader(meshFilename);
 	const int nElements = h5reader.readDataSize("/face2vertex");
 	assert(nElements > 0);
 
@@ -4506,37 +4506,37 @@ const std::string AppmSolver::xdmf_GridPrimalFaces(const int iteration) const
 	ss << "<Topology TopologyType=\"Mixed\""
 		<< " NumberOfElements=\"" << primalMesh.getNumberOfFaces() << "\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << nElements << "\" DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
-	ss << datafilename << ":/face2vertex" << std::endl;
+	ss << meshFilename << ":/face2vertex" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Topology>" << std::endl;
 
 	ss << "<Geometry GeometryType=\"XYZ\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfVertices() << " 3\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << datafilename << ":/vertexPos" << std::endl;
+	ss << meshFilename << ":/vertexPos" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Geometry>" << std::endl;
 
 	ss << "<Attribute Name=\"Face index\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfFaces() << "\""
 		<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
-	ss << datafilename << ":/faceIndex" << std::endl;
+	ss << meshFilename << ":/faceIndex" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
 	ss << "<Attribute Name=\"Vertex type\" AttributeType=\"Scalar\" Center=\"Node\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfVertices() << "\""
 		<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
-	ss << datafilename << ":/vertexType" << std::endl;
+	ss << meshFilename << ":/vertexType" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
-
+	const std::string dataFilename = getOutputFilename(iteration);
 	if (isWriteBfield) {
 		ss << "<Attribute Name=\"Magnetic Flux\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfFaces() << " 3\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << "appm-" << iteration << ".h5:/B" << std::endl;
+		ss << dataFilename << ":/B" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 	}
@@ -4544,14 +4544,14 @@ const std::string AppmSolver::xdmf_GridPrimalFaces(const int iteration) const
 	ss << "<Attribute Name=\"Magnetic Flux Vertex Centered\" AttributeType=\"Vector\" Center=\"Node\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfVertices() << " 3\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << "appm-" << iteration << ".h5:/Bcc" << std::endl;
+	ss << dataFilename << ":/Bcc" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
 	ss << "<Attribute Name=\"Magnetic Flux Vertex Centered Mag\" AttributeType=\"Scalar\" Center=\"Node\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << "\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << "appm-" << iteration << ".h5" << ":/Bcc_mag" << std::endl;
+	ss << dataFilename << ":/Bcc_mag" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
@@ -4563,36 +4563,37 @@ const std::string AppmSolver::xdmf_GridPrimalFaces(const int iteration) const
 
 const std::string AppmSolver::xdmf_GridDualEdges(const int iteration) const
 {
-	const std::string datafilename = dualMesh.getMeshDataFilename();
+	const std::string meshFilename = dualMesh.getMeshDataFilename();
 	std::stringstream ss;
 	ss << "<Grid Name=\"Dual Edges\">" << std::endl;
 	ss << "<Topology TopologyType=\"Polyline\""
 		<< " NumberOfElements=\"" << dualMesh.getNumberOfEdges() << "\"" 
 		<< " NodesPerElement=\"2\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << 2 * dualMesh.getNumberOfEdges() << "\" DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
-	ss << datafilename << ":/edge2vertex" << std::endl;
+	ss << meshFilename << ":/edge2vertex" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Topology>" << std::endl;
 
 	ss << "<Geometry GeometryType=\"XYZ\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfVertices() << " 3\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << datafilename << ":/vertexPos" << std::endl;
+	ss << meshFilename << ":/vertexPos" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Geometry>" << std::endl;
 
 	ss << "<Attribute Name=\"Edge index\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfEdges() << "\""
 		<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
-	ss << datafilename << ":/edgeIdx" << std::endl;
+	ss << meshFilename << ":/edgeIdx" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
+	const std::string dataFilename = getOutputFilename(iteration);
 	if (isWriteHfield) {
 		ss << "<Attribute Name=\"Magnetic field\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfEdges() << " 3\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << "appm-" << iteration << ".h5:/H" << std::endl;
+		ss << dataFilename << ":/H" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 	}
@@ -4602,9 +4603,9 @@ const std::string AppmSolver::xdmf_GridDualEdges(const int iteration) const
 
 const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 {
-	const std::string datafilename = dualMesh.getMeshDataFilename();
+	const std::string meshFilename = dualMesh.getMeshDataFilename();
 	H5Reader h5reader;
-	h5reader = H5Reader(datafilename);
+	h5reader = H5Reader(meshFilename);
 	const int nElements = h5reader.readDataSize("/face2vertex");
 	assert(nElements > 0);
 
@@ -4613,38 +4614,39 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 	ss << "<Topology TopologyType=\"Mixed\""
 		<< " NumberOfElements=\"" << dualMesh.getNumberOfFaces() << "\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << nElements << "\" DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
-	ss << datafilename << ":/face2vertex" << std::endl;
+	ss << meshFilename << ":/face2vertex" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Topology>" << std::endl;
 
 	ss << "<Geometry GeometryType=\"XYZ\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfVertices() << " 3\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << datafilename << ":/vertexPos" << std::endl;
+	ss << meshFilename << ":/vertexPos" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Geometry>" << std::endl;
 
 	ss << "<Attribute Name=\"Face index\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 		<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
-	ss << datafilename << ":/faceIndex" << std::endl;
+	ss << meshFilename << ":/faceIndex" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 	
 	ss << "<Attribute Name=\"Face Fluid Type\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 		<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
-	ss << datafilename << ":/faceFluidType" << std::endl;
+	ss << meshFilename << ":/faceFluidType" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
 	ss << "<Attribute Name=\"" << "Face Normal" << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << datafilename << ":/faceNormal" << std::endl;
+	ss << meshFilename << ":/faceNormal" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
+	const std::string dataFilename = getOutputFilename(iteration);
 
 	for (int fidx = 0; fidx < getNFluids(); fidx++) {
 		const std::string speciesName = getSpecies(fidx).getName();
@@ -4653,7 +4655,7 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 			<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
-		ss << "appm-" << iteration << ".h5:/" << dataName << std::endl;
+		ss << dataFilename << ":/" << dataName << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
@@ -4661,7 +4663,7 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << "appm-" << iteration << ".h5:/" << speciesName << "-massFlux" << std::endl;
+		ss << dataFilename << ":/" << speciesName << "-massFlux" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
@@ -4669,7 +4671,7 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << "appm-" << iteration << ".h5:/" << speciesName << "-momentumFlux" << std::endl;
+		ss << dataFilename << ":/" << speciesName << "-momentumFlux" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
@@ -4677,7 +4679,7 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << "appm-" << iteration << ".h5:/" << speciesName << "-energyFlux" << std::endl;
+		ss << dataFilename << ":/" << speciesName << "-energyFlux" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
@@ -4685,7 +4687,7 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << "appm-" << iteration << ".h5:/" << speciesName << "-massFluxImplicitTerm" << std::endl;
+		ss << dataFilename << ":/" << speciesName << "-massFluxImplicitTerm" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 	}
@@ -4693,7 +4695,7 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 	ss << "<Attribute Name=\"Current density\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << "appm-" << iteration << ".h5:/CurrentDensity" << std::endl;
+	ss << dataFilename << ":/CurrentDensity" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 	
@@ -4701,14 +4703,14 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 	ss << "<Attribute Name=\"Current density aux\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << "appm-" << iteration << ".h5:/j_h_aux_vector" << std::endl;
+	ss << dataFilename << ":/j_h_aux_vector" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
 	ss << "<Attribute Name=\"J h aux\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << "appm-" << iteration << ".h5:/J_h_aux" << std::endl;
+	ss << dataFilename << ":/J_h_aux" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
