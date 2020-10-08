@@ -81,7 +81,7 @@ void removeFiles(const fs::path folder, const std::string extension) {
 		const std::string filename = p.path().string();
 		const std::string ext = filename.substr(filename.size() - extension.size());
 		if (ext == extension) {
-			std::cout << filename << std::endl;
+			//std::cout << filename << std::endl;
 			const bool isRemoved = fs::remove(p.path()); // delete file
 			assert(isRemoved);
 			counter++;

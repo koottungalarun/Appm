@@ -61,6 +61,8 @@ eStar_J = eStar_eV * eV_to_J;
 %% Parameters
 TeVec = (300 : 100 : 40e3)';
 lambdaVec = [0 0.01 0.1 0.3 1 3 10]; %logspace(-2, 1, 50)];
+% n = 5;
+lambdaVec = [0 logspace(-5, 0, 5) 3 10];
 
 %% Integrands
 fun_Gion = @(x0, Te) ...

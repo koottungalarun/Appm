@@ -17,14 +17,14 @@ const Eigen::VectorXd Physics::primitive2state(const double massRatio, const dou
 	assert(n > 0);
 	assert(p > 0);
 	assert(massRatio > 0);
-	const double n_e = 1. / (gamma - 1) * 1. / massRatio * p; // ideal gas law
-	assert(n_e > 0);
-	const double n_etot = n_e + 0.5 * n * u.squaredNorm();
-	assert(n_etot > 0);
+	const double ne = 1. / (gamma - 1) * 1. / massRatio * p; // ideal gas law
+	assert(ne > 0);
+	const double ne_tot = ne + 0.5 * n * u.squaredNorm();
+	assert(ne_tot > 0);
 	Eigen::VectorXd state = Eigen::VectorXd::Zero(5);
 	state(0) = n;
 	state.segment(1, 3) = n * u;
-	state(4) = n_etot;
+	state(4) = ne_tot;
 	return state;
 }
 
@@ -50,8 +50,8 @@ double Physics::getTemperature(const Eigen::VectorXd & state, const double massR
 	assert(n > 0);
 	assert(ne_tot > 0);
 	const Eigen::Vector3d uvec = state.segment(1, 3) / n;
-	double ne = ne_tot - 0.5 * n * uvec.norm();
-	double T = (Physics::gamma - 1) * massRatio * ne;
+	double ne = ne_tot - 0.5 * n * uvec.squaredNorm();
+	double T = (Physics::gamma - 1) * massRatio * ne / n;
 	assert(T > 0);
 	return T;
 }

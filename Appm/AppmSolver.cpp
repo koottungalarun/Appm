@@ -1423,6 +1423,16 @@ void AppmSolver::init_multiFluid_readFromFile(const std::string & filename)
 		double p = n * T;
 		Eigen::VectorXd state = Physics::primitive2state(massRatio, n, p, u);
 
+		// check if state is computed consistently:
+		{
+			double Ts = Physics::getTemperature(state, massRatio);
+			std::cout << "Check temperature conversion: " << std::endl;
+			std::cout << "T  = " << T << std::endl;
+			std::cout << "Ts = " << Ts << std::endl;
+			const double relErr = std::abs(Ts / T - 1.); // relative error between T and Ts
+			assert(relErr < 1e-4); // check if Ts and T are almost equal
+		}
+
 		// Set fluid state for all fluid cells
 		for (int k = 0; k < dualMesh.getNumberFluidCells(); k++) {
 			fluidStates.col(k).segment(5 * fidx, 5) = state;

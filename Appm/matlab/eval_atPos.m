@@ -10,11 +10,33 @@ x = dualMesh.cellCenter - x0;
 dist = vecnorm(x')';
 [d,idx0] = min(dist); % idx0 is the cell index
 
-%% get list of output files
+%% get list of output files and sort by their timestamps
 filenameList = dir('appm-*.h5');
-iterMax = length(filenameList);
+% [~,idx] = sort([filenameList.datenum]);
+% filenameList = filenameList(idx);
+
+clear time
+time = zeros(size(filenameList));
+for i = 1 : length(filenameList)
+    time(i) = h5read(filenameList(i).name, '/time');
+end
+[time,idx] = sort(time);
+filenameList = filenameList(idx);
+
+if ~any(diff(time) <= 0)
+    time2 = zeros(size(filenameList));
+    for i = 1 : length(filenameList)
+        time2(i) = h5read(filenameList(i).name, '/time');
+    end
+else 
+    time2 = time;
+end
+% check if time values in *.h5 files are sorted (increasing)
+assert(all(diff(time2) > 0 ))
+
 
 %%
+clear time time2
 fluidNames = [
     "Electron"
     "Ion"
@@ -33,10 +55,11 @@ assert(isfile(filename));
 info = h5info(filename);
 
 i = 0;
+iterMax = length(filenameList);
 for idx = 1 : iterMax
-    i = i + 100;
-    filename = sprintf('appm-%05d.h5', i);
-%     filename = filenameList(idx).name;
+%     i = i + 100;
+%     filename = sprintf('appm-%05d.h5', i);
+    filename = filenameList(idx).name;
     if ~isfile(filename)
         warning("File not found: %s", filename)
         break
@@ -68,7 +91,7 @@ for idx = 1 : iterMax
     end
 end
 
-%%
+%% Plot data as figures
 close all
 pos = [50 50 1400 800]; % left bottom width height
 figure('Position', pos);
@@ -81,12 +104,14 @@ subplot(rows, cols, idx)
 plot(time, n(:,1), '-')
 hold on
 plot(time, n(:,2), '--')
-plot(time, n(:,3), '-.')
+plot(time, 1 - n(:,3), '-.')
 hold off
 grid on
 xlabel('t')
 ylabel('n')
-legend(fluidNames)
+fluidNames_N = fluidNames;
+fluidNames_N(3) = "1 - " + fluidNames(3);
+legend(fluidNames_N)
 title('Number density')
 
 idx = idx + 1;
@@ -108,19 +133,26 @@ title('Temperature')
 legend(fluidNames)
 
 
+figure(2)
+for i = 1 : 3
+    subplot(3,1,i)
+    plot(time, u(:,i))
+    grid on
+    legend(fluidNames(i))
+    if i == 1
+        title('Velocity')
+    end
+end
 
-% semilogy(time, stateE)
-% grid on
-% xlabel('t')
-% ylabel('stateE')
-% legend(fluidNames)
-% 
-% % subplot(3,1,2)
-% figure(2)
-% plot(time, p)
-% grid on
-% xlabel('t')
-% ylabel('p')
-% legend(fluidNames)
+figure(3)
+for i = 1 : 3
+    subplot(3,1,i)
+    plot(time, n(:,i))
+    grid on
+    legend(fluidNames(i))
+    if i == 1
+        title('Number density')
+    end
+end
 
 

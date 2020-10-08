@@ -147,6 +147,11 @@ void Interpolation2d::readCsvFile(const std::string & filename, const DataTransf
 
 	Eigen::VectorXd lambdaVec = firstRow.segment(1, firstRow.size() - 1);
 	Eigen::VectorXd TeVec = firstCol.segment(1, firstCol.size() - 1);
+
+	// assert that values in lambdaVec and TeVec are montonic increasing
+	assert(isSorted(lambdaVec));
+	assert(isSorted(TeVec));
+
 	TeVec *= yScale;
 
 	MatrixXdRowMajor dataMatrix = map.bottomRightCorner(rows - 1, cols - 1);
@@ -174,6 +179,7 @@ void Interpolation2d::readCsvFile(const std::string & filename, const DataTransf
 	this->m = this->y.length();
 	assert(this->n > 0);
 	assert(this->m > 0);
+
 }
 
 void Interpolation2d::writeCsvFile(const std::string & filename)
@@ -191,6 +197,24 @@ void Interpolation2d::writeCsvFile(const std::string & filename)
 		file << std::endl;
 	}
 
+}
+
+/**
+* If data vector is sorted in ascending order.
+* @param data   data vector with at least 2 elements
+* @return if data vector is sorted
+*/
+bool Interpolation2d::isSorted(const Eigen::VectorXd & data)
+{
+	assert(data.size() > 1);
+	const int n = data.size();
+	const Eigen::VectorXd temp = data.bottomRows(n - 1) - data.topRows(n - 1);
+	const bool isSorted = (temp.array() > 0).all();
+	if (!isSorted) {
+		std::cout << "Data vector is not sorted: " << std::endl;
+		std::cout << data << std::endl;
+	}
+	return isSorted;
 }
 
 template <class T>
