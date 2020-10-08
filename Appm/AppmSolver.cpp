@@ -10,12 +10,9 @@ AppmSolver::AppmSolver()
 AppmSolver::~AppmSolver()
 {
 	for (int i = elasticCollisions.size() - 1; i >= 0; i--) {
-		if (elasticCollisions[i] != nullptr) {
-			delete elasticCollisions[i];
-			elasticCollisions[i] = nullptr;
-		}
+		delete elasticCollisions[i];
+		elasticCollisions[i] = nullptr;
 	}
-	elasticCollisions = std::vector<ElasticCollision*>();
 }
 
 
@@ -114,10 +111,6 @@ void AppmSolver::init()
 	//E_cc = getEfieldAtCellCenter();
 }
 
-/**
-* Get string to display informations of the current iteration.
-* @return string with informations of the current iteration
-*/
 std::string AppmSolver::getIterationHeader(const int iter, const double time, const double dt) const
 {
 	std::stringstream ss;
@@ -131,9 +124,7 @@ std::string AppmSolver::getIterationHeader(const int iter, const double time, co
 }
 
 
-/**
-* Run the APPM solver with settings as provided.
-*/
+
 void AppmSolver::run()
 {
 	init();
