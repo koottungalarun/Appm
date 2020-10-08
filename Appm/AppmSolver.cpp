@@ -346,9 +346,9 @@ void AppmSolver::run()
 		std::cout << "**********************************************************" << std::endl;
 		std::cout << "**********************************************************" << std::endl;
 		writeOutput(iteration, time);
-		writeXdmf("appm.xdmf");
-		writeXdmfDualVolume("appm-volume.xdmf");
 	}
+	writeXdmf("appm.xdmf");
+	writeXdmfDualVolume("appm-volume.xdmf");
 
 	std::cout << std::endl;
 	std::cout << "Final time:      " << time << std::endl;
@@ -3648,6 +3648,16 @@ void AppmSolver::writeXdmfDualVolume(const std::string & filename)
 }
 
 /**
+* Get formatted string of output filename.
+*
+* @param iteration  iteration number 
+* @return formatted string of output filename
+*/
+std::string getOutputFilename(const int iteration) {
+	return (std::stringstream() << "appm-" << std::setfill('0') << std::setw(5) << iteration << ".h5").str();
+}
+
+/**
 * Write data to output file.
 */
 void AppmSolver::writeOutput(const int iteration, const double time)
@@ -3657,7 +3667,7 @@ void AppmSolver::writeOutput(const int iteration, const double time)
 	timeStamps.push_back(time);
 
 
-	const std::string filename = (std::stringstream() << "appm-" << std::setfill('0') << std::setw(5) << iteration << ".h5").str();
+	const std::string filename = getOutputFilename(iteration); 
 
 	const int nPrimalFaces = primalMesh.getNumberOfFaces();
 	const int nDualEdges = dualMesh.getNumberOfEdges();
@@ -4445,36 +4455,37 @@ void AppmSolver::init_RaviartThomasInterpolation()
 
 const std::string AppmSolver::xdmf_GridPrimalEdges(const int iteration) const
 {
-	const std::string datafilename = primalMesh.getMeshDataFilename();
+	const std::string meshFilename = primalMesh.getMeshDataFilename();
 	std::stringstream ss;
 	ss << "<Grid Name=\"Primal Edges\">" << std::endl;
 	ss << "<Topology TopologyType=\"Polyline\""
 		<< " NumberOfElements=\"" << primalMesh.getNumberOfEdges() << "\""
 		<< " NodesPerElement=\"2\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << 2 * primalMesh.getNumberOfEdges() << "\" DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
-	ss << datafilename << ":/edge2vertex" << std::endl;
+	ss << meshFilename << ":/edge2vertex" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Topology>" << std::endl;
 
 	ss << "<Geometry GeometryType=\"XYZ\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfVertices() << " 3\""
 		<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-	ss << datafilename << ":/vertexPos" << std::endl;
+	ss << meshFilename << ":/vertexPos" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Geometry>" << std::endl;
 
 	ss << "<Attribute Name=\"Edge index\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfEdges() << "\""
 		<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
-	ss << datafilename << ":/edgeIdx" << std::endl;
+	ss << meshFilename << ":/edgeIdx" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
 	if (isWriteEfield) {
+		const std::string dataFilename = getOutputFilename(iteration);
 		ss << "<Attribute Name=\"Electric field\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfEdges() << " 3\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
-		ss << "appm-" << iteration << ".h5:/E" << std::endl;
+		ss << dataFilename << ":/E" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 	}
@@ -4743,7 +4754,7 @@ const std::string AppmSolver::xdmf_GridDualCells(const int iteration) const
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
-	const std::string datafilename = (std::stringstream() << "appm-" << iteration << ".h5").str();
+	const std::string datafilename = getOutputFilename(iteration); 
 
 	ss << "<Attribute Name=\"Magnetic Flux Cell Centered\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 	ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << " 3\""
