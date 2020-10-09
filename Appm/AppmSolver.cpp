@@ -15,6 +15,35 @@ AppmSolver::~AppmSolver()
 	}
 }
 
+/**
+* @return get message how data should be visualized.
+*/
+const std::string AppmSolver::message_howToVisualizeData(const std::string & outFilename_volume, const std::string & outFilename_surface) const
+{
+	std::stringstream ss;
+	ss << "Note on data output: \n";
+	ss << " - heavy data is stored in HDF5 files. \n";
+	ss << " - light data is stored in XDMF files (version 3).  \n";
+	ss << " (Polyhedrons have been added to XDMF in version 3; this was not supported in version 2.)  \n";
+	ss << "  \n";
+	ss << "Use Paraview (version 5.6.0) to visualize. It comes with three readers: \n";
+	ss << " - XDMF Reader:  CANNOT read polyhedrons, but  CAN   read grid-of-grids. \n";
+	ss << " - Xdmf3ReaderS:  CAN   read polyhedrons, but CANNOT grid-of-grids (i.e., grids with GridType=Tree). \n";
+	ss << " - Xdmf3ReaderT: ??? \n";
+	ss << "  \n";
+	ss << "Therefore output data has been splitted into two *.xdmf files:  \n";
+	ss << " - " << outFilename_surface << ":   contains data with geometric dimensionality <= 2 (i.e., vertices, edges, faces) \n";
+	ss << " - " << outFilename_volume << ": contains volumetric data \n";
+	ss << "  \n";
+	ss << "To visualize volumetric data: \n";
+	ss << " - Start paraview, open " << outFilename_volume << ", and read it with Xdmf3ReaderS. \n";
+	ss << "  \n";
+	ss << "To visualize point, edge, or surface data:  \n";
+	ss << " - Start paraview, open " << outFilename_surface << ", and read it with XDMF Reader. \n";
+	ss << "  \n";
+	return ss.str();
+}
+
 
 void AppmSolver::init()
 {
@@ -332,9 +361,11 @@ void AppmSolver::run()
 		std::cout << "**********************************************************" << std::endl;
 		std::cout << "**********************************************************" << std::endl;
 		writeOutput(iteration, time);
-		writeXdmf("appm.xdmf");
-		writeXdmfDualVolume("appm-volume.xdmf");
 	}
+	const std::string filename_surfaceData = "appm.xdmf";
+	const std::string filename_volumeData = "appm-volume.xdmf";
+	writeXdmf(filename_surfaceData);
+	writeXdmfDualVolume(filename_volumeData);
 
 	std::cout << std::endl;
 	std::cout << "Final time:      " << time << std::endl;
@@ -346,14 +377,7 @@ void AppmSolver::run()
 
 	std::cout << solverParams << std::endl;
 
-	// Use Paraview (version 5.6.0) to visualize.
-	// Light data is given in XDMF files (version 3). 
-	// Heavy data is stored in HDF5 files.
-	// Note that polyhedrons have been added to XDMF in version 3; version 2 does not support polyhedrons.
-	// Moreover, Paraview has 3 readers: XDMF Reader, Xdmf3ReaderS, Xdmf3ReaderT.
-	// Xdmf3Reader3: can     read polyhedrons, but not grid-of-grids (i.e., grids with GridType=Tree).
-	// XDMF Reader:  can not read polyhedrons, but     grid-of-grids.
-	// Therefore, the mesh data for vertices, edges, and faces, are separated from the volume data.
+	std::cout << message_howToVisualizeData(filename_volumeData, filename_surfaceData) << std::endl;
 }
 
 
@@ -5338,6 +5362,8 @@ const int AppmSolver::getLinearIndexInJacobian(const int fluidIdx, const int cel
 	int idx = 5 * (nFluids * cellidx + fluidIdx);
 	return idx;
 }
+
+
 
 std::ostream & operator<<(std::ostream & os, const AppmSolver::MaxwellSolverType & obj)
 {

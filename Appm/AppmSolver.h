@@ -399,6 +399,8 @@ private:
 
 	const int getLinearIndexInJacobian(const int fluidIdx, const int cellidx) const;
 
+	const std::string message_howToVisualizeData(const std::string & outFilename_volume, const std::string & outFilename_surface) const;
+
 };
 
 /**
