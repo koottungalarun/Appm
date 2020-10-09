@@ -157,6 +157,9 @@ std::string AppmSolver::getIterationHeader(const int iter, const double time, co
 void AppmSolver::run()
 {
 	init();
+	const std::string filename_surfaceData = "appm.xdmf";
+	const std::string filename_volumeData = "appm-volume.xdmf";
+
 	
 	if (primalMesh.getNumberOfCells() == 0) {
 		std::cout << "Primal mesh has no cells" << std::endl;
@@ -345,8 +348,8 @@ void AppmSolver::run()
 			}
 			else {
 				writeOutput(iteration, time);
-				writeXdmf("appm.xdmf");
-				writeXdmfDualVolume("appm-volume.xdmf");
+				writeXdmf(filename_surfaceData);
+				writeXdmfDualVolume(filename_volumeData);
 				break; // <<<--- stop loop iterations
 			}
 		}
@@ -361,11 +364,9 @@ void AppmSolver::run()
 		std::cout << "**********************************************************" << std::endl;
 		std::cout << "**********************************************************" << std::endl;
 		writeOutput(iteration, time);
+		writeXdmf(filename_surfaceData);
+		writeXdmfDualVolume(filename_volumeData);
 	}
-	const std::string filename_surfaceData = "appm.xdmf";
-	const std::string filename_volumeData = "appm-volume.xdmf";
-	writeXdmf(filename_surfaceData);
-	writeXdmfDualVolume(filename_volumeData);
 
 	std::cout << std::endl;
 	std::cout << "Final time:      " << time << std::endl;
