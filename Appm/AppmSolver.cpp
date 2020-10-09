@@ -332,9 +332,9 @@ void AppmSolver::run()
 		std::cout << "**********************************************************" << std::endl;
 		std::cout << "**********************************************************" << std::endl;
 		writeOutput(iteration, time);
+		writeXdmf("appm.xdmf");
+		writeXdmfDualVolume("appm-volume.xdmf");
 	}
-	writeXdmf("appm.xdmf");
-	writeXdmfDualVolume("appm-volume.xdmf");
 
 	std::cout << std::endl;
 	std::cout << "Final time:      " << time << std::endl;
@@ -446,6 +446,8 @@ void AppmSolver::setElasticCollisionSourceTerms()
 
 		std::cout << "Set default value: 1" << std::endl;
 		temp_ab.setOnes(); // <<<----------------------------------------  TODO: default value! ---------------
+		assert(false);
+
 
 		// for each fluid cell ...
 		for (int i = 0; i < nCells; i++) {
@@ -1646,75 +1648,75 @@ void AppmSolver::setRadiationSource()
 *
 * This also results in an energy source term Q_a = u_a * R_a.
 */
-void AppmSolver::setFrictionSourceTerms()
-{
-	auto nCells = dualMesh.getNumberOfCells();
-	auto nFluids = getNFluids();
-
-	if (solverParams.getFluidEnabled()) {
-		// For each fluid cell ...
-		for (int i = 0; i < nCells; i++) {
-			const Cell * cell = dualMesh.getCell(i);
-			if (cell->getType() != Cell::Type::FLUID) {
-				continue; // Skip non-fluid cells
-			}
-
-			double rho_avg = 0;    // bulk density
-			Eigen::Vector3d u_avg = Eigen::Vector3d::Zero(); // bulk velocity (mass-averaged velocity)
-
-			for (int alpha = 0; alpha < nFluids; alpha++) {
-				auto massRatio = getSpecies(alpha).getMassRatio();
-				auto state = fluidStates.col(i).segment(5 * alpha, 5);
-				assert(state.size() == 5);
-				auto n_u = state.segment(1, 3);
-				u_avg += massRatio * n_u;
-				rho_avg += massRatio * state(0);
-			}
-			assert(rho_avg > 0);
-			u_avg /= rho_avg;
-			bulkVelocity.col(i) = u_avg;
-
-			// For each species alpha ...
-			for (int alpha = 0; alpha < nFluids; alpha++) {
-				Eigen::Vector3d R_a = Eigen::Vector3d::Zero();
-				auto stateA = fluidStates.col(i).segment(5 * alpha, 5); // state vector of fluid A in cell i
-				auto n_a = stateA(0); // number density
-				auto u_a = stateA.segment(1, 3) / n_a; // velocity vector
-
-				// ... for each species beta != alpha ...
-				for (int beta = 0; beta < nFluids; beta++) {
-					auto stateB = fluidStates.col(i).segment(5 * beta, 5);
-					auto n_b = stateB(0); // number density
-					auto u_b = stateB.segment(1, 3) / n_b; // velocity vector
-
-					if (beta == alpha) {
-						continue; // skip if indices are equal, since they contribute nothing
-					}
-					// species interaction term
-					//auto z_ab = 1; // assume a constant value for testing purpose
-					// R_a -= n_a * n_b * (u_a - u_b) * z_ab;
-
-					// ... get friction force due to interaction of species Alpha and Beta
-					auto m_ab = getReducedMass(alpha, beta);
-					auto nu_ab = getCollisionFrequency(alpha, beta, i);
-					R_a -= n_a * m_ab * nu_ab * (u_a - u_b);
-				} // end for each species B
-				auto w_a = u_a - u_avg; // Diffusion velocity w_a 
-				auto Q_a = u_a.dot(R_a); // Source term for energy equation due to friction
-
-				// Save local data for post-processing
-				diffusionVelocity.col(i).segment(3 * alpha, 3) = w_a;
-				if (solverParams.getFrictionActive()) {
-					frictionForceSourceTerm.col(i).segment(3 * alpha, 3) = R_a;
-					frictionEnergySourceTerm(alpha, i) = Q_a;
-
-					fluidSources.col(i).segment(5 * alpha + 1, 3) += R_a; // set momentum source of fluid A
-					fluidSources(5 * alpha + 4, i) += Q_a;                // set   energy source of fluid A
-				} 
-			} // end for each species A
-		} // end for each fluid cell i
-	} // end if isFluidEnabled
-}
+//void AppmSolver::setFrictionSourceTerms()
+//{
+//	auto nCells = dualMesh.getNumberOfCells();
+//	auto nFluids = getNFluids();
+//
+//	if (solverParams.getFluidEnabled()) {
+//		// For each fluid cell ...
+//		for (int i = 0; i < nCells; i++) {
+//			const Cell * cell = dualMesh.getCell(i);
+//			if (cell->getType() != Cell::Type::FLUID) {
+//				continue; // Skip non-fluid cells
+//			}
+//
+//			double rho_avg = 0;    // bulk density
+//			Eigen::Vector3d u_avg = Eigen::Vector3d::Zero(); // bulk velocity (mass-averaged velocity)
+//
+//			for (int alpha = 0; alpha < nFluids; alpha++) {
+//				auto massRatio = getSpecies(alpha).getMassRatio();
+//				auto state = fluidStates.col(i).segment(5 * alpha, 5);
+//				assert(state.size() == 5);
+//				auto n_u = state.segment(1, 3);
+//				u_avg += massRatio * n_u;
+//				rho_avg += massRatio * state(0);
+//			}
+//			assert(rho_avg > 0);
+//			u_avg /= rho_avg;
+//			bulkVelocity.col(i) = u_avg;
+//
+//			// For each species alpha ...
+//			for (int alpha = 0; alpha < nFluids; alpha++) {
+//				Eigen::Vector3d R_a = Eigen::Vector3d::Zero();
+//				auto stateA = fluidStates.col(i).segment(5 * alpha, 5); // state vector of fluid A in cell i
+//				auto n_a = stateA(0); // number density
+//				auto u_a = stateA.segment(1, 3) / n_a; // velocity vector
+//
+//				// ... for each species beta != alpha ...
+//				for (int beta = 0; beta < nFluids; beta++) {
+//					auto stateB = fluidStates.col(i).segment(5 * beta, 5);
+//					auto n_b = stateB(0); // number density
+//					auto u_b = stateB.segment(1, 3) / n_b; // velocity vector
+//
+//					if (beta == alpha) {
+//						continue; // skip if indices are equal, since they contribute nothing
+//					}
+//					// species interaction term
+//					//auto z_ab = 1; // assume a constant value for testing purpose
+//					// R_a -= n_a * n_b * (u_a - u_b) * z_ab;
+//
+//					// ... get friction force due to interaction of species Alpha and Beta
+//					auto m_ab = getReducedMass(alpha, beta);
+//					auto nu_ab = getCollisionFrequency(alpha, beta, i);
+//					R_a -= n_a * m_ab * nu_ab * (u_a - u_b);
+//				} // end for each species B
+//				auto w_a = u_a - u_avg; // Diffusion velocity w_a 
+//				auto Q_a = u_a.dot(R_a); // Source term for energy equation due to friction
+//
+//				// Save local data for post-processing
+//				diffusionVelocity.col(i).segment(3 * alpha, 3) = w_a;
+//				if (solverParams.getFrictionActive()) {
+//					frictionForceSourceTerm.col(i).segment(3 * alpha, 3) = R_a;
+//					frictionEnergySourceTerm(alpha, i) = Q_a;
+//
+//					fluidSources.col(i).segment(5 * alpha + 1, 3) += R_a; // set momentum source of fluid A
+//					fluidSources(5 * alpha + 4, i) += Q_a;                // set   energy source of fluid A
+//				} 
+//			} // end for each species A
+//		} // end for each fluid cell i
+//	} // end if isFluidEnabled
+//}
 
 /**
 * Evaluate magnetic Lorentz force (i.e., F_* = q_* * eps_*^(-2) * (nu)_* x B) 
@@ -1822,14 +1824,6 @@ const double AppmSolver::getNextFluidTimestepSize() const
 	return dt;
 }
 
-//const Eigen::VectorXd AppmSolver::getFluidState(const int cellIdx, const int fluidIdx) const 
-//{
-//	assert(cellIdx >= 0);
-//	assert(cellIdx < fluidStates.cols());
-//	assert(fluidIdx >= 0);
-//	assert(fluidIdx < getNFluids());
-//	return fluidStates.col(cellIdx).segment(5*fluidIdx, 5);
-//}
 
 /**
 * @return Fluid state in given cell and fluid, projected in direction of 
@@ -1848,6 +1842,10 @@ const Eigen::Vector3d AppmSolver::getFluidState(const int cellIdx, const int flu
 	return Eigen::Vector3d(state(0), state.segment(1,3).dot(fn), state(4));
 }
 
+/**
+* Get orientation of cell and face as indicated by the face normal vector. 
+* @return 1 if face normal has same orientation as the position vector of face center with respect to cell center; otherwise -1.
+*/
 const int AppmSolver::getOrientation(const Cell * cell, const Face * face) const
 {
 	assert(cell != nullptr);
@@ -1861,94 +1859,13 @@ const int AppmSolver::getOrientation(const Cell * cell, const Face * face) const
 }
 
 /**
-* Get the face flux with explicit Rusanov scheme. 
+* Get adjacient fluid cell states of a given face.
+* @param face       (input) face between adjacient fluid cells.
+* @param fluidIdx   (input) fluid index of which the states are retrieved.
+* @param qL
+* @param qR         (output) fluid states on the left- and right-side of face, as indicated by the face normal vector. 
+* @return   cell index of the left- and right-adjacient cells.
 */
-//const Eigen::Vector3d AppmSolver::getRusanovFluxExplicit(const int faceIdx, const int fluidIdx) const
-//{
-//	assert(false); // Do not use this anymore
-//
-//	const bool showOutput = false;
-//	Eigen::Vector3d qL, qR;
-//	Eigen::Vector3d faceFlux;
-//	faceFlux.setZero();
-//
-//	const Face * face = dualMesh.getFace(faceIdx);
-//	const Face::Type faceFluidType = getFaceTypeOfFluid(face, fluidIdx);
-//
-//	switch (faceFluidType) {
-//	case Face::Type::INTERIOR:
-//		getAdjacientCellStates(face, fluidIdx, qL, qR);
-//		faceFlux = Physics::getRusanovFlux(qL, qR, showOutput);
-//		break;
-//
-//
-//	}
-//
-//	return faceFlux; 
-//}
-//
-//const Eigen::Vector3d AppmSolver::getRusanovFluxImEx(const int faceIdx, const int fluidIdx, const double dt) 
-//{
-//	const Face * face = dualMesh.getFace(faceIdx);
-//	const Eigen::Vector3d faceNormal = face->getNormal();
-//	//const Face::FluidType faceFluidType = face->getFluidType();
-//	const Face::Type faceFluidType = getFaceTypeOfFluid(face, fluidIdx);
-//
-//	Eigen::Vector3d qL, qR;
-//	const std::pair<int, int> adjacientCellIdx = getAdjacientCellStates(face, fluidIdx, qL, qR);
-//
-//	double implicitExtraTerms = 0;
-//	int cellIndex;
-//
-//	if (faceFluidType != Face::Type::INTERIOR) {
-//		assert(adjacientCellIdx.first == -1 || adjacientCellIdx.second == -1);
-//	}
-//	const bool isInteriorFace = faceFluidType == Face::Type::INTERIOR;
-//	const bool isBoundaryFace = !isInteriorFace;
-//	if (appmParams.isMassFluxSchemeImplicit) {
-//		cellIndex = adjacientCellIdx.first;
-//		double extra_L = 0;
-//		if (cellIndex >= 0) {
-//			extra_L = getImplicitExtraTermMomentumFlux(cellIndex, faceNormal, fluidIdx);
-//		}
-//		cellIndex = adjacientCellIdx.second;
-//		double extra_R = 0;
-//		if (cellIndex >= 0) {
-//			extra_R = getImplicitExtraTermMomentumFlux(cellIndex, faceNormal, fluidIdx);
-//		}
-//		implicitExtraTerms -= dt * extra_L;
-//		implicitExtraTerms -= dt * extra_R;
-//		faceFluxesImExRusanov.coeffRef(faceIdx, fluidIdx) = implicitExtraTerms;
-//	}
-//	
-//
-//	Eigen::Vector3d faceFlux = getRusanovFluxExplicit(faceIdx, fluidIdx);
-//	faceFlux(0) += implicitExtraTerms;
-//	return faceFlux;
-//}
-
-//const double AppmSolver::getImplicitExtraTermMomentumFlux(const int cellIdx, const Eigen::Vector3d & faceNormal, const int fluidIdx) const
-//{
-//	assert(cellIdx >= 0); 
-//	assert(std::fabs(faceNormal.norm() - 1) <= 4*std::numeric_limits<double>::epsilon());
-//
-//	const Cell * cell = dualMesh.getCell(cellIdx);
-//	const double cellVolume = cell->getVolume();
-//	const std::vector<Face*> cellFaces = cell->getFaceList();
-//	double sumFaceFluxes = 0;
-//	for (auto face : cellFaces) {
-//		const int faceIdx = face->getIndex();
-//		const Eigen::Vector3d faceFlux = getRusanovFluxExplicit(faceIdx, fluidIdx);
-//		const double momentumFlux = faceFlux(1);
-//		const double faceArea = face->getArea();
-//		const Eigen::Vector3d fn = face->getNormal();
-//		const double orientation = fn.dot(faceNormal) * getOrientation(cell, face);
-//		sumFaceFluxes += momentumFlux * faceArea * orientation;
-//	}
-//	const double result = 0.5 * 1./cellVolume * sumFaceFluxes;
-//	return result;
-//}
-
 const std::pair<int,int> AppmSolver::getAdjacientCellStates(const Face * face, const int fluidIdx, Eigen::Vector3d & qL, Eigen::Vector3d & qR) const
 {
 	assert(face != nullptr);
@@ -2033,23 +1950,6 @@ const std::pair<int,int> AppmSolver::getAdjacientCellStates(const Face * face, c
 
 	return std::pair<int, int>(idxL, idxR);
 }
-
-//const double AppmSolver::getMomentumUpdate(const int k, const Eigen::Vector3d & nvec, const int fluidIdx) const
-//{
-//	double result = 0;
-//	const Cell * cell = dualMesh.getCell(k);
-//	const std::vector<Face*> cellFaces = cell->getFaceList();
-//	for (auto face : cellFaces) {
-//		const double faceArea = face->getArea();
-//		const Eigen::Vector3d faceNormal = face->getNormal();
-//		const Eigen::Vector3d faceFlux = getRusanovFluxExplicit(face->getIndex(), fluidIdx);
-//		const double momentumFlux = faceFlux(1);
-//		double localResult = momentumFlux * faceArea * faceNormal.dot(nvec);
-//		result += localResult;
-//	}
-//	result /= cell->getVolume();
-//	return result;
-//}
 
 /**
 * Create stop file with default value.

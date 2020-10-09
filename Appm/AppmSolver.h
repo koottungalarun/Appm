@@ -292,7 +292,7 @@ private:
 	//void get_Msigma_consistent(const double dt, Eigen::SparseMatrix<double> & Msigma, Eigen::VectorXd & jaux);
 	
 	void setRadiationSource();
-	void setFrictionSourceTerms();
+	//void setFrictionSourceTerms();
 	void setMagneticLorentzForceSourceTerms();
 
 	const int getFluidStateLength() const;
