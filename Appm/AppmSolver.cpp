@@ -233,10 +233,10 @@ void AppmSolver::run()
 			std::cout << std::endl;
 			std::cout << getIterationHeader(iteration, time, dt) << std::endl;
 
-			// Set explicit fluid source terms
-			setMagneticLorentzForceSourceTerms();
-			setElasticCollisionSourceTerms();
-			//setInelasticCollisionSourceTerms();
+
+			this->J_el = getJacobianEulerSourceElasticCollisions();
+			this->J_inel = getJacobianEulerSourceInelasticCollisions(this->rhs_inel);
+
 			//setRadiationSource(); // <<<----  TODO
 
 			// Set explicit face fluxes
@@ -244,17 +244,10 @@ void AppmSolver::run()
 				setFluidFaceFluxes();
 			}
 
-			// TODO set explicit fluid sources with magnetic Lorentz force,
-			// but without electric Lorentz force because that will be added implicitly
-
-			// Add magnetic Lorentz force to fluid momentum sources
-			if (solverParams.getFluidEnabled() && solverParams.getLorentzForceEnabled()) {
-				const int n = dualMesh.getNumberFluidCells();
-				for (int fluidx = 0; fluidx < nFluids; fluidx++) {
-					fluidSources.block(5 * fluidx + 1, 0, 3, n) += LorentzForce_magnetic.block(3 * fluidx, 0, 3, nCells);
-				}
-			}
-
+			// Set explicit fluid source terms
+			setMagneticLorentzForceSourceTerms();
+			addMagneticLorentzForceToFluidSources();
+			addCollisionsToFluidSourcesExplicit();
 
 			// Affine-linear function for implicit-consistent formulation of current density J_h = Msigma * E_h + Jaux
 			Eigen::SparseMatrix<double> Msigma;
@@ -266,6 +259,11 @@ void AppmSolver::run()
 				// E- and B-field have been updated to new timestep
 			}
 			J_h = Msigma * E_h + J_h_aux;
+			
+			// Reset fluid sources to zero
+			fluidSources.setZero();
+			// add magnetic Lorentz force explicitly
+			addMagneticLorentzForceToFluidSources();
 
 			// Fluid equations
 			if (solverParams.getFluidEnabled()) {
@@ -1689,13 +1687,55 @@ void AppmSolver::setMagneticLorentzForceSourceTerms()
 				continue; // ... skip neutral fluids 
 			}
 			// get fluid momentum
-			const Eigen::Vector3d nu = fluidStates.col(i).segment(5 * fluidIdx + 1, 3); 
+			const Eigen::Vector3d nu = getState(i, fluidIdx).segment(1, 3);
 			// compute magnetic Lorentz force
 			const Eigen::Vector3d result = q * 1. / massRatio * nu.cross(B);
 			LorentzForce_magnetic.col(i).segment(3 * fluidIdx, 3) = result;
 		}
 	}
-	assert(LorentzForce_electric.allFinite());
+	assert(LorentzForce_magnetic.allFinite());
+}
+
+/** 
+* Add magnetic Lorentz force to fluid momentum sources.
+*/
+void AppmSolver::addMagneticLorentzForceToFluidSources()
+{
+	const int n = dualMesh.getNumberFluidCells();
+	const int nFluids = getNFluids();
+	if (solverParams.getFluidEnabled() && solverParams.getLorentzForceEnabled()) {
+		for (int fluidx = 0; fluidx < nFluids; fluidx++) {
+			fluidSources.block(5 * fluidx + 1, 0, 3, n) += LorentzForce_magnetic.block(3 * fluidx, 0, 3, n);
+		}
+	}
+}
+
+/**
+* Add explicit elastic and inelastic collision source terms
+*/
+void AppmSolver::addCollisionsToFluidSourcesExplicit()
+{
+	const int n = dualMesh.getNumberFluidCells();
+
+	// get a map that reshapes fluid states to vector 
+	const Eigen::MatrixXd states = fluidStates.leftCols(n);
+	const Eigen::Map<const Eigen::VectorXd> statesVec(states.data(), states.size());
+
+	// get fluid sources in vector shape (S = A*q + rhs)
+	Eigen::VectorXd srcCollVec = Eigen::VectorXd::Zero(n);
+
+	// add sources due to elastic collisions
+	if (J_el.rows() == n && J_el.cols() == n) {
+		srcCollVec += J_el * statesVec;
+	}
+	// add sources due to inelastic collisions
+	if (J_inel.rows() == n && J_inel.cols() == n) {
+		srcCollVec += J_inel * statesVec + rhs_inel;
+	}
+
+	// reshape fluid sources to matrix 
+	const Eigen::Map<const Eigen::MatrixXd> srcCollMat(srcCollVec.data(), fluidSources.rows(), n);
+	fluidSources += srcCollMat;
 }
 
 
@@ -2142,22 +2182,11 @@ void AppmSolver::updateFluidStates(const double dt, const bool isImplicitSources
 	const int nFluids = getNFluids();
 	const int n = 5 * nFluidCells * nFluids;
 
-	fluidSources.setZero();
-	Eigen::SparseMatrix<double> M_elastic;
-	M_elastic = getJacobianEulerSourceElasticCollisions();
-	assert(M_elastic.rows() == n);
-	assert(M_elastic.cols() == n);
-
-	Eigen::SparseMatrix<double> M_inelastic;
-	Eigen::VectorXd rhs_inelastic(n);
-	rhs_inelastic.setZero();
-
-	M_inelastic = getJacobianEulerSourceInelasticCollisions(rhs_inelastic);
-	assert(M_inelastic.rows() == n);
-	assert(M_inelastic.cols() == n);
-
-	Eigen::SparseMatrix<double> M;
-	M = M_elastic + M_inelastic;
+	assert(J_el.rows() == n);
+	assert(J_el.cols() == n);
+	assert(J_inel.rows() == n);
+	assert(J_inel.cols() == n);
+	Eigen::SparseMatrix<double> M = J_el + J_inel; 
 
 	if (isImplicitSources) {
 		// implicit scheme
@@ -2175,7 +2204,7 @@ void AppmSolver::updateFluidStates(const double dt, const bool isImplicitSources
 
 		// solve sparse system A*x = rhs
 		assert(statesVec.size() == sumOfFluxesVec.size());
-		Eigen::VectorXd rhs = statesVec - dt * sumOfFluxesVec - dt * rhs_inelastic;
+		Eigen::VectorXd rhs = statesVec - dt * sumOfFluxesVec - dt * rhs_inel;
 		Eigen::VectorXd x(rhs.size());
 		Eigen::BiCGSTAB<Eigen::SparseMatrix<double>> solver;
 		solver.compute(A);
@@ -2200,17 +2229,17 @@ void AppmSolver::updateFluidStates(const double dt, const bool isImplicitSources
 		/* Explicit scheme */
 
 		// Get states of fluid cells in vector format
-		Eigen::MatrixXd states = fluidStates.leftCols(nFluidCells);
-		Eigen::Map<Eigen::VectorXd> statesVec(states.data(), states.size());
-
-		// Get sources in vector format
-		assert(M.cols() == statesVec.size());
+		const Eigen::MatrixXd states = fluidStates.leftCols(nFluidCells);
+		const Eigen::Map<const Eigen::VectorXd> statesVec(states.data(), states.size());
 		assert(statesVec.allFinite());
-		Eigen::VectorXd srcVec = M * statesVec; 
+		assert(M.cols() == statesVec.size());
+
+		// Sources in vector format
+		const Eigen::VectorXd srcVec = M * statesVec + rhs_inel;
 		assert(srcVec.allFinite());
 
 		// Reshape source vector to matrix format
-		Eigen::Map<Eigen::MatrixXd> src_as_matrix(srcVec.data(), fluidSources.rows(), nFluidCells);
+		const Eigen::Map<const Eigen::MatrixXd> src_as_matrix(srcVec.data(), fluidSources.rows(), nFluidCells);
 		fluidSources.leftCols(nFluidCells) = src_as_matrix;
 
 		// Update states

@@ -158,6 +158,8 @@ private:
 
 	// List of elastic collisions
 	std::vector<ElasticCollision*> elasticCollisions;
+	Eigen::SparseMatrix<double> J_el;
+
 	void setElasticCollisionSourceTerms();
 
 	// List of inelastic collisions
@@ -275,6 +277,8 @@ private:
 	
 	void setRadiationSource();
 	void setMagneticLorentzForceSourceTerms();
+	void addMagneticLorentzForceToFluidSources();
+	void addCollisionsToFluidSourcesExplicit();
 
 	const int getFluidStateLength() const;
 	const double getNextFluidTimestepSize() const;
