@@ -401,6 +401,8 @@ private:
 
 	const std::string message_howToVisualizeData(const std::string & outFilename_volume, const std::string & outFilename_surface) const;
 
+	const bool isMeshOrientationConsistent() const;
+
 };
 
 /**

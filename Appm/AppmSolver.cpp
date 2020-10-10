@@ -44,6 +44,31 @@ const std::string AppmSolver::message_howToVisualizeData(const std::string & out
 	return ss.str();
 }
 
+/**
+* Primal edges and dual faces have orientations as given by their edge vectors and face normals, respectively. 
+* 
+* @return true if all primal edges and dual faces have identical orientations.
+*/
+const bool AppmSolver::isMeshOrientationConsistent() const
+{
+	const int nEdges = primalMesh.getNumberOfEdges();
+	const double expected = 1;
+	Eigen::VectorXd actual(nEdges);
+	actual.setZero();
+	const double tol = 4 * std::numeric_limits<double>::epsilon();
+
+	for (int i = 0; i < nEdges; i++) {
+		const Edge * edge = primalMesh.getEdge(i);
+		const Eigen::Vector3d Lhat = edge->getDirection().normalized();
+		const Face * face = dualMesh.getFace(i);
+		const Eigen::Vector3d nhat = face->getNormal().normalized();
+		const double orientation = Lhat.dot(nhat); // this value should be equal to 1.000
+		actual(i) = orientation;
+	}
+	const Eigen::VectorXd err = actual.array() - expected; // difference between expected and actual values
+	return (err.cwiseAbs().array() <= tol).all(); // are all errors smaller than tolerance?
+}
+
 
 void AppmSolver::init()
 {
@@ -5072,20 +5097,7 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 	// Check if primal edges and dual face normals are oriented in same direction
 	const bool debug = false;
 	if (debug) {
-		Eigen::VectorXd orientation(nEdges);
-		orientation.setZero();
-		for (int i = 0; i < nEdges; i++) {
-			const Edge * edge = primalMesh.getEdge(i);
-			const Eigen::Vector3d Lhat = edge->getDirection().normalized();
-
-			const Face * face = dualMesh.getFace(i);
-			const Eigen::Vector3d nhat = face->getNormal().normalized();
-
-			orientation(i) = Lhat.dot(nhat); // this value should be equal to 1.000
-		}
-		orientation.array() -= 1;
-		const double tol = 4 * std::numeric_limits<double>::epsilon();
-		assert((orientation.cwiseAbs().array() <= tol).all());
+		assert(isMeshOrientationConsistent());
 	}
 
 	const int nFluids = getNFluids();
