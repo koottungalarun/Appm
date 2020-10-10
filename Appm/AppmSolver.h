@@ -119,8 +119,6 @@ public:
 
 
 	AppmSolver();
-	//AppmSolver(const PrimalMesh::PrimalMeshParams & primalMeshParams, 
-	//	const AppmSolver::SolverParameters & appmParams);
 	~AppmSolver();
 
 	void run();
@@ -158,38 +156,15 @@ private:
 	std::vector<Species> speciesList;
 	ScalingParameters scalingParameters;
 
-	//struct ParticleParameters {
-	//	std::string name = "neutral";
-	//	double mass = 1.0;
-	//	int electricCharge = 0;
-	//};
-	//std::vector<ParticleParameters> particleParams;
-
 	// List of elastic collisions
 	std::vector<ElasticCollision*> elasticCollisions;
 	void setElasticCollisionSourceTerms();
 
 	std::vector<InelasticCollision*> inelasticCollisions;
 
-	//struct AppmParameters {
-	//	int maxIterations = 0;
-	//	double maxTime = 0;
-	//	bool isFluidEnabled = false;
-	//	bool isMaxwellEnabled = false;
-	//	bool isEulerMaxwellCouplingEnabled = false;
-	//	bool isLorentzForceElectricEnabled = false;
-	//	bool isLorentzForceMagneticEnabled = false;
-	//	bool isMassFluxSchemeImplicit = false;
-	//	double timestepSize = 1;
-	//	bool isMaxwellCurrentDefined = false;
-	//	bool isFrictionActive = true;
-	//	MaxwellSolverType maxwellSolverType = MaxwellSolverType::CG;
-	//} appmParams;
-
 	std::ofstream timeFile;
 
 	void init();
-	std::string getIterationHeader(const int iter, const double time, const double dt) const;
 
 	void debug_checkCellStatus() const;
 
@@ -292,7 +267,6 @@ private:
 	//void get_Msigma_consistent(const double dt, Eigen::SparseMatrix<double> & Msigma, Eigen::VectorXd & jaux);
 	
 	void setRadiationSource();
-	//void setFrictionSourceTerms();
 	void setMagneticLorentzForceSourceTerms();
 
 	const int getFluidStateLength() const;
@@ -346,7 +320,7 @@ private:
 	
 	bool isShowDataWriterOutput = false;
 	void writeOutput(const int iteration, const double time);
-
+	
 	void writeFluidStates(H5Writer & writer);
 	void writeMaxwellStates(H5Writer & writer);
 
@@ -402,6 +376,7 @@ private:
 	const std::string message_howToVisualizeData(const std::string & outFilename_volume, const std::string & outFilename_surface) const;
 
 	const bool isMeshOrientationConsistent() const;
+	const std::string getIterationHeader(const int iter, const double time, const double dt) const;
 
 };
 

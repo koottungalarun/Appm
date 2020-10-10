@@ -44,31 +44,6 @@ const std::string AppmSolver::message_howToVisualizeData(const std::string & out
 	return ss.str();
 }
 
-/**
-* Primal edges and dual faces have orientations as given by their edge vectors and face normals, respectively. 
-* 
-* @return true if all primal edges and dual faces have identical orientations.
-*/
-const bool AppmSolver::isMeshOrientationConsistent() const
-{
-	const int nEdges = primalMesh.getNumberOfEdges();
-	const double expected = 1;
-	Eigen::VectorXd actual(nEdges);
-	actual.setZero();
-	const double tol = 4 * std::numeric_limits<double>::epsilon();
-
-	for (int i = 0; i < nEdges; i++) {
-		const Edge * edge = primalMesh.getEdge(i);
-		const Eigen::Vector3d Lhat = edge->getDirection().normalized();
-		const Face * face = dualMesh.getFace(i);
-		const Eigen::Vector3d nhat = face->getNormal().normalized();
-		const double orientation = Lhat.dot(nhat); // this value should be equal to 1.000
-		actual(i) = orientation;
-	}
-	const Eigen::VectorXd err = actual.array() - expected; // difference between expected and actual values
-	return (err.cwiseAbs().array() <= tol).all(); // are all errors smaller than tolerance?
-}
-
 
 void AppmSolver::init()
 {
@@ -165,19 +140,6 @@ void AppmSolver::init()
 	//E_cc = getEfieldAtCellCenter();
 }
 
-std::string AppmSolver::getIterationHeader(const int iter, const double time, const double dt) const
-{
-	std::stringstream ss;
-	ss << "*********************************************" << std::endl;
-	ss << "* Iteration " << iter;
-	ss << ",\t time = " << time;
-	ss << ",\t dt = " << dt;
-	ss << std::endl;
-	ss << "*********************************************";
-	return ss.str();
-}
-
-
 
 void AppmSolver::run()
 {
@@ -273,7 +235,6 @@ void AppmSolver::run()
 
 			// Set explicit fluid source terms
 			setMagneticLorentzForceSourceTerms();
-			//setFrictionSourceTerms();
 			setElasticCollisionSourceTerms();
 			//setInelasticCollisionSourceTerms();
 			//setRadiationSource(); // <<<----  TODO
@@ -1775,22 +1736,28 @@ void AppmSolver::setRadiationSource()
 void AppmSolver::setMagneticLorentzForceSourceTerms()
 {
 	const int nFluids = this->getNFluids();
-	const int nCells = dualMesh.getNumberOfCells();
+	const int n = dualMesh.getNumberFluidCells();
+	assert(n < fluidStates.cols());
+	assert(5 * nFluids == fluidStates.rows());
 
-	for (int i = 0; i < nCells; i++) {
+	// For each fluid cell ...
+	for (int i = 0; i < n; i++) {
 		const Cell * cell = dualMesh.getCell(i);
-		if (cell->getType() != Cell::Type::FLUID) {
-			continue; // Skip cell that are not of type Fluid 
-		}
+		assert(cell->getType() != Cell::Type::FLUID); 
+
+		// Magnetic flux at primal vertex (= dual cell center)
+		const Eigen::Vector3d B = B_vertex.col(i);
+
+		// For each fluid ...
 		for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-			assert(i < fluidStates.cols());
-			assert(5 * fluidIdx + 3 < fluidStates.rows());
-			const Eigen::Vector3d nu = fluidStates.col(i).segment(5 * fluidIdx + 1, 3);
-			assert(nu.allFinite());
-			const Eigen::Vector3d B = B_vertex.col(i);
-			assert(B.allFinite());
-			const int q = getSpecies(fluidIdx).getCharge();
 			const double massRatio = getSpecies(fluidIdx).getMassRatio();
+			const int q = getSpecies(fluidIdx).getCharge();
+			if (q == 0) {
+				continue; // ... skip neutral fluids 
+			}
+			// get fluid momentum
+			const Eigen::Vector3d nu = fluidStates.col(i).segment(5 * fluidIdx + 1, 3); 
+			// compute magnetic Lorentz force
 			const Eigen::Vector3d result = q * 1. / massRatio * nu.cross(B);
 			if (!result.allFinite()) {
 				std::cout << "result: " << result.transpose() << std::endl;
@@ -1799,12 +1766,10 @@ void AppmSolver::setMagneticLorentzForceSourceTerms()
 			LorentzForce_magnetic.col(i).segment(3 * fluidIdx, 3) = result;
 		}
 	}
-	//std::cout << "maxCoeff F_L magnetic: " << LorentzForce_magnetic.cwiseAbs().maxCoeff() << std::endl;
-
-	// Update of momentum source term
+	// Add magnetic Lorentz force to fluid momentum sources
 	if (solverParams.getFluidEnabled() && solverParams.getLorentzForceEnabled()) {
 		for (int fluidx = 0; fluidx < nFluids; fluidx++) {
-			fluidSources.block(5 * fluidx + 1, 0, 3, nCells) += LorentzForce_magnetic.block(3 * fluidx, 0, 3, nCells);
+			fluidSources.block(5 * fluidx + 1, 0, 3, n) += LorentzForce_magnetic.block(3 * fluidx, 0, 3, nCells);
 		}
 	}
 }
@@ -5377,6 +5342,49 @@ const int AppmSolver::getLinearIndexInJacobian(const int fluidIdx, const int cel
 }
 
 
+/**
+* Primal edges and dual faces have orientations as given by their edge vectors and face normals, respectively.
+*
+* @return true if all primal edges and dual faces have identical orientations.
+*/
+const bool AppmSolver::isMeshOrientationConsistent() const
+{
+	const int nEdges = primalMesh.getNumberOfEdges();
+	const double expected = 1;
+	Eigen::VectorXd actual(nEdges);
+	actual.setZero();
+	const double tol = 4 * std::numeric_limits<double>::epsilon();
+
+	for (int i = 0; i < nEdges; i++) {
+		const Edge * edge = primalMesh.getEdge(i);
+		const Eigen::Vector3d Lhat = edge->getDirection().normalized();
+		const Face * face = dualMesh.getFace(i);
+		const Eigen::Vector3d nhat = face->getNormal().normalized();
+		const double orientation = Lhat.dot(nhat); // this value should be equal to 1.000
+		actual(i) = orientation;
+	}
+	const Eigen::VectorXd err = actual.array() - expected; // difference between expected and actual values
+	return (err.cwiseAbs().array() <= tol).all(); // are all errors smaller than tolerance?
+}
+
+/**
+* Get text string of header that is shown at each iteration.
+* @param iter   Iteration number
+* @param time   simulation time
+* @param dt     timestep size
+* @return text string with formatted informations
+*/
+const std::string AppmSolver::getIterationHeader(const int iter, const double time, const double dt) const
+{
+	std::stringstream ss;
+	ss << "*********************************************" << std::endl;
+	ss << "* Iteration " << iter;
+	ss << ",\t time = " << time;
+	ss << ",\t dt = " << dt;
+	ss << std::endl;
+	ss << "*********************************************";
+	return ss.str();
+}
 
 std::ostream & operator<<(std::ostream & os, const AppmSolver::MaxwellSolverType & obj)
 {
