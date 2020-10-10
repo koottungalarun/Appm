@@ -244,6 +244,18 @@ void AppmSolver::run()
 				setFluidFaceFluxes();
 			}
 
+			// TODO set explicit fluid sources with magnetic Lorentz force,
+			// but without electric Lorentz force because that will be added implicitly
+
+			// Add magnetic Lorentz force to fluid momentum sources
+			if (solverParams.getFluidEnabled() && solverParams.getLorentzForceEnabled()) {
+				const int n = dualMesh.getNumberFluidCells();
+				for (int fluidx = 0; fluidx < nFluids; fluidx++) {
+					fluidSources.block(5 * fluidx + 1, 0, 3, n) += LorentzForce_magnetic.block(3 * fluidx, 0, 3, nCells);
+				}
+			}
+
+
 			// Affine-linear function for implicit-consistent formulation of current density J_h = Msigma * E_h + Jaux
 			Eigen::SparseMatrix<double> Msigma;
 			Msigma = get_Msigma_spd(J_h_aux, dt, time);
@@ -1651,85 +1663,6 @@ void AppmSolver::setRadiationSource()
 }
 
 /**
-* Apply friction force to all fluids. 
-*
-* Momentum source for species a: R_a = (-1) * sum_b( n_a * n_b * (u_a - u_b) * z_ab ), 
-* where b stands for all other fluids (b != a), and z_ab is a function that describes further parameters 
-* of the interaction between species a and b, e.g. temperature, mass ratio, and collision cross section.
-*
-* This also results in an energy source term Q_a = u_a * R_a.
-*/
-//void AppmSolver::setFrictionSourceTerms()
-//{
-//	auto nCells = dualMesh.getNumberOfCells();
-//	auto nFluids = getNFluids();
-//
-//	if (solverParams.getFluidEnabled()) {
-//		// For each fluid cell ...
-//		for (int i = 0; i < nCells; i++) {
-//			const Cell * cell = dualMesh.getCell(i);
-//			if (cell->getType() != Cell::Type::FLUID) {
-//				continue; // Skip non-fluid cells
-//			}
-//
-//			double rho_avg = 0;    // bulk density
-//			Eigen::Vector3d u_avg = Eigen::Vector3d::Zero(); // bulk velocity (mass-averaged velocity)
-//
-//			for (int alpha = 0; alpha < nFluids; alpha++) {
-//				auto massRatio = getSpecies(alpha).getMassRatio();
-//				auto state = fluidStates.col(i).segment(5 * alpha, 5);
-//				assert(state.size() == 5);
-//				auto n_u = state.segment(1, 3);
-//				u_avg += massRatio * n_u;
-//				rho_avg += massRatio * state(0);
-//			}
-//			assert(rho_avg > 0);
-//			u_avg /= rho_avg;
-//			bulkVelocity.col(i) = u_avg;
-//
-//			// For each species alpha ...
-//			for (int alpha = 0; alpha < nFluids; alpha++) {
-//				Eigen::Vector3d R_a = Eigen::Vector3d::Zero();
-//				auto stateA = fluidStates.col(i).segment(5 * alpha, 5); // state vector of fluid A in cell i
-//				auto n_a = stateA(0); // number density
-//				auto u_a = stateA.segment(1, 3) / n_a; // velocity vector
-//
-//				// ... for each species beta != alpha ...
-//				for (int beta = 0; beta < nFluids; beta++) {
-//					auto stateB = fluidStates.col(i).segment(5 * beta, 5);
-//					auto n_b = stateB(0); // number density
-//					auto u_b = stateB.segment(1, 3) / n_b; // velocity vector
-//
-//					if (beta == alpha) {
-//						continue; // skip if indices are equal, since they contribute nothing
-//					}
-//					// species interaction term
-//					//auto z_ab = 1; // assume a constant value for testing purpose
-//					// R_a -= n_a * n_b * (u_a - u_b) * z_ab;
-//
-//					// ... get friction force due to interaction of species Alpha and Beta
-//					auto m_ab = getReducedMass(alpha, beta);
-//					auto nu_ab = getCollisionFrequency(alpha, beta, i);
-//					R_a -= n_a * m_ab * nu_ab * (u_a - u_b);
-//				} // end for each species B
-//				auto w_a = u_a - u_avg; // Diffusion velocity w_a 
-//				auto Q_a = u_a.dot(R_a); // Source term for energy equation due to friction
-//
-//				// Save local data for post-processing
-//				diffusionVelocity.col(i).segment(3 * alpha, 3) = w_a;
-//				if (solverParams.getFrictionActive()) {
-//					frictionForceSourceTerm.col(i).segment(3 * alpha, 3) = R_a;
-//					frictionEnergySourceTerm(alpha, i) = Q_a;
-//
-//					fluidSources.col(i).segment(5 * alpha + 1, 3) += R_a; // set momentum source of fluid A
-//					fluidSources(5 * alpha + 4, i) += Q_a;                // set   energy source of fluid A
-//				} 
-//			} // end for each species A
-//		} // end for each fluid cell i
-//	} // end if isFluidEnabled
-//}
-
-/**
 * Evaluate magnetic Lorentz force (i.e., F_* = q_* * eps_*^(-2) * (nu)_* x B) 
 * and add this source term to the fluid sources.
 */
@@ -1759,19 +1692,10 @@ void AppmSolver::setMagneticLorentzForceSourceTerms()
 			const Eigen::Vector3d nu = fluidStates.col(i).segment(5 * fluidIdx + 1, 3); 
 			// compute magnetic Lorentz force
 			const Eigen::Vector3d result = q * 1. / massRatio * nu.cross(B);
-			if (!result.allFinite()) {
-				std::cout << "result: " << result.transpose() << std::endl;
-				assert(result.allFinite());
-			}
 			LorentzForce_magnetic.col(i).segment(3 * fluidIdx, 3) = result;
 		}
 	}
-	// Add magnetic Lorentz force to fluid momentum sources
-	if (solverParams.getFluidEnabled() && solverParams.getLorentzForceEnabled()) {
-		for (int fluidx = 0; fluidx < nFluids; fluidx++) {
-			fluidSources.block(5 * fluidx + 1, 0, 3, n) += LorentzForce_magnetic.block(3 * fluidx, 0, 3, nCells);
-		}
-	}
+	assert(LorentzForce_electric.allFinite());
 }
 
 

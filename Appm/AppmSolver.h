@@ -160,7 +160,14 @@ private:
 	std::vector<ElasticCollision*> elasticCollisions;
 	void setElasticCollisionSourceTerms();
 
+	// List of inelastic collisions
 	std::vector<InelasticCollision*> inelasticCollisions;
+
+	// Jacobian matrix and rhs vector of inelastic collision model.
+	// They are designed for being used in implicit scheme S(m+1) = A(m) * q(m+1) + rhs(m), 
+	// but they recover also recover the explicit scheme   S(m)   = A(m) * q(m)   + rhs(m). 
+	Eigen::SparseMatrix<double> J_inel;
+	Eigen::VectorXd rhs_inel;
 
 	std::ofstream timeFile;
 
