@@ -258,6 +258,12 @@ void Main::readInputFile()
 			std::istringstream(value) >> dtFactor;
 			solverParameters.setTimestepSizeFactor(dtFactor);
 		}
+		if (tag == "isMaxwellEnabled") {
+			bool b = false;
+			std::istringstream(value) >> b;
+			solverParameters.setMaxwellEnabled(b);
+		}
+
 	}
 
 	std::cout << solverParameters << std::endl;
