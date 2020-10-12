@@ -9,10 +9,18 @@ AppmSolver::AppmSolver()
 
 AppmSolver::~AppmSolver()
 {
+	// delete elastic collisions
 	for (int i = elasticCollisions.size() - 1; i >= 0; i--) {
 		delete elasticCollisions[i];
 		elasticCollisions[i] = nullptr;
 	}
+	elasticCollisions = std::vector<ElasticCollision*>();
+	// delete inelastic collisions
+	for (int i = inelasticCollisions.size() - 1; i >= 0; i--) {
+		delete inelasticCollisions[i];
+		inelasticCollisions[i] = nullptr;
+	}
+	inelasticCollisions = std::vector<InelasticCollision*>();
 }
 
 /**
