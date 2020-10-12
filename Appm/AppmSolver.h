@@ -72,8 +72,6 @@ public:
 		const bool getLorentzForceEnabled() const;
 		void setMassfluxSchemeImplicit(const bool b);
 		const bool getMassfluxSchemeImplicit() const;
-		void setFrictionActive(const bool b);
-		const bool getFrictionActive() const;
 		void setMaxwellCurrentDefined(const bool b);
 		const bool getMaxwellCurrentDefined() const;
 		void setMaxwellSolverType(const AppmSolver::MaxwellSolverType type);
@@ -92,6 +90,8 @@ public:
 		const bool getEulerSourcesImplicit() const;
 		const double getTimestepSizeFactor() const;
 		void setTimestepSizeFactor(const double dt_factor);
+		void setVoltageBCfilename(const std::string filename);
+		const std::string getVoltageBCfilename() const;
 
 		friend std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters & obj);
 	private:
@@ -102,17 +102,16 @@ public:
 		double timestepSizeMax = 1;
 		int outputFrequency = 1;
 
-		bool isEulerMaxwellCouplingEnabled = false;
-	
 		bool isFluidEnabled = false;
 		bool isMassFluxSchemeImplicit = true;
-		bool isFrictionEnabled = false;
 		bool isLorentzForceEnabled = false;
 		bool isEulerSourcesImplicit = false;
 
 		bool isMaxwellEnabled = false;
 		MaxwellSolverType maxwellSolverType = MaxwellSolverType::BiCGStab;		
 		AppmSolver::FluidInitType fluidInitType = AppmSolver::FluidInitType::UNIFORM;
+
+		std::string voltageBCfilename;
 
 		Eigen::Vector3d initEfield = Eigen::Vector3d::Zero();
 	};
@@ -372,6 +371,9 @@ private:
 	Eigen::SparseMatrix<double> get_Msigma_spd(Eigen::VectorXd & Jaux, const double dt, const double time);
 
 	const Eigen::VectorXd testcase_001_FluidSourceTerm(const double time, const Cell * cell, const int fluidIdx) const;
+
+	InterpolationTable * voltageBCtable = nullptr;
+	void readVoltageBCtable(const std::string & filename);
 	const Eigen::VectorXd setVoltageBoundaryConditions(const double time) const;
 
 	const Species & getSpecies(const int idx) const;

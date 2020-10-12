@@ -263,6 +263,9 @@ void Main::readInputFile()
 			std::istringstream(value) >> b;
 			solverParameters.setMaxwellEnabled(b);
 		}
+		if (tag == "voltageBCfilename") {
+			solverParameters.setVoltageBCfilename(trim(value));
+		}
 
 	}
 

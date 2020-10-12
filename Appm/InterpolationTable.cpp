@@ -62,6 +62,15 @@ const Eigen::VectorXd InterpolationTable::interpolate(const Eigen::VectorXd & si
 	return result;
 }
 
+const double InterpolationTable::interpolate(const double site)
+{
+	Eigen::VectorXd sites(1);
+	sites(0) = site;
+	const Eigen::VectorXd results = this->interpolate(sites);
+	assert(results.size() == 1);
+	return results(0);
+}
+
 const Eigen::VectorXd InterpolationTable::getXdata() const
 {
 	return this->x;

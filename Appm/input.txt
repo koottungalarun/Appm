@@ -39,11 +39,12 @@ outputFrequency: 1
 ### numerics
 #
 ### coupling
-isFluidEnabled: 0
+isFluidEnabled: 1
 isMassfluxImplicit: 1
 isLorentzForceEnabled: 1
 isMaxwellEnabled: 1
 isEulerSourcesImplicit: 1
+voltageBCfilename: voltBCtable.csv
 #
 #
 ######################

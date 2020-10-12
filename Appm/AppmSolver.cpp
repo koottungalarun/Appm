@@ -21,6 +21,11 @@ AppmSolver::~AppmSolver()
 		inelasticCollisions[i] = nullptr;
 	}
 	inelasticCollisions = std::vector<InelasticCollision*>();
+	// delete voltageBCtable
+	if (voltageBCtable != nullptr) {
+		delete voltageBCtable;
+		voltageBCtable = nullptr;
+	}
 }
 
 /**
@@ -102,6 +107,7 @@ void AppmSolver::init()
 		}
 	}
 
+	readVoltageBCtable(solverParams.getVoltageBCfilename());
 
 	faceFluxes = Eigen::MatrixXd::Zero(5 * nFluids, nFaces);
 	faceFluxesImExRusanov = Eigen::MatrixXd::Zero(nFaces, nFluids);
@@ -5083,7 +5089,7 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 								const double Vk = cell->getVolume(); // volume of cell k
 
 								// Explicit fluid sources (e.g., magnetic Lorentz force, or friction force)
-								if (solverParams.getLorentzForceEnabled() || solverParams.getFrictionActive()) {
+								if (solverParams.getLorentzForceEnabled()) {
 									const Eigen::Vector3d fluidMomentumSource = fluidSources.col(cell->getIndex()).segment(5 * fluidIdx + 1, 3);
 									Jaux(i) += numSchemeFactor * q * Ai * dt * fluidMomentumSource.dot(ni);
 								}
@@ -5180,6 +5186,43 @@ const Eigen::VectorXd AppmSolver::testcase_001_FluidSourceTerm(const double time
 	return srcVector;
 }
 
+/**
+* Read data file that defines voltage boundary conditions w.r.t. time.
+* @param filename    Name of data file.
+*/
+void AppmSolver::readVoltageBCtable(const std::string & filename)
+{
+	std::vector<double> time;
+	std::vector<double> voltage;
+
+	std::string line;
+	assert(filename.size() > 0);
+	std::cout << "Read voltage bc from file: " << filename << std::endl;
+	std::ifstream file(filename);
+	assert(file.is_open());
+	while( std::getline(file, line)) {
+		if (line.size() == 0 || line.front() == '#') {
+			continue; // skip empty lines or comment lines
+		}
+		std::istringstream iss(line);
+		double t, phi;
+		char c;
+		iss >> t >> c >> phi;
+		time.push_back(t);
+		voltage.push_back(phi);
+	}
+	// add additional data point if input data is shorter than maxTime
+	if (time.back() > this->solverParams.getMaxTime()) {
+		time.push_back(this->solverParams.getMaxIterations());
+		voltage.push_back(voltage.back());
+	}
+	std::cout << "Data: " << std::endl;
+	for (int i = 0; i < time.size(); i++) {
+		std::cout << time[i] << "\t" << voltage[i] << std::endl;
+	}
+	this->voltageBCtable = new InterpolationTable(time, voltage);
+}
+
 const Eigen::VectorXd AppmSolver::setVoltageBoundaryConditions(const double time) const
 {
 	const int nPrimalTerminalVertices = primalMesh.getMeshInfo().nVerticesTerminal;
@@ -5193,14 +5236,15 @@ const Eigen::VectorXd AppmSolver::setVoltageBoundaryConditions(const double time
 	}
 	else {
 		// Set voltage values at terminal A (stressed electrode)
-		auto finalVoltage = 0.25;
-		auto t0 = 0.3;
-		auto t1 = 0.5;
-		auto tscale = 0.05;
-		auto timeFunction0 = 0.5 * (1 + tanh((time - t0) / tscale));
-		auto timeFunction1 = 0.5 * (1 + tanh(-(time - t1) / tscale));
-		auto voltage = finalVoltage * timeFunction0 * timeFunction1;
-		voltage = 1e0 * (time > 0);
+		//auto finalVoltage = 0.25;
+		//auto t0 = 0.3;
+		//auto t1 = 0.5;
+		//auto tscale = 0.05;
+		//auto timeFunction0 = 0.5 * (1 + tanh((time - t0) / tscale));
+		//auto timeFunction1 = 0.5 * (1 + tanh(-(time - t1) / tscale));
+		//auto voltage = finalVoltage * timeFunction0 * timeFunction1;
+		//voltage = 1e0 * (time > 0);
+		auto voltage = voltageBCtable->interpolate(time);
 		xd.topRows(n / 2).array() = voltage;
 	}
 	// Set voltage condition to zero at terminal B (grounded electrode)
@@ -5452,11 +5496,6 @@ const bool AppmSolver::SolverParameters::getMassfluxSchemeImplicit() const
 	return this->isMassFluxSchemeImplicit;
 }
 
-const bool AppmSolver::SolverParameters::getFrictionActive() const
-{
-	return false;
-}
-
 const bool AppmSolver::SolverParameters::getMaxwellCurrentDefined() const
 {
 	return false;
@@ -5566,6 +5605,17 @@ void AppmSolver::SolverParameters::setTimestepSizeFactor(const double dt_factor)
 	this->timestepSizeFactor = dt_factor;
 }
 
+void AppmSolver::SolverParameters::setVoltageBCfilename(const std::string filename)
+{
+	assert(filename.size() > 0);
+	this->voltageBCfilename = filename;
+}
+
+const std::string AppmSolver::SolverParameters::getVoltageBCfilename() const
+{
+	return this->voltageBCfilename;
+}
+
 std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters & obj)
 {
 	os << "APPM Solver Parameters:" << std::endl;
@@ -5575,16 +5625,15 @@ std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters 
 	os << "timestepSizeFactor: " << obj.timestepSizeFactor << std::endl;
 	os << "timestepSizeMax: " << obj.timestepSizeMax << std::endl;
 	os << "outputFrequency: " << obj.outputFrequency << std::endl;
-	os << "isEulerMaxwellCouplingEnabled: " << obj.isEulerMaxwellCouplingEnabled << std::endl;
 	os << "isFluidEnabled: " << obj.isFluidEnabled << std::endl;
 	os << "fluidInitState: " << obj.fluidInitType << std::endl;
 	os << "initEfield: " << obj.initEfield.transpose() << std::endl;
 	os << "isMassfluxSchemeImplicit: " << obj.isMassFluxSchemeImplicit << std::endl;
-	os << "isFrictionEnabled: " << obj.isFrictionEnabled << std::endl;
 	os << "isMaxwellEnabled: " << obj.isMaxwellEnabled << std::endl;
 	os << "maxwellSolverType: " << obj.maxwellSolverType << std::endl;
 	os << "AP parameter: " << obj.lambdaSq << std::endl;
 	os << "isEulerSourcesImplicit: " << obj.isEulerSourcesImplicit << std::endl;
+	os << "voltageBCfilename: " << obj.voltageBCfilename << std::endl;
 	os << "=======================" << std::endl;
 	return os;
 }

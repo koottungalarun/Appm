@@ -14,6 +14,7 @@ public:
 	~InterpolationTable();
 
 	const Eigen::VectorXd interpolate(const Eigen::VectorXd & sites);
+	const double interpolate(const double site);
 
 	const Eigen::VectorXd getXdata() const;
 	const Eigen::VectorXd getYdata() const;
