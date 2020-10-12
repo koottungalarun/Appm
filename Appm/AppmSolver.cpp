@@ -3138,18 +3138,18 @@ void AppmSolver::solveMaxwellSystem(const double time, const double dt, const do
 	// The system of equations has fixed and free values; 
 	// - fixed values: electric potential at terminals (Dirichlet boundary condition)
 	// - free  values: electric potential at non-terminal vertices, and electric voltages at non-boundary edges
-	int nDirichlet = nPrimalTerminalVertices;
-	if (solverParams.getMaxwellCurrentDefined()) {
-		// If we define a current, then only one electrode is grounded 
-		// and the other is on a free-floating potential.
-		//assert(nPrimalTerminalVertices % 2 == 0);
-		nDirichlet = nPrimalTerminalVertices;
-	} else {
-		// If no current is defined, then we specify the electric potential 
-		// on both electrodes as fixed values.
-		nDirichlet = nPrimalTerminalVertices;
-	}
-	int nFree = maxwellState.size() - nDirichlet;
+	const int nDirichlet = nPrimalTerminalVertices;
+	//if (solverParams.getMaxwellCurrentDefined()) {
+	//	// If we define a current, then only one electrode is grounded 
+	//	// and the other is on a free-floating potential.
+	//	//assert(nPrimalTerminalVertices % 2 == 0);
+	//	nDirichlet = nPrimalTerminalVertices;
+	//} else {
+	//	// If no current is defined, then we specify the electric potential 
+	//	// on both electrodes as fixed values.
+	//	nDirichlet = nPrimalTerminalVertices;
+	//}
+	const int nFree = maxwellState.size() - nDirichlet;
 
 	// The vector of degrees of freedom (DoF) is sorted such that free values are in front of fixed values:
 	// x = [freeValues, fixedValues]
@@ -4993,8 +4993,7 @@ const Eigen::VectorXd AppmSolver::solveMaxwell_CG(Eigen::SparseMatrix<double>& M
 Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, const double dt, const double time)
 {
 	const int nDualFaces = dualMesh.getNumberOfFaces();
-	const int nEdges = primalMesh.getNumberOfEdges();
-	Eigen::SparseMatrix<double> Msigma(nDualFaces, nEdges);
+	const int nPrimalEdges = primalMesh.getNumberOfEdges();
 	Jaux.setZero();
 
 	if (solverParams.getMaxwellCurrentDefined()) {
@@ -5005,7 +5004,7 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 		const double radius = 0.5;
 		const double tol = 2 * std::numeric_limits<double>::epsilon();
 
-		for (int i = 0; i < nEdges; i++) {
+		for (int i = 0; i < nPrimalEdges; i++) {
 			const Face * dualFace = dualMesh.getFace(i);
 			const Eigen::Vector3d fn = dualFace->getNormal().normalized();
 			const double fA = dualFace->getArea();
@@ -5038,11 +5037,11 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 			// accumulator to guard against truncation errors
 			Eigen::VectorXd c = Eigen::VectorXd::Zero(nDualFaces);
 
-			assert(nEdges <= faceFluxes.cols());
+			assert(nPrimalEdges <= faceFluxes.cols());
 			// Loop over dual faces (where current density lives). 
 			// Do not consider dual boundary faces (those coincident with domain boundary), 
 			// this leaves us with inner faces of the dual mesh 
-			for (int i = 0; i < nEdges; i++) {
+			for (int i = 0; i < nPrimalEdges; i++) {
 				//std::cout << "i = " << i << std::endl;
 				const Face * dualFace = dualMesh.getFace(i);
 				const Eigen::Vector3d ni = dualFace->getNormal().normalized();
@@ -5057,23 +5056,14 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 
 					// Term due to explicit mass flux. Note that face fluxes are already multiplied with face area Ai
 					const double massFlux = faceFluxes(5 * fluidIdx + 0, i);
-					Jaux(i) += q * massFlux;
+					Jaux(i) += q * massFlux; // j = q*n*u
 
 					// Add extra terms due to implicit formulation
 					if (solverParams.getMassfluxSchemeImplicit()) {
 						auto adjacientCells = dualFace->getCellList();
 						for (auto cell : adjacientCells) {
 							// non-fluid cells
-							if (cell->getType() != Cell::Type::FLUID) {
-								//if (dualFace->getType() == Face::Type::DEFAULT) {
-								//	const double elCondSolid = 1e-3;
-								//	const double Li = primalMesh.getEdge(i)->getLength();
-								//	const double value = elCondSolid * Ai / Li;
-								//	triplets.push_back(T(i, i, elCondSolid));
-								//}
-							}
-							else { // is fluid cell
-								assert(cell->getType() == Cell::Type::FLUID);
+							if (cell->getType() == Cell::Type::FLUID) {
 								const double nk = fluidStates(5 * fluidIdx + 0, cell->getIndex()); // number density in cell k
 								const double Vk = cell->getVolume(); // volume of cell k
 
@@ -5112,6 +5102,14 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 										geomTriplets.push_back(T(i, j, geomFactor));
 									}
 								}
+								//if (dualFace->getType() == Face::Type::DEFAULT) {
+								//	const double elCondSolid = 1e-3;
+								//	const double Li = primalMesh.getEdge(i)->getLength();
+								//	const double value = elCondSolid * Ai / Li;
+								//	triplets.push_back(T(i, i, elCondSolid));
+								//}
+							}
+							else { // is not fluid cell
 							} // end if cellType != Fluid
 						}
 					} // end if isMassFluxSchemeImplicit
@@ -5137,7 +5135,7 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 	}
 	else
 	{
-		for (int i = 0; i < nEdges; i++) {
+		for (int i = 0; i < nPrimalEdges; i++) {
 			const double elCond = 1;
 			const double dL = primalMesh.getEdge(i)->getLength();
 			const double dA = dualMesh.getFace(i)->getArea();
@@ -5145,6 +5143,7 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 			triplets.push_back(T(i, i, value));
 		}
 	}
+	Eigen::SparseMatrix<double> Msigma(nDualFaces, nPrimalEdges);
 	Msigma.setFromTriplets(triplets.begin(), triplets.end());
 	Msigma.makeCompressed();
 
@@ -5171,16 +5170,12 @@ const Eigen::VectorXd AppmSolver::setVoltageBoundaryConditions(const double time
 {
 	const int nPrimalTerminalVertices = primalMesh.getMeshInfo().nVerticesTerminal;
 	assert(nPrimalTerminalVertices > 0);
-
-	int nDirichlet = nPrimalTerminalVertices;
-	if (solverParams.getMaxwellCurrentDefined()) {
-		nDirichlet = nPrimalTerminalVertices;
-	}
-
-	Eigen::VectorXd xd = Eigen::VectorXd::Zero(nDirichlet);
+	const int n = nPrimalTerminalVertices; // short-hand for vector length
+	Eigen::VectorXd xd = Eigen::VectorXd::Zero(n);
 
 	if (solverParams.getMaxwellCurrentDefined()) {
-		xd.topRows(nPrimalTerminalVertices / 2).array() = 0;
+		assert(n % 2 == 0);
+		xd.topRows(n / 2).array() = 0;
 	}
 	else {
 		// Set voltage values at terminal A (stressed electrode)
@@ -5192,10 +5187,10 @@ const Eigen::VectorXd AppmSolver::setVoltageBoundaryConditions(const double time
 		auto timeFunction1 = 0.5 * (1 + tanh(-(time - t1) / tscale));
 		auto voltage = finalVoltage * timeFunction0 * timeFunction1;
 		voltage = 1e0 * (time > 0);
-		xd.topRows(nPrimalTerminalVertices / 2).array() = voltage;
+		xd.topRows(n / 2).array() = voltage;
 	}
 	// Set voltage condition to zero at terminal B (grounded electrode)
-	xd.bottomRows(nPrimalTerminalVertices / 2).array() = 0;
+	xd.bottomRows(n / 2).array() = 0;
 
 	return xd;
 }
