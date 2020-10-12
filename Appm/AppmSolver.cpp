@@ -5058,21 +5058,23 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 					const double massFlux = faceFluxes(5 * fluidIdx + 0, i);
 					Jaux(i) += q * massFlux; // j = q*n*u
 
-					// Add extra terms due to implicit formulation
+					// Add terms due to implicit formulation
 					if (solverParams.getMassfluxSchemeImplicit()) {
 						auto adjacientCells = dualFace->getCellList();
+						// ... for each adjacient cell ...
 						for (auto cell : adjacientCells) {
-							// non-fluid cells
+							// fluid cells
 							if (cell->getType() == Cell::Type::FLUID) {
 								const double nk = fluidStates(5 * fluidIdx + 0, cell->getIndex()); // number density in cell k
 								const double Vk = cell->getVolume(); // volume of cell k
 
-								// Extra term by explicit Fluid sources (e.g., magnetic Lorentz force, or friction force)
+								// Explicit fluid sources (e.g., magnetic Lorentz force, or friction force)
 								if (solverParams.getLorentzForceEnabled() || solverParams.getFrictionActive()) {
 									const Eigen::Vector3d fluidMomentumSource = fluidSources.col(cell->getIndex()).segment(5 * fluidIdx + 1, 3);
 									Jaux(i) += numSchemeFactor * q * Ai * dt * fluidMomentumSource.dot(ni);
 								}
 
+								// ... for each face of adjacient cell
 								auto cellFaces = cell->getFaceList();
 								for (auto face : cellFaces) {
 									const double Aj = face->getArea();
@@ -5084,15 +5086,13 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 										nj_dot_ni = 0; // Truncate small angles
 									}
 
-									// Extra term by explicit momentum flux
-									if (true) {
-										const Eigen::Vector3d fj = faceFluxes.col(j).segment(5 * fluidIdx + 1, 3); // (directional) momentum flux at face j, times face area
-										const double temp = numSchemeFactor * q * Ai * -dt * 1 / Vk * s_kj * fj.dot(ni);
-										c(i) += abs(temp); // accumulator to guard against truncation error
-										Jaux(i) += temp;
-									}
+									// Explicit advection of fluid flux
+									const Eigen::Vector3d fj = faceFluxes.col(j).segment(5 * fluidIdx + 1, 3); // (directional) momentum flux at face j, times face area
+									const double temp = numSchemeFactor * q * Ai * -dt * 1 / Vk * s_kj * fj.dot(ni);
+									c(i) += abs(temp); // accumulator to guard against truncation error
+									Jaux(i) += temp;
 
-									// Extra term by implicit electric Lorentz force (electric field)
+									// Implicit electric Lorentz force (electric field)
 									const double geomFactor = nj_dot_ni * (Ai * Aj) / Vk; // geometric factor
 									if (solverParams.getLorentzForceEnabled()) {
 										const double value = numSchemeFactor * 0.5 * dt * pow(q, 2) / massRatio * nk / Vk * Ai * Aj * nj_dot_ni;
