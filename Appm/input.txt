@@ -39,10 +39,10 @@ outputFrequency: 1
 ### numerics
 #
 ### coupling
-isFluidEnabled: 1
+isFluidEnabled: 0
 isMassfluxImplicit: 1
 isLorentzForceEnabled: 1
-isMaxwellEnabled: 0
+isMaxwellEnabled: 1
 isEulerSourcesImplicit: 1
 #
 #

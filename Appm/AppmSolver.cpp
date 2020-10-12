@@ -85,11 +85,15 @@ void AppmSolver::init()
 	}
 
 	init_multiFluid();
-
 	
 	const int nFluids = this->getNFluids();
 	const int nFaces = dualMesh.getNumberOfFaces();
 	const int nCells = dualMesh.getNumberOfCells();
+
+	const int mSize = 5 * nFluids * dualMesh.getNumberFluidCells();
+	this->rhs_inel = Eigen::VectorXd::Zero(mSize);
+	this->J_el = Eigen::SparseMatrix<double>(mSize, mSize);
+	this->J_inel = Eigen::SparseMatrix<double>(mSize, mSize);
 
 	for (int i = 0; i < nCells; i++) {
 		const Cell * cell = dualMesh.getCell(i);
@@ -1682,7 +1686,7 @@ void AppmSolver::setMagneticLorentzForceSourceTerms()
 	// For each fluid cell ...
 	for (int i = 0; i < n; i++) {
 		const Cell * cell = dualMesh.getCell(i);
-		assert(cell->getType() != Cell::Type::FLUID); 
+		assert(cell->getType() == Cell::Type::FLUID); 
 
 		// Magnetic flux at primal vertex (= dual cell center)
 		const Eigen::Vector3d B = B_vertex.col(i);
@@ -1723,27 +1727,34 @@ void AppmSolver::addMagneticLorentzForceToFluidSources()
 */
 void AppmSolver::addCollisionsToFluidSourcesExplicit()
 {
-	const int n = dualMesh.getNumberFluidCells();
+	const int nFluids = getNFluids();
+	const int nFluidCells = dualMesh.getNumberFluidCells();
+	const int n = 5 * nFluids * nFluidCells;
 
 	// get a map that reshapes fluid states to vector 
-	const Eigen::MatrixXd states = fluidStates.leftCols(n);
+	const Eigen::MatrixXd states = fluidStates.leftCols(nFluidCells);
 	const Eigen::Map<const Eigen::VectorXd> statesVec(states.data(), states.size());
 
 	// get fluid sources in vector shape (S = A*q + rhs)
 	Eigen::VectorXd srcCollVec = Eigen::VectorXd::Zero(n);
 
+	assert(J_el.rows() == n && J_el.cols() == n);
+	assert(statesVec.size() == n);
+	assert(this->rhs_inel.size() == n);
+	assert(J_inel.rows() == n && J_inel.cols() == n);
+
 	// add sources due to elastic collisions
-	if (J_el.rows() == n && J_el.cols() == n) {
-		srcCollVec += J_el * statesVec;
-	}
+	srcCollVec += J_el * statesVec;
+	
 	// add sources due to inelastic collisions
-	if (J_inel.rows() == n && J_inel.cols() == n) {
-		srcCollVec += J_inel * statesVec + rhs_inel;
-	}
+	srcCollVec += J_inel * statesVec + rhs_inel;
+	
 
 	// reshape fluid sources to matrix 
-	const Eigen::Map<const Eigen::MatrixXd> srcCollMat(srcCollVec.data(), fluidSources.rows(), n);
-	fluidSources += srcCollMat;
+	const Eigen::Map<const Eigen::MatrixXd> srcCollMat(srcCollVec.data(), fluidSources.rows(), nFluidCells);
+	assert(srcCollMat.rows() == fluidSources.rows());
+	assert(srcCollMat.cols() == nFluidCells);
+	fluidSources.leftCols(nFluidCells) += srcCollMat;
 }
 
 
@@ -2868,6 +2879,7 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 
 	// Create Jacobian matrix from triplets
 	const int mSize = 5 * n * nFluids;
+	assert(rhs.size() == mSize);
 	Eigen::SparseMatrix<double> M(mSize, mSize);
 	M.setFromTriplets(triplets.begin(), triplets.end());
 	M.makeCompressed();
@@ -3088,6 +3100,7 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 
 void AppmSolver::solveMaxwellSystem(const double time, const double dt, const double dt_previous, const Eigen::SparseMatrix<double> & Msigma)
 {
+	std::cout << "Setup Maxwell system" << std::endl;
 	// Number of primal edges
 	const int nEdges = primalMesh.getNumberOfEdges();
 
@@ -3199,6 +3212,7 @@ void AppmSolver::solveMaxwellSystem(const double time, const double dt, const do
 	default:
 		exit(-1);
 	}
+	std::cout << "Maxwell solver finished" << std::endl;
 	
 	// Test: apply guard against truncation errors by adding and subtracting a large number, 
 	//       so that small values (of order 1e-10 smaller than largest number) goes to zero 
@@ -5391,6 +5405,11 @@ void AppmSolver::SolverParameters::setMaxTime(const double tmax)
 const double AppmSolver::SolverParameters::getMaxTime() const
 {
 	return this->maxTime;
+}
+
+void AppmSolver::SolverParameters::setMaxwellEnabled(const bool b)
+{
+	this->isMaxwellEnabled = b;
 }
 
 const bool AppmSolver::SolverParameters::getMaxwellEnabled() const
