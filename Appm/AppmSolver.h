@@ -77,7 +77,6 @@ public:
 		void setMaxwellSolverType(const AppmSolver::MaxwellSolverType type);
 		const AppmSolver::MaxwellSolverType getMaxwellSolverType() const;
 		void setEulerMaxwellCouplingEnabled(const bool b);
-		const bool getEulerMaxwellCouplingEnabled() const;
 		void setOutputFrequency(const int n);
 		const int getOutputFrequency() const;
 		void setFluidInitType(const std::string & s);

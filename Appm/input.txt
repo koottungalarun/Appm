@@ -16,8 +16,8 @@
 ######################
 ### MESH
 ######################
-mesh: mesh-coarse-test.txt
-# mesh: mesh-coarse.txt
+# mesh: mesh-coarse-test.txt
+mesh: mesh-coarse.txt
 # mesh: mesh-medium.txt
 # mesh: mesh-fine.txt
 #
@@ -32,9 +32,9 @@ initEfield: 0 0 0
 #
 ### Simulation controls
 maxTime: 10
-maxIterations: 10
+maxIterations: 10000
 timestepSizeFactor: 1
-outputFrequency: 1
+outputFrequency: 20
 #
 ### numerics
 #
