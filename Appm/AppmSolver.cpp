@@ -5216,9 +5216,12 @@ void AppmSolver::readVoltageBCtable(const std::string & filename)
 		time.push_back(this->solverParams.getMaxIterations());
 		voltage.push_back(voltage.back());
 	}
-	std::cout << "Data: " << std::endl;
-	for (int i = 0; i < time.size(); i++) {
-		std::cout << time[i] << "\t" << voltage[i] << std::endl;
+	const bool isPrintData = false;
+	if (isPrintData) {
+		std::cout << "Data: " << std::endl;
+		for (int i = 0; i < time.size(); i++) {
+			std::cout << time[i] << "\t" << voltage[i] << std::endl;
+		}
 	}
 	this->voltageBCtable = new InterpolationTable(time, voltage);
 }
