@@ -28,13 +28,13 @@ mesh: mesh-coarse-test.txt
 ######################
 ### Initial conditions
 initFluidState: INIT_FILE
-initEfield: 0 0 1
+initEfield: 0 0 0
 #
 ### Simulation controls
-maxTime: 50
-maxIterations: 10
+maxTime: 5
+maxIterations: 10000
 timestepSizeFactor: 1
-outputFrequency: 1
+outputFrequency: 10
 #
 ### numerics
 #
@@ -59,8 +59,8 @@ species: Ar, Argon, 1, 0
 ######################
 ### REACTIONS
 ######################
-# elastic-collision: Ar-Ar+
-# elastic-collision: e-Ar
+elastic-collision: Ar-Ar+
+elastic-collision: e-Ar
 # elastic-collision: e-Ar+
 inelastic-collision: e-Ar
 

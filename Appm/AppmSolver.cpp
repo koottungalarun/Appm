@@ -2336,7 +2336,7 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceElasticCollisions(
 		const double sqrt_8_pi = M_2_SQRTPI * M_SQRT2; // sqrt(8/pi) = 2/sqrt(pi) * sqrt(2)
 		Eigen::VectorXd v_th = (sqrt_8_pi / sqrt(mab)) * Tab.array().sqrt();
 
-		const bool isDefaultDataUsed = true;
+		const bool isDefaultDataUsed = false;
 		if (isDefaultDataUsed) {
 			std::cout << "Warning: use default data for elastic collisions" << std::endl;
 			Qab.setConstant(1);

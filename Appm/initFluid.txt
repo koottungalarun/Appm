@@ -4,7 +4,7 @@
 Electron: 
 n: 5e-3
 T: 1.5 
-u: 0
+u: 1
 
 Ion:
 n: 5e-3
