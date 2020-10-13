@@ -16,8 +16,8 @@
 ######################
 ### MESH
 ######################
-# mesh: mesh-coarse-test.txt
-mesh: mesh-coarse.txt
+mesh: mesh-coarse-test.txt
+# mesh: mesh-coarse.txt
 # mesh: mesh-medium.txt
 # mesh: mesh-fine.txt
 #
@@ -28,13 +28,13 @@ mesh: mesh-coarse.txt
 ######################
 ### Initial conditions
 initFluidState: INIT_FILE
-initEfield: 0 0 0
+initEfield: 0 0 1
 #
 ### Simulation controls
-maxTime: 10
-maxIterations: 10000
+maxTime: 50
+maxIterations: 10
 timestepSizeFactor: 1
-outputFrequency: 20
+outputFrequency: 1
 #
 ### numerics
 #
@@ -42,7 +42,7 @@ outputFrequency: 20
 isFluidEnabled: 1
 isMassfluxImplicit: 1
 isLorentzForceEnabled: 1
-isMaxwellEnabled: 1
+isMaxwellEnabled: 0
 isEulerSourcesImplicit: 1
 voltageBCfilename: voltBCtable.csv
 #

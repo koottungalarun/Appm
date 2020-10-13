@@ -207,6 +207,7 @@ void AppmSolver::run()
 	const int nFluids = this->getNFluids();
 	const int nFaces = dualMesh.getNumberOfFaces();
 	const int nCells = dualMesh.getNumberOfCells();
+	const int nFluidCells = dualMesh.getNumberFluidCells();
 
 	//debug_checkCellStatus();
 	
@@ -296,15 +297,12 @@ void AppmSolver::run()
 
 				// Set source term for electric Lorentz force (implicit)
 				if (solverParams.getLorentzForceEnabled()) {
-					for (int i = 0; i < nCells; i++) {
+					for (int i = 0; i < nFluidCells; i++) {
 						const Cell * cell = dualMesh.getCell(i);
-						if (cell->getType() != Cell::Type::FLUID) {
-							continue; // Skip cells that are not of type Fluid
-						}
+						assert(cell->getType() == Cell::Type::FLUID);
 						for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
-							//const int q = particleParams[fluidIdx].electricCharge;
 							const int q = getSpecies(fluidIdx).getCharge();
-							const double n = fluidStates(5 * fluidIdx, i);
+							const double n = getState(i, fluidIdx)(0); // number density in cell i and fluid fluidIdx
 							const double massRatio = getSpecies(fluidIdx).getMassRatio();
 							LorentzForce_electric.col(i).segment(3 * fluidIdx, 3) = q * 1. / massRatio * n * E_cc.col(i);
 						}
@@ -2230,10 +2228,16 @@ void AppmSolver::updateFluidStates(const double dt, const bool isImplicitSources
 		Eigen::MatrixXd sumOfFluxes = sumOfFaceFluxes.leftCols(nFluidCells);
 		assert(sumOfFluxes.size() == n);
 		Eigen::Map<Eigen::VectorXd> sumOfFluxesVec(sumOfFluxes.data(), sumOfFluxes.size());
+		assert(sumOfFluxesVec.size() == n);
+
+		Eigen::MatrixXd fluidSrc = fluidSources.leftCols(nFluidCells);
+		Eigen::Map<Eigen::VectorXd> fluidSourcesVec(fluidSrc.data(), fluidSrc.size()); // TODO check if size is appropriate!
+		assert(fluidSourcesVec.size() == n);
+		assert(rhs_inel.size() == n);
 
 		// solve sparse system A*x = rhs
 		assert(statesVec.size() == sumOfFluxesVec.size());
-		Eigen::VectorXd rhs = statesVec - dt * sumOfFluxesVec - dt * rhs_inel;
+		Eigen::VectorXd rhs = statesVec - dt * (sumOfFluxesVec - rhs_inel - fluidSourcesVec); 
 		Eigen::VectorXd x(rhs.size());
 		Eigen::BiCGSTAB<Eigen::SparseMatrix<double>> solver;
 		solver.compute(A);
@@ -4697,14 +4701,14 @@ const std::string AppmSolver::fluidXdmfOutput(const std::string & datafilename) 
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
-		ss << "<Attribute Name=\"Electric Lorentz Force\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+		ss << "<Attribute Name=\"" << fluidName << " Electric Lorentz Force" << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << " 3\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
 		ss << datafilename << ":/" << fluidName << "-LorentzForceEl" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
-		ss << "<Attribute Name=\"Magnetic Lorentz Force\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
+		ss << "<Attribute Name=\"" << fluidName << " Magnetic Lorentz Force" << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << " 3\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
 		ss << datafilename << ":/" << fluidName << "-LorentzForceMag" << std::endl;
