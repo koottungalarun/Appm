@@ -661,7 +661,7 @@ void AppmSolver::debug_checkCellStatus() const
 
 }
 
-const int AppmSolver::getNFluids() const
+inline const int AppmSolver::getNFluids() const
 {
 	return speciesList.size();
 }
@@ -1814,7 +1814,7 @@ const double AppmSolver::getNextFluidTimestepSize() const
 				const double s = Physics::getMaxWavespeed(q);
 				wavespeeds(fluidIdx) = s;
 			}
-			assert((wavespeeds.array() > 0).all());
+			assert(wavespeeds.minCoeff() > 0);
 			const double smax = wavespeeds.maxCoeff();
 			assert(smax > 0);
 			assert(smax > 1e-6);
@@ -2678,9 +2678,12 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 				}
 			}
 			// Energy source
-			const int idxEE = getLinearIndexInJacobian(fidxE, k) + 4; // row index for Energy source in Electron fluid
-			const int idxEI = getLinearIndexInJacobian(fidxI, k) + 4; // row index for Energy sourcce in Ion fluid
-			const int idxEA = getLinearIndexInJacobian(fidxA, k) + 4; // row index for Energy source in Atom (Neutral) fluid
+			//const int idxEE = getLinearIndexInJacobian(fidxE, k) + 4; // row index for Energy source in Electron fluid
+			//const int idxEI = getLinearIndexInJacobian(fidxI, k) + 4; // row index for Energy sourcce in Ion fluid
+			//const int idxEA = getLinearIndexInJacobian(fidxA, k) + 4; // row index for Energy source in Atom (Neutral) fluid
+			const int idxEE = idxE + 4; // row index for Energy source in Electron fluid
+			const int idxEI = idxI + 4; // row index for Energy sourcce in Ion fluid
+			const int idxEA = idxN + 4; // row index for Energy source in Atom (Neutral) fluid
 			{
 				// ionization energy source 
 				// (Grec - Gion) * E_ion
@@ -5351,7 +5354,7 @@ const Eigen::MatrixXd AppmSolver::getStates(const int fidx, const int nCols) con
 	return fluidStates.block(5*fidx, 0, 5, nCols);
 }
 
-const int AppmSolver::getLinearIndexInJacobian(const int fluidIdx, const int cellidx) const
+__forceinline const int AppmSolver::getLinearIndexInJacobian(const int fluidIdx, const int cellidx) const
 {
 	const int nFluids = getNFluids();
 	const int nFluidCells = dualMesh.getNumberFluidCells();
@@ -5360,7 +5363,7 @@ const int AppmSolver::getLinearIndexInJacobian(const int fluidIdx, const int cel
 	assert(cellidx >= 0);
 	assert(cellidx < nFluidCells);
 
-	int idx = 5 * (nFluids * cellidx + fluidIdx);
+	const int idx = 5 * (nFluids * cellidx + fluidIdx);
 	return idx;
 }
 

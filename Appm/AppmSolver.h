@@ -176,7 +176,7 @@ private:
 	void debug_checkCellStatus() const;
 
 	/** Get number of fluids. */
-	const int getNFluids() const;
+	inline const int getNFluids() const;
 
 	/** */
 	const Eigen::VectorXd getState(const int cIdx, const int fluidx) const;
