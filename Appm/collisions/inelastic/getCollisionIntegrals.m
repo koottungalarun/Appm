@@ -62,11 +62,24 @@ eStar_J = eStar_eV * eV_to_J;
 TeVec = (300 : 100 : 40e3)';
 lambdaVec = [0 0.01 0.1 0.3 1 3 10]; %logspace(-2, 1, 50)];
 % n = 5;
-lambdaVec = [0 logspace(-5, 0, 5) 3 10];
+lambdaVec = [0 logspace(-5, 0, 5) 3];
 
 %% Integrands
-fun_Gion = @(x0, Te) ...
-    x0 .* exp(-x0) ...
+% Note: if integrands become infinite, it is most likely due to zeta0 
+% and/or zeta1. To resolve this issue, rewrite them using their 
+% analytic definitions. For instance, zeta0 is given as 
+% zeta0(xi) = sinh(2*xi)/(2*xi). 
+% Note that sinh(x) = 1/2 * (exp(-x) + exp(x)), which cannot be computed
+% for x > 700. (it yields to overflow)
+% Using its analytic formula, we find: 
+% x0 * exp(-x0) * zeta0(sqrt(lambda*x0))
+% = sqrt(x0/(2*lambda)) * 1/2 * (
+%      exp(-sqrt(x0) * (sqrt(x0) + sqrt(2*lambda))
+%    + exp(-sqrt(x0) * (sqrt(x0) - sqrt(2*lambda))) )
+% which should be computable for large x0.
+
+fun_Gion = @(x0, Te, lambda) ...
+    x0 .* exp(-x0) .* zeta0(sqrt(lambda*x0)) ...
     .* getCrossSection(x0 * kB * Te * J_to_eV);
 
 fun_R0ion = @(x0, Te, lambda) ...
@@ -111,9 +124,8 @@ fun_J12rec = @(x0,v,xStar,Te,lambda) ...
 
 %% Compute integrals
 
-x_upBound = 10000;
-I_Gion = zeros(size(TeVec));
 I_R0ion = zeros([length(TeVec), length(lambdaVec)]);
+I_Gion = zeros(size(I_R0ion));
 I_Grec = zeros(size(I_R0ion));
 I_R1rec = zeros(size(I_R0ion));
 I_R2rec = zeros(size(I_R0ion));
@@ -130,9 +142,9 @@ for m = 1 : length(lambdaVec)
     for k = 1 : length(TeVec)
         Te = TeVec(k);
         xStar = eStar_J / (kB * Te);
-        if m == 1
-            I_Gion(k) = integral(@(x0) fun_Gion(x0, Te), xStar, x_upBound);
-        end
+        x_upBound = 1000 / (kB*Te) * eV_to_J;
+        I_Gion(k,m) = integral(@(x0) fun_Gion(x0, Te, lambda), xStar, x_upBound);
+        assert(all(isfinite(I_Gion(:))));
         I_R0ion(k,m) = integral(@(x0) fun_R0ion(x0, Te, lambda), xStar, x_upBound);
         I_J00ion(k,m) = integral(@(x0) fun_J00ion(x0, Te, lambda), xStar, x_upBound);
         I_Grec(k,m) = integral2(@(x0,v) fun_Grec(x0,v,xStar,Te,lambda), xStar, x_upBound, xStar, @(x0) x0);
