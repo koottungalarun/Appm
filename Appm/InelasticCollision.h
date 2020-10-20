@@ -40,7 +40,7 @@ public:
 
 	const double getIonizationEnergyScaled() const;
 
-	const Eigen::VectorXd getGionInterpolated(const Eigen::VectorXd & Te) const;
+	const Eigen::VectorXd getGionInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const;
 	const Eigen::VectorXd getR0ionInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const;
 	const Eigen::VectorXd getJ00ionInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const;
 	const Eigen::VectorXd getGrecInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const;
@@ -65,7 +65,7 @@ private:
 	/* Scale for cross sections */
 	double sigmaScale = 0;
 
-	Interpolation1d data_Gion;
+	Interpolation2d data_Gion;
 	Interpolation2d data_R0ion;
 	Interpolation2d data_J00ion;
 

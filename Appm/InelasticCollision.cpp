@@ -36,37 +36,40 @@ InelasticCollision::InelasticCollision(const std::string & folderPath,
 	const DataTransform yTrans = DataTransform::INVERSE;
 	const DataTransform fTrans = DataTransform::LOG;
 
+	const double yScale = 1. / Tscale;
+
 	assert(folderPath.back() == '/'); // folder path should end with a path separator
 
 	std::string filename;
 	filename = folderPath + "I_Gion.csv";
-	data_Gion = Interpolation1d(filename, xTrans, fTrans, 1. / Tscale, sigmaScaleInverse);
+	data_Gion = Interpolation2d(filename, xTrans, yTrans, fTrans, yScale, sigmaScaleInverse);
+	data_Gion.writeData("I_Gion_temp.dat", yScale, sigmaScaleInverse);
 
 	filename = folderPath + "I_Grec.csv";
-	data_Grec = Interpolation2d(filename, xTrans, yTrans, fTrans, 1. / Tscale, sigmaScaleInverse);
+	data_Grec = Interpolation2d(filename, xTrans, yTrans, fTrans, yScale, sigmaScaleInverse);
 
 	filename = folderPath + "I_J00ion.csv";
-	data_J00ion = Interpolation2d(filename, xTrans, yTrans, fTrans, 1. / Tscale, sigmaScaleInverse);
+	data_J00ion = Interpolation2d(filename, xTrans, yTrans, fTrans, yScale, sigmaScaleInverse);
 
 	filename = folderPath + "I_J11rec.csv";
-	data_J11rec = Interpolation2d(filename, xTrans, yTrans, fTrans, 1. / Tscale, sigmaScaleInverse);
+	data_J11rec = Interpolation2d(filename, xTrans, yTrans, fTrans, yScale, sigmaScaleInverse);
 
 	filename = folderPath + "I_J22rec.csv";
-	data_J22rec = Interpolation2d(filename, xTrans, yTrans, fTrans, 1. / Tscale, sigmaScaleInverse);
+	data_J22rec = Interpolation2d(filename, xTrans, yTrans, fTrans, yScale, sigmaScaleInverse);
 
 	filename = folderPath + "I_J12rec.csv";
 	// if lambda = 0 we have J12rec = 0, transformation with exp() cannot be executed. 
 	// Therefore, pull lambda out of integral 
-	data_J12rec = Interpolation2d(filename, xTrans, yTrans, fTrans, 1. / Tscale, sigmaScaleInverse);
+	data_J12rec = Interpolation2d(filename, xTrans, yTrans, fTrans, yScale, sigmaScaleInverse);
 
 	filename = folderPath + "I_R0ion.csv";
-	data_R0ion = Interpolation2d(filename, xTrans, yTrans, fTrans, 1. / Tscale, sigmaScaleInverse);
+	data_R0ion = Interpolation2d(filename, xTrans, yTrans, fTrans, yScale, sigmaScaleInverse);
 
 	filename = folderPath + "I_R1rec.csv";
-	data_R1rec = Interpolation2d(filename, xTrans, yTrans, fTrans, 1. / Tscale, sigmaScaleInverse);
+	data_R1rec = Interpolation2d(filename, xTrans, yTrans, fTrans, yScale, sigmaScaleInverse);
 
 	filename = folderPath + "I_R2rec.csv";
-	data_R2rec = Interpolation2d(filename, xTrans, yTrans, fTrans, 1. / Tscale, sigmaScaleInverse);
+	data_R2rec = Interpolation2d(filename, xTrans, yTrans, fTrans, yScale, sigmaScaleInverse);
 }
 
 InelasticCollision::~InelasticCollision()
@@ -75,7 +78,7 @@ InelasticCollision::~InelasticCollision()
 
 const Eigen::VectorXd InelasticCollision::getGion(const Eigen::VectorXd & nE, const Eigen::VectorXd & nA, const Eigen::VectorXd & vthE, const Eigen::VectorXd & TeVec, const Eigen::VectorXd & lambdaIon) const
 {	
-	const Eigen::VectorXd I_Gion = getGionInterpolated(TeVec);
+	const Eigen::VectorXd I_Gion = getGionInterpolated(TeVec, lambdaIon);
 	const Eigen::VectorXd Gion = nE.array() * nA.array() * vthE.array() * (-1 * lambdaIon.array()).exp() * I_Gion.array();
 	assert(Gion.allFinite());
 	return Gion;
@@ -196,9 +199,9 @@ const Eigen::VectorXd InelasticCollision::getJ12rec(const Eigen::VectorXd & nE, 
 	return R2rec;
 }
 
-const Eigen::VectorXd InelasticCollision::getGionInterpolated(const Eigen::VectorXd & Te) const
+const Eigen::VectorXd InelasticCollision::getGionInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const
 {
-	return data_Gion.cubicInterp(Te);
+	return data_Gion.bicubicInterp(lambda, Te);
 }
 
 const Eigen::VectorXd InelasticCollision::getR0ionInterpolated(const Eigen::VectorXd & Te, const Eigen::VectorXd & lambda) const
