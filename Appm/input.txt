@@ -34,7 +34,7 @@ initEfield: 0 0 0
 maxTime: 50
 maxIterations: 10
 timestepSizeFactor: 1
-outputFrequency: 25
+outputFrequency: 1
 #
 ### numerics
 #

@@ -47,8 +47,7 @@ void test_Gion() {
 	InelasticCollision collision(folderPath, idxE, idxA, idxI, scales);
 
 	Eigen::VectorXd Te = Eigen::VectorXd::LinSpaced(298, 300, 30e3);
-	Eigen::VectorXd I_Gion = collision.getGionInterpolated(Te);
-
+	
 	const int n = Te.size();
 	Eigen::VectorXd nE = Eigen::VectorXd::Ones(n);
 	Eigen::VectorXd nA = Eigen::VectorXd::Ones(n);
@@ -59,7 +58,8 @@ void test_Gion() {
 	Eigen::VectorXd lambdaIon = Eigen::VectorXd::Zero(n);
 	Eigen::VectorXd lambdaRec = Eigen::VectorXd::Zero(n);
 
-	Eigen::VectorXd Gion = collision.getGion(nE, nA, vthE, lambdaIon, Te);
+	Eigen::VectorXd I_Gion = collision.getGionInterpolated(Te, lambdaIon);
+	Eigen::VectorXd Gion = collision.getGion(nE, nA, vthE, Te, lambdaIon);
 	Eigen::VectorXd Grec = collision.getGrec(nI, nE, vthE, xStar, mE, Te, lambdaRec);
 
 	Eigen::MatrixXd data(n, 4);
@@ -68,8 +68,12 @@ void test_Gion() {
 	data.col(2) = Gion;
 	data.col(3) = Grec;
 
+	std::cout << "Te\t" << "I_Gion\t" << "Gion\t" << "Grec\t" << std::endl;
 	std::cout << data << std::endl;
-	std::ofstream("output.dat") << data << std::endl;
+	
+	std::ofstream file("output.dat");
+	file << "Te\t" << "I_Gion\t" << "Gion\t" << "Grec\t" << std::endl;
+	file << data << std::endl;
 }
 
 void removeFiles(const fs::path folder, const std::string extension) {
@@ -105,7 +109,8 @@ int main() {
 
 	const std::string inputFilename = "input.txt";
 
-	//test_Gion();
+	test_Gion();
+	return EXIT_SUCCESS;
 	//test_bicubicInterpolation();
 
 	Main main;
