@@ -124,6 +124,22 @@ void DualMesh::init_dualMesh(const PrimalMesh & primal, const double terminalRad
 
 	dualFaceToPrimalEdgeList = associateDualFacesWithPrimalEdges(primal);
 
+	// Set number of fluid cells
+	assert(this->nFluidCells <= 0);
+	{
+		const int nCells = getNumberOfCells();
+		int counter = 0;
+		for (int k = 0; k < nCells; k++) {
+			if (this->getCell(k)->getType() == Cell::Type::FLUID) {
+				++counter;
+			}
+			else {
+				break;
+			}
+		}
+		this->nFluidCells = counter;
+		assert(this->nFluidCells > 0);
+	}
 }
 
 const int DualMesh::getAssociatedPrimalEdgeIndex(const int dualFaceIndex) const
@@ -141,16 +157,6 @@ const int DualMesh::getAssociatedPrimalEdgeIndex(const int dualFaceIndex) const
 */
 const int DualMesh::getNumberFluidCells() const
 {
-	const int nCells = getNumberOfCells();
-	int nFluidCells = 0;
-	for (int k = 0; k < nCells; k++) {
-		if (this->getCell(k)->getType() == Cell::Type::FLUID) {
-			nFluidCells++;
-		}
-		else {
-			break;
-		}
-	}
 	return nFluidCells;
 }
 

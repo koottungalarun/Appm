@@ -24,6 +24,7 @@ protected:
 
 
 private:
+	int nFluidCells = 0;
 	Eigen::SparseVector<int> primalFaceToDualVertex;
 	Eigen::SparseVector<int> primalEdgeToDualVertex;
 	Eigen::SparseVector<int> primalVertexToDualVertex;
