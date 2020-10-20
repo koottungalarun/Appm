@@ -96,6 +96,77 @@ const Eigen::VectorXd Interpolation2d::bicubicInterp(const Eigen::VectorXd & xSi
 }
 
 /**
+* Write data to file.
+* @param filename    filename of output file
+*/
+void Interpolation2d::writeData(const std::string & filename, const double yScale, const double fScale) const
+{
+	std::cout << "Write data to file: " << filename << std::endl;
+	int n;
+
+	n = x.length();
+	Eigen::VectorXd tempX(n);
+	tempX.setZero();
+	for (int i = 0; i < n; i++) {
+		tempX(i) = *(x.getcontent() + i);
+	}
+
+	int m;
+	m = y.length();
+	Eigen::VectorXd tempY(m);
+	tempY.setZero();
+	for (int i = 0; i < m; i++) {
+		tempY(i) = *(y.getcontent() + i);
+	}
+
+	int k;
+	k = f.length();
+	Eigen::VectorXd tempF(k);
+	tempF.setZero();
+	for (int i = 0; i < k; i++) {
+		tempF(i) = *(f.getcontent() + i);
+	}
+
+	assert(n*m == k);
+
+	// back-transform data
+	assert(fTrans == DataTransform::LOG);
+	Eigen::VectorXd fResult(tempF.size());
+	fResult = tempF;
+	if (fTrans == DataTransform::LOG) {
+		fResult = tempF.array().exp() / fScale;
+	}
+	typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXdRowMajor;
+	Eigen::Map<MatrixXdRowMajor> fMap(fResult.data(), m, n);
+
+	assert(yTrans == DataTransform::INVERSE);
+	Eigen::VectorXd yResult(tempY.size());
+	yResult = tempY;
+	if (yTrans == DataTransform::INVERSE) {
+		yResult = tempY.array().inverse() / yScale;
+	}
+
+	assert(xTrans == DataTransform::NONE);
+	Eigen::VectorXd xResult(tempX.size());
+	xResult = tempX;
+
+	// Write data to output matrix
+	Eigen::MatrixXd outData = Eigen::MatrixXd::Zero(m + 1, n + 1);
+	outData.bottomRightCorner(m, n) = fMap;
+	outData.bottomLeftCorner(m, 1) = yResult;
+	for (int i = 0; i < n; i++) {
+		outData(0, i + 1) = xResult(i);
+	}
+
+	std::ofstream file(filename);
+	file << outData << std::endl;
+	std::cout << "DONE" << std::endl;
+
+}
+
+
+
+/**
 * Read 2d data file with format given as follows:
 * M = [a x; y z];
 * where a is a scalar (dummy value), x is a row vector, 
@@ -155,13 +226,17 @@ void Interpolation2d::readCsvFile(const std::string & filename, const DataTransf
 	TeVec *= yScale;
 
 	MatrixXdRowMajor dataMatrix = map.bottomRightCorner(rows - 1, cols - 1);
+	assert(dataMatrix.allFinite());
 	dataMatrix *= fScale;
+	assert(dataMatrix.allFinite());
 	if (fTrans != DataTransform::NONE) {
 		dataMatrix = applyTransform(dataMatrix, fTrans);
 	}
 	if (yTrans != DataTransform::NONE) {
 		TeVec = applyTransform(TeVec, yTrans);
 	}
+	assert(dataMatrix.allFinite());
+	assert(TeVec.allFinite());
 
 	this->f.setcontent(dataMatrix.size(), dataMatrix.data());
 	this->y.setcontent(TeVec.size(), TeVec.data());
@@ -173,13 +248,13 @@ void Interpolation2d::readCsvFile(const std::string & filename, const DataTransf
 
 
 	// Set variables for spline data
+	assert(lambdaVec.allFinite());
 	this->x.setcontent(lambdaVec.size(), lambdaVec.data());
 
 	this->n = this->x.length();
 	this->m = this->y.length();
 	assert(this->n > 0);
 	assert(this->m > 0);
-
 }
 
 void Interpolation2d::writeCsvFile(const std::string & filename)

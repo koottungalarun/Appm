@@ -58,7 +58,10 @@ public:
 	*/
 	const Eigen::VectorXd bicubicInterp(const Eigen::VectorXd & xSites, const Eigen::VectorXd & ySites) const;
 	
-
+	/**
+	* Write data to file.
+	*/
+	void writeData(const std::string & filename, const double yScale, const double fScale) const;
 
 private:
 
