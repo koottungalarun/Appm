@@ -63,6 +63,7 @@ TeVec = (300 : 100 : 40e3)';
 lambdaVec = [0 0.01 0.1 0.3 1 3 10]; %logspace(-2, 1, 50)];
 % n = 5;
 lambdaVec = [0 logspace(-5, 0, 5) 3];
+lambdaVec = (0:3)*1e-2;
 
 %% Integrands
 % Note: if integrands become infinite, it is most likely due to zeta0 
