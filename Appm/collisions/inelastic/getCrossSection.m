@@ -1,5 +1,5 @@
 function [cs, csDataOut] = getCrossSection(e)
-% get cross section at energy e
+% get cross section (in units of m^2) at energy e (in units of eV)
 
 persistent csData
 
