@@ -78,7 +78,7 @@ void MaxwellSolverLeapFrog::updateMaxwellState(const double dt, const double tim
 {
 	// System of equations
 	assert(dt > 0);
-	assert(isfinite(dt));
+	assert(std::isfinite(dt));
 	this->M = A + pow(dt, 2) * B;
 	const int nFreeIdx = M.rows() - nPvt;
 	assert(nFreeIdx > 0);
