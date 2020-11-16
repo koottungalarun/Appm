@@ -144,11 +144,11 @@ const double Physics::getMaxWavespeed(const Eigen::Vector3d & qL, const Eigen::V
 {
 	const double sL = Physics::getMaxWavespeed(qL);
 	const double sR = Physics::getMaxWavespeed(qR);
-	assert(isfinite(sL));
-	assert(isfinite(sR));
+	assert(std::isfinite(sL));
+	assert(std::isfinite(sR));
 	const double s = std::max(sL, sR);
 	assert(s > 0);
-	assert(isfinite(s));
+	assert(std::isfinite(s));
 	return s;
 }
 

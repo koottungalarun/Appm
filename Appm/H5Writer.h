@@ -21,11 +21,11 @@ public:
 
 	// Specialization for type int
 	template <int cols, int rows> 
-	void writeData<int>(const Eigen::Matrix<int,cols,rows> & matrix, const std::string & dataname);
+	void writeDataInt(const Eigen::Matrix<int,cols,rows> & matrix, const std::string & dataname);
 
 	// Specialization for type double
 	template <int cols, int rows>
-	void writeData<double>(const Eigen::Matrix<double, cols, rows> & matrix, const std::string & dataname);
+	void writeDataDouble(const Eigen::Matrix<double, cols, rows> & matrix, const std::string & dataname);
 
 	void writeData(const std::vector<int> & vector, const std::string & dataname);
 
@@ -60,7 +60,7 @@ inline void H5Writer::writeData(const std::vector<int>& vector, const std::strin
 
 // Specialization for type int
 template <int cols, int rows>
-inline void H5Writer::writeData(const Eigen::Matrix<int, cols, rows> & matrix, const std::string & dataname)
+inline void H5Writer::writeDataInt(const Eigen::Matrix<int, cols, rows> & matrix, const std::string & dataname)
 {
 	if (showOutputInfo) {
 		std::cout << "Write int data to " << this->filename << ": " << dataname << std::endl;
@@ -77,7 +77,7 @@ inline void H5Writer::writeData(const Eigen::Matrix<int, cols, rows> & matrix, c
 
 // Specialization for type double
 template <int cols, int rows>
-inline void H5Writer::writeData(const Eigen::Matrix<double, cols, rows> & matrix, const std::string & dataname)
+inline void H5Writer::writeDataDouble(const Eigen::Matrix<double, cols, rows> & matrix, const std::string & dataname)
 {
 	if (showOutputInfo) {
 		std::cout << "Write double data to " << this->filename << ": " << dataname << std::endl;
