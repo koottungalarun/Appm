@@ -61,7 +61,7 @@ y = 0.85 * [1 1];
 t_h = annotation('textarrow', x, y, 'String', 'k_{ion}, k_{dir}')
 
 yyaxis right
-ph(3) = semilogy(TeVec / Tscale, kr, 'DisplayName', 'k_{rec}');
+ph(3) = semilogy(TeVec / Tscale, kr, 'DisplayName', 'k_{rec}', 'LineStyle', '-.');
 grid on
 xlabel('T / kK')
 ylabel('k_{rec} / (m^6 s^{-1})')

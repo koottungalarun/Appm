@@ -17,8 +17,8 @@
 ### MESH
 ######################
 # mesh: mesh-coarse-test.txt
-# mesh: mesh-coarse.txt
-mesh: mesh-medium.txt
+mesh: mesh-coarse.txt
+# mesh: mesh-medium.txt
 # mesh: mesh-fine.txt
 #
 #
@@ -61,7 +61,6 @@ species: Ar, Argon, 1, 0
 ######################
 elastic-collision: Ar-Ar+
 elastic-collision: e-Ar
-# elastic-collision: e-Ar+
 inelastic-collision: e-Ar
 
 

@@ -567,6 +567,11 @@ void AppmSolver::setElasticCollisions(const std::vector<std::string> & list)
 		int idxA = getSpeciesIndex(tagA);
 		int idxB = getSpeciesIndex(tagB);
 
+		const int qA = speciesList[idxA].getCharge();
+		const int qB = speciesList[idxB].getCharge();
+
+		// Elastic collision of charged and neutral species
+		assert((qA == 0 && qB != 0) || ((qA != 0) && (qB == 0)));
 		std::stringstream ss;
 		ss << "collisions/elastic/" << tag << ".dat";
 		const std::string filename = ss.str();
@@ -2564,12 +2569,12 @@ Eigen::SparseMatrix<double> AppmSolver::getJacobianEulerSourceInelasticCollision
 		const Eigen::VectorXd psi_Gion = collision->getGion(ones, ones, vthE, Te, lambdaIon);
 		const Eigen::VectorXd psi_Grec = collision->getGrec(ones, ones, vthE, xStar, mE, Te, lambdaRec);
 		const Eigen::VectorXd psi_R0ion = collision->getR0ion(ones, ones, vthE, Te, lambdaIon);
-		const Eigen::VectorXd psi_R1rec = collision->getR1rec(ones, ones, vthE, xStar, Te, lambdaRec);
-		const Eigen::VectorXd psi_R2rec = collision->getR2rec(ones, ones, vthE, xStar, Te, lambdaRec);
+		const Eigen::VectorXd psi_R1rec = collision->getR1rec(ones, ones, vthE, xStar, mE, Te, lambdaRec);
+		const Eigen::VectorXd psi_R2rec = collision->getR2rec(ones, ones, vthE, xStar, mE, Te, lambdaRec);
 		const Eigen::VectorXd psi_J00ion = collision->getJ00ion(ones, ones, vthE, Te, lambdaIon);
-		const Eigen::VectorXd psi_J11rec = collision->getJ11rec(ones, ones, vthE, xStar, Te, lambdaRec);
-		const Eigen::VectorXd psi_J22rec = collision->getJ22rec(ones, ones, vthE, xStar, Te, lambdaRec);
-		const Eigen::VectorXd psi_J12rec = collision->getJ12rec(ones, ones, vthE, xStar, Te, lambdaRec);
+		const Eigen::VectorXd psi_J11rec = collision->getJ11rec(ones, ones, vthE, xStar, mE, Te, lambdaRec);
+		const Eigen::VectorXd psi_J22rec = collision->getJ22rec(ones, ones, vthE, xStar, mE, Te, lambdaRec);
+		const Eigen::VectorXd psi_J12rec = collision->getJ12rec(ones, ones, vthE, xStar, mE, Te, lambdaRec);
 
 		// Coefficients in system of equations as given by Le & Cambier (2016)
 		const Eigen::VectorXd psi_Rion = psi_R0ion;
@@ -2985,12 +2990,12 @@ Eigen::MatrixXd AppmSolver::getInelasticSourcesExplicit()
 		const Eigen::VectorXd Gion = collision->getGion(nE, nA, vthE, TeVec, lambdaIon);
 		const Eigen::VectorXd Grec = collision->getGrec(nI, nE, vthE, xStar, mE, TeVec, lambdaRec);
 		const Eigen::VectorXd R0ion = collision->getR0ion(nE, nA, vthE, TeVec, lambdaIon);
-		const Eigen::VectorXd R1rec = collision->getR1rec(nE, nI, vthE, xStar, TeVec, lambdaRec);
-		const Eigen::VectorXd R2rec = collision->getR2rec(nE, nI, vthE, xStar, TeVec, lambdaRec);
+		const Eigen::VectorXd R1rec = collision->getR1rec(nE, nI, vthE, xStar, mE, TeVec, lambdaRec);
+		const Eigen::VectorXd R2rec = collision->getR2rec(nE, nI, vthE, xStar, mE, TeVec, lambdaRec);
 		const Eigen::VectorXd J00ion = collision->getJ00ion(nE, nA, vthE, TeVec, lambdaIon);
-		const Eigen::VectorXd J11rec = collision->getJ11rec(nE, nI, vthE, xStar, TeVec, lambdaRec);
-		const Eigen::VectorXd J22rec = collision->getJ22rec(nE, nI, vthE, xStar, TeVec, lambdaRec);
-		const Eigen::VectorXd J12rec = collision->getJ12rec(nE, nI, vthE, xStar, TeVec, lambdaRec);
+		const Eigen::VectorXd J11rec = collision->getJ11rec(nE, nI, vthE, xStar, mE, TeVec, lambdaRec);
+		const Eigen::VectorXd J22rec = collision->getJ22rec(nE, nI, vthE, xStar, mE, TeVec, lambdaRec);
+		const Eigen::VectorXd J12rec = collision->getJ12rec(nE, nI, vthE, xStar, mE, TeVec, lambdaRec);
 		assert(Gion.allFinite());
 		assert(Grec.allFinite());
 		assert(R0ion.allFinite());

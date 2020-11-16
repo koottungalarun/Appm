@@ -28,11 +28,11 @@ public:
 	const Eigen::VectorXd getGrec(const Eigen::VectorXd & nI, const Eigen::VectorXd & nE, const Eigen::VectorXd & vthE, const Eigen::VectorXd & xStar, const double mE, const Eigen::VectorXd & Te, const Eigen::VectorXd & lambdaVec) const;
 	const Eigen::VectorXd getR0ion(const Eigen::VectorXd & nE, const Eigen::VectorXd & nA, const Eigen::VectorXd & vthE, const Eigen::VectorXd & TeVec, const Eigen::VectorXd & lambdaIon) const;
 	const Eigen::VectorXd getJ00ion(const Eigen::VectorXd & nE, const Eigen::VectorXd & nA, const Eigen::VectorXd & vthE, const Eigen::VectorXd & TeVec, const Eigen::VectorXd & lambdaIon) const;
-	const Eigen::VectorXd getR1rec(const Eigen::VectorXd & nE, const Eigen::VectorXd & nI, const Eigen::VectorXd & vthE, const Eigen::VectorXd & xStar, const Eigen::VectorXd & TeVec, const Eigen::VectorXd & lambdaRec) const;
-	const Eigen::VectorXd getR2rec(const Eigen::VectorXd & nE, const Eigen::VectorXd & nI, const Eigen::VectorXd & vthE, const Eigen::VectorXd & xStar, const Eigen::VectorXd & TeVec, const Eigen::VectorXd & lambdaRec) const;
-	const Eigen::VectorXd getJ11rec(const Eigen::VectorXd & nE, const Eigen::VectorXd & nI, const Eigen::VectorXd & vthE, const Eigen::VectorXd & xStar, const Eigen::VectorXd & TeVec, const Eigen::VectorXd & lambdaRec) const;
-	const Eigen::VectorXd getJ22rec(const Eigen::VectorXd & nE, const Eigen::VectorXd & nI, const Eigen::VectorXd & vthE, const Eigen::VectorXd & xStar, const Eigen::VectorXd & TeVec, const Eigen::VectorXd & lambdaRec) const;
-	const Eigen::VectorXd getJ12rec(const Eigen::VectorXd & nE, const Eigen::VectorXd & nI, const Eigen::VectorXd & vthE, const Eigen::VectorXd & xStar, const Eigen::VectorXd & TeVec, const Eigen::VectorXd & lambdaRec) const;
+	const Eigen::VectorXd getR1rec(const Eigen::VectorXd & nE, const Eigen::VectorXd & nI, const Eigen::VectorXd & vthE, const Eigen::VectorXd & xStar, const double mE, const Eigen::VectorXd & TeVec, const Eigen::VectorXd & lambdaRec) const;
+	const Eigen::VectorXd getR2rec(const Eigen::VectorXd & nE, const Eigen::VectorXd & nI, const Eigen::VectorXd & vthE, const Eigen::VectorXd & xStar, const double mE, const Eigen::VectorXd & TeVec, const Eigen::VectorXd & lambdaRec) const;
+	const Eigen::VectorXd getJ11rec(const Eigen::VectorXd & nE, const Eigen::VectorXd & nI, const Eigen::VectorXd & vthE, const Eigen::VectorXd & xStar, const double mE, const Eigen::VectorXd & TeVec, const Eigen::VectorXd & lambdaRec) const;
+	const Eigen::VectorXd getJ22rec(const Eigen::VectorXd & nE, const Eigen::VectorXd & nI, const Eigen::VectorXd & vthE, const Eigen::VectorXd & xStar, const double mE, const Eigen::VectorXd & TeVec, const Eigen::VectorXd & lambdaRec) const;
+	const Eigen::VectorXd getJ12rec(const Eigen::VectorXd & nE, const Eigen::VectorXd & nI, const Eigen::VectorXd & vthE, const Eigen::VectorXd & xStar, const double mE, const Eigen::VectorXd & TeVec, const Eigen::VectorXd & lambdaRec) const;
 
 	const int getElectronFluidx() const;
 	const int getIonFluidx() const;

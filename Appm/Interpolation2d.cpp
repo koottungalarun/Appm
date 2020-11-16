@@ -62,7 +62,7 @@ const Eigen::VectorXd Interpolation2d::bicubicInterp(const Eigen::VectorXd & xSi
 		break;
 
 	case DataTransform::LOG:
-		ySitesTrans = ySites.array().exp();
+		ySitesTrans = ySites.array().log();
 		break;
 
 	default:
@@ -237,6 +237,12 @@ void Interpolation2d::readCsvFile(const std::string & filename, const DataTransf
 	}
 	assert(dataMatrix.allFinite());
 	assert(TeVec.allFinite());
+
+	// Show y-vector and data matrix to console
+	Eigen::MatrixXd M(TeVec.size(), dataMatrix.cols() + 1);
+	M.col(0) = TeVec;
+	M.rightCols(dataMatrix.cols()) = dataMatrix;
+	//std::cout << M << std::endl;
 
 	this->f.setcontent(dataMatrix.size(), dataMatrix.data());
 	this->y.setcontent(TeVec.size(), TeVec.data());

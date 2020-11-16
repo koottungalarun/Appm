@@ -36,6 +36,33 @@ namespace fs = std::experimental::filesystem;
 //	std::ofstream("output.dat") << Mout << std::endl;
 //}
 
+void test_interpolation2d() {
+	const std::string filename = "collisions/inelastic/I_Gion.csv";
+	DataTransform xTrans = DataTransform::NONE;
+	DataTransform yTrans = DataTransform::INVERSE;
+	DataTransform fTrans = DataTransform::LOG;
+	const double Tscale = 10e3;
+	const double yScale = 1. / Tscale;
+	const double sigmaScale = 1.36e-21;
+	const double fScale = 1. / sigmaScale;
+	Interpolation2d table2d(filename, xTrans, yTrans, fTrans, yScale, fScale);
+
+	const int n = 101;
+	Eigen::VectorXd xSites(n), ySites(n);
+	ySites = Eigen::VectorXd::LinSpaced(n, 0.3, 4);
+	xSites.array() = 0;
+
+	Eigen::VectorXd fSites;
+	fSites = table2d.bicubicInterp(xSites, ySites);
+
+	Eigen::MatrixXd data(n, 3);
+	data.col(0) = xSites;
+	data.col(1) = ySites;
+	data.col(2) = fSites;
+	std::ofstream file("test_table2d_out.dat");
+	file << data << std::endl;
+}
+
 
 void test_Gion() {
 	std::string folderPath = "collisions/inelastic/";
@@ -46,7 +73,7 @@ void test_Gion() {
 	std::cout << scales << std::endl;
 	InelasticCollision collision(folderPath, idxE, idxA, idxI, scales);
 
-	Eigen::VectorXd Te = Eigen::VectorXd::LinSpaced(298, 300, 30e3);
+	Eigen::VectorXd Te = Eigen::VectorXd::LinSpaced(398, 300, 30e3);
 	
 	const int n = Te.size();
 	Eigen::VectorXd nE = Eigen::VectorXd::Ones(n);
@@ -68,11 +95,11 @@ void test_Gion() {
 	data.col(2) = Gion;
 	data.col(3) = Grec;
 
-	std::cout << "Te\t" << "I_Gion\t" << "Gion\t" << "Grec\t" << std::endl;
+	std::cout << "\tTe\t" << "I_Gion\t" << "Gion\t" << "Grec\t" << std::endl;
 	std::cout << data << std::endl;
 	
 	std::ofstream file("output.dat");
-	file << "Te\t" << "I_Gion\t" << "Gion\t" << "Grec\t" << std::endl;
+	file << "\tTe\t" << "I_Gion\t" << "Gion\t" << "Grec\t" << std::endl;
 	file << data << std::endl;
 }
 
@@ -109,8 +136,9 @@ int main() {
 
 	const std::string inputFilename = "input.txt";
 
-	test_Gion();
-	return EXIT_SUCCESS;
+	//test_Gion();
+	//test_interpolation2d();
+	//return EXIT_SUCCESS;
 	//test_bicubicInterpolation();
 
 	Main main;

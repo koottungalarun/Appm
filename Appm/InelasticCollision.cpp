@@ -11,7 +11,7 @@ InelasticCollision::InelasticCollision(const std::string & folderPath,
 	: idxE(idxE_), idxA(idxA_), idxI(idxI_)
 {
 	this->sigmaScale = scales.getCrossSectionsScale();
-	std::cout << "sigmaScale: " << sigmaScale << std::endl;
+	//std::cout << "sigmaScale: " << sigmaScale << std::endl;
 	const double sigmaScaleInverse = 1. / sigmaScale;
 
 	// set parameters 
@@ -43,7 +43,7 @@ InelasticCollision::InelasticCollision(const std::string & folderPath,
 	std::string filename;
 	filename = folderPath + "I_Gion.csv";
 	data_Gion = Interpolation2d(filename, xTrans, yTrans, fTrans, yScale, sigmaScaleInverse);
-	data_Gion.writeData("I_Gion_temp.dat", yScale, sigmaScaleInverse);
+	//data_Gion.writeData("I_Gion_temp.dat", yScale, sigmaScaleInverse);
 
 	filename = folderPath + "I_Grec.csv";
 	data_Grec = Interpolation2d(filename, xTrans, yTrans, fTrans, yScale, sigmaScaleInverse);
