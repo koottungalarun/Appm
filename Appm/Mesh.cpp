@@ -52,7 +52,7 @@ void Mesh::writeToFile()
 	std::cout << "Faces:    " << faceList.size() << std::endl;
 	std::cout << "Cells:    " << cellList.size() << std::endl;
 
-	std::ofstream file;
+	//std::ofstream file;
 
 	const int nVertices = getNumberOfVertices();
 	const int nEdges = getNumberOfEdges();
@@ -107,7 +107,7 @@ void Mesh::writeToFile()
 		edge2Vertex(0, i) = getEdge(i)->getVertexA()->getIndex();
 		edge2Vertex(1, i) = getEdge(i)->getVertexB()->getIndex();
 	}
-	h5writer.writeData(edge2Vertex, "/edge2vertex");
+	h5writer.writeDataInt(edge2Vertex, "/edge2vertex");
 
 	Eigen::VectorXi edgeIdx(nEdges);
 	for (int i = 0; i < nEdges; i++) {
@@ -144,7 +144,7 @@ void Mesh::writeToFile()
 	const int f2v_maxCoeff = f2v.array().abs().maxCoeff();
 	//std::cout << "f2v max: " << f2v_maxCoeff << std::endl;
 	//assert(f2v_maxCoeff == getNumberOfVertices() - 1);
-	file = std::ofstream(this->meshPrefix + "-f2v.dat");
+	std::ofstream file(this->meshPrefix + "-f2v.dat");
 	file << f2v.transpose() << std::endl;
 
 	Eigen::Matrix3Xd fc(3, nFaces);
@@ -715,30 +715,40 @@ XdmfGrid Mesh::getXdmfVertexGrid() const
 	XdmfGrid vertexGrid(XdmfGrid::Tags("Vertex Grid"));
 
 	// Topology and topology dataItem
-	XdmfTopology topology(XdmfTopology::Tags(XdmfTopology::TopologyType::Polyvertex, getNumberOfVertices(), 1));
-	topology.addChild(XdmfDataItem(
-		XdmfDataItem::Tags(
-			{ getNumberOfVertices()}, 
-			XdmfDataItem::NumberType::Int,
-			XdmfDataItem::Format::HDF),
-		(std::stringstream() << this->meshPrefix << "-mesh.h5:/vertexIdx").str()
-	));
-	vertexGrid.addChild(topology);
+	{
+		std::stringstream ss;
+		ss << this->meshPrefix << "-mesh.h5:/vertexIdx";
+		XdmfTopology topology(XdmfTopology::Tags(XdmfTopology::TopologyType::Polyvertex, getNumberOfVertices(), 1));
+		topology.addChild(XdmfDataItem(
+			XdmfDataItem::Tags(
+				{ getNumberOfVertices()}, 
+				XdmfDataItem::NumberType::Int,
+				XdmfDataItem::Format::HDF),
+			ss.str()
+		));
+		vertexGrid.addChild(topology);
+	}
 
 	// Geometry and geometry data item
-	XdmfGeometry geometry;
-	geometry.addChild(
-		XdmfDataItem(
-			XdmfDataItem::Tags(
-				{ getNumberOfVertices(), 3 },
-				XdmfDataItem::NumberType::Float,
-				XdmfDataItem::Format::HDF),
-				(std::stringstream() << this->meshPrefix << "-mesh.h5:/vertexPos").str()
-		));
-	vertexGrid.addChild(geometry);
+	{
+		std::stringstream ss;
+		ss << this->meshPrefix << "-mesh.h5:/vertexPos";
+		XdmfGeometry geometry;
+		geometry.addChild(
+			XdmfDataItem(
+				XdmfDataItem::Tags(
+					{ getNumberOfVertices(), 3 },
+					XdmfDataItem::NumberType::Float,
+					XdmfDataItem::Format::HDF),
+				ss.str()
+			));
+		vertexGrid.addChild(geometry);
+	}
 
 	// Attribute: vertex index
 	{
+		std::stringstream ss;
+		ss << this->meshPrefix << "-mesh.h5:/vertexIdx";
 		XdmfAttribute attribute(XdmfAttribute::Tags("Vertex Index", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
 		attribute.addChild(
 			XdmfDataItem(
@@ -746,7 +756,7 @@ XdmfGrid Mesh::getXdmfVertexGrid() const
 					{ getNumberOfVertices() },
 					XdmfDataItem::NumberType::Int,
 					XdmfDataItem::Format::HDF),
-					(std::stringstream() << this->meshPrefix << "-mesh.h5:/vertexIdx").str()
+				ss.str()
 			)
 		);
 		vertexGrid.addChild(attribute);
@@ -754,6 +764,8 @@ XdmfGrid Mesh::getXdmfVertexGrid() const
 
 	// Attribute: vertex type
 	{
+		std::stringstream ss;
+		ss << this->meshPrefix << "-mesh.h5:/vertexType";
 		XdmfAttribute attribute(XdmfAttribute::Tags("Vertex Type", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
 		attribute.addChild(
 			XdmfDataItem(
@@ -761,7 +773,7 @@ XdmfGrid Mesh::getXdmfVertexGrid() const
 					{ getNumberOfVertices() },
 					XdmfDataItem::NumberType::Int,
 					XdmfDataItem::Format::HDF),
-					(std::stringstream() << this->meshPrefix << "-mesh.h5:/vertexType").str()
+				ss.str()
 			)
 		);
 		vertexGrid.addChild(attribute);
@@ -774,59 +786,73 @@ XdmfGrid Mesh::getXdmfEdgeGrid() const
 	XdmfGrid edgeGrid(XdmfGrid::Tags("Edge grid"));
 
 	// Topology
-	XdmfTopology topology(XdmfTopology::Tags(XdmfTopology::TopologyType::Polyline, getNumberOfEdges(), 2));
-	topology.addChild(
-		XdmfDataItem(
-			XdmfDataItem::Tags(
-				{ 2*getNumberOfEdges() },
-				XdmfDataItem::NumberType::Int,
-				XdmfDataItem::Format::HDF),
-			(std::stringstream() << this->meshPrefix << "-mesh.h5:/edge2vertex").str()
-		)
-	);
-	edgeGrid.addChild(topology);
+	{
+		std::stringstream ss;
+		ss << this->meshPrefix << "-mesh.h5:/edge2vertex";
+		XdmfTopology topology(XdmfTopology::Tags(XdmfTopology::TopologyType::Polyline, getNumberOfEdges(), 2));
+		topology.addChild(
+			XdmfDataItem(
+				XdmfDataItem::Tags(
+					{ 2*getNumberOfEdges() },
+					XdmfDataItem::NumberType::Int,
+					XdmfDataItem::Format::HDF),
+				ss.str()
+			)
+		);
+		edgeGrid.addChild(topology);
+	}
 
 	// Geometry
-	XdmfGeometry geometry;
-	geometry.addChild(
-		XdmfDataItem(
-			XdmfDataItem::Tags(
-				{ getNumberOfVertices(), 3 },
-				XdmfDataItem::NumberType::Float,
-				XdmfDataItem::Format::HDF), 
-			(std::stringstream() << this->meshPrefix << "-mesh.h5:/vertexPos").str()
-		));
-	edgeGrid.addChild(geometry);
+	{
+		XdmfGeometry geometry;
+		std::stringstream ss;
+		ss << this->meshPrefix << "-mesh.h5:/vertexPos";
+		geometry.addChild(
+			XdmfDataItem(
+				XdmfDataItem::Tags(
+					{ getNumberOfVertices(), 3 },
+					XdmfDataItem::NumberType::Float,
+					XdmfDataItem::Format::HDF), 
+				ss.str()
+			));
+		edgeGrid.addChild(geometry);
+	}
 
 	// Attribute: edge index
 	XdmfAttribute edgeIdxAttribute(
 		XdmfAttribute::Tags("Edge index", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell)
 	);
+	std::stringstream ss;
+	ss << this->meshPrefix << "-mesh.h5:/edgeIdx";
 	edgeIdxAttribute.addChild(
 		XdmfDataItem(
 			XdmfDataItem::Tags(
 				{ getNumberOfEdges() },
 				XdmfDataItem::NumberType::Int,
 				XdmfDataItem::Format::HDF),
-				(std::stringstream() << this->meshPrefix << "-mesh.h5:/edgeIdx").str()
+			ss.str()
 		)
 	);
 	edgeGrid.addChild(edgeIdxAttribute);
 
 	// Attribute: edge type
-	XdmfAttribute edgeTypeAttribute(
-		XdmfAttribute::Tags("Edge Type", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell)
-	);
-	edgeTypeAttribute.addChild(
-		XdmfDataItem(
-			XdmfDataItem::Tags(
-				{ getNumberOfEdges() },
-				XdmfDataItem::NumberType::Int,
-				XdmfDataItem::Format::HDF),
-				(std::stringstream() << this->meshPrefix << "-mesh.h5:/edgeType").str()
-		)
-	);
-	edgeGrid.addChild(edgeTypeAttribute);
+	{
+		XdmfAttribute edgeTypeAttribute(
+			XdmfAttribute::Tags("Edge Type", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell)
+		);
+		std::stringstream ss;
+		ss << this->meshPrefix << "-mesh.h5:/edgeType";
+		edgeTypeAttribute.addChild(
+			XdmfDataItem(
+				XdmfDataItem::Tags(
+					{ getNumberOfEdges() },
+					XdmfDataItem::NumberType::Int,
+					XdmfDataItem::Format::HDF),
+				ss.str()
+			)
+		);
+		edgeGrid.addChild(edgeTypeAttribute);
+	}
 
 
 	return edgeGrid;
@@ -842,53 +868,70 @@ XdmfGrid Mesh::getXdmfSurfaceGrid() const
 	XdmfTopology topology(XdmfTopology::Tags(XdmfTopology::TopologyType::Mixed, getNumberOfFaces()));
 
 	// Topology DataItem
-	const int nElements = h5reader.readDataSize("/face2vertex");
-	topology.addChild(
-		XdmfDataItem(
-			XdmfDataItem::Tags(
-				{ nElements }, 
-				XdmfDataItem::NumberType::Int, 
-				XdmfDataItem::Format::HDF), 
-			(std::stringstream() << this->meshPrefix << "-mesh.h5:/face2vertex").str()
-		));
-	surfaceGrid.addChild(topology);
+	{
+		const int nElements = h5reader.readDataSize("/face2vertex");
+		std::stringstream ss;
+		ss << this->meshPrefix << "-mesh.h5:/face2vertex";
+		topology.addChild(
+			XdmfDataItem(
+				XdmfDataItem::Tags(
+					{ nElements }, 
+					XdmfDataItem::NumberType::Int, 
+					XdmfDataItem::Format::HDF), 
+				ss.str()
+			));
+		surfaceGrid.addChild(topology);
+	}
 
 	// Geometry and Geometry DataItem
-	XdmfGeometry geometry;
-	geometry.addChild(
-		XdmfDataItem(
-			XdmfDataItem::Tags(
-				{ getNumberOfVertices(), 3 }, 
-				XdmfDataItem::NumberType::Float, 
-				XdmfDataItem::Format::HDF), 
-			(std::stringstream() << this->meshPrefix << "-mesh.h5:/vertexPos").str()
-		));
-	
-	surfaceGrid.addChild(geometry);
+	{
+		std::stringstream ss;
+		ss << this->meshPrefix << "-mesh.h5:/vertexPos";
+		XdmfGeometry geometry;
+		geometry.addChild(
+			XdmfDataItem(
+				XdmfDataItem::Tags(
+					{ getNumberOfVertices(), 3 }, 
+					XdmfDataItem::NumberType::Float, 
+					XdmfDataItem::Format::HDF), 
+				ss.str()
+			));
+		
+		surfaceGrid.addChild(geometry);
+	}
 
 	// Attribute: face index
-	XdmfAttribute attributeFaceIdx(XdmfAttribute::Tags("Face Index", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
-	std::string faceIdxStringAttribute = (std::stringstream() << this->meshPrefix << "-mesh.h5:/faceIndex").str();
-	attributeFaceIdx.addChild(
-		XdmfDataItem(
-			XdmfDataItem::Tags(
-				{ getNumberOfFaces() },
-				XdmfDataItem::NumberType::Int,
-				XdmfDataItem::Format::HDF),
-			faceIdxStringAttribute));
-	surfaceGrid.addChild(attributeFaceIdx);
+
+	{
+		std::stringstream ss;
+		ss << this->meshPrefix << "-mesh.h5:/faceIndex";
+		XdmfAttribute attributeFaceIdx(XdmfAttribute::Tags("Face Index", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
+		std::string faceIdxStringAttribute = ss.str();
+		attributeFaceIdx.addChild(
+			XdmfDataItem(
+				XdmfDataItem::Tags(
+					{ getNumberOfFaces() },
+					XdmfDataItem::NumberType::Int,
+					XdmfDataItem::Format::HDF),
+				faceIdxStringAttribute));
+		surfaceGrid.addChild(attributeFaceIdx);
+	}
 
 	// Attribute: face area
-	XdmfAttribute attributeFaceArea(XdmfAttribute::Tags("Face Area", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
-	std::string faceAreaStringAttribute = (std::stringstream() << this->meshPrefix << "-mesh.h5:/faceArea").str();
-	attributeFaceArea.addChild(
-		XdmfDataItem(
-			XdmfDataItem::Tags(
-				{ getNumberOfFaces() },
-				XdmfDataItem::NumberType::Float,
-				XdmfDataItem::Format::HDF),
-			faceAreaStringAttribute));
-	surfaceGrid.addChild(attributeFaceArea);
+	{
+		std::stringstream ss;
+		ss << this->meshPrefix << "-mesh.h5:/faceArea";
+		XdmfAttribute attributeFaceArea(XdmfAttribute::Tags("Face Area", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
+		std::string faceAreaStringAttribute = ss.str();
+		attributeFaceArea.addChild(
+			XdmfDataItem(
+				XdmfDataItem::Tags(
+					{ getNumberOfFaces() },
+					XdmfDataItem::NumberType::Float,
+					XdmfDataItem::Format::HDF),
+				faceAreaStringAttribute));
+		surfaceGrid.addChild(attributeFaceArea);
+	}
 	
 	return surfaceGrid;
 }
@@ -902,26 +945,32 @@ XdmfGrid Mesh::getXdmfVolumeGrid() const
 	XdmfTopology topology(XdmfTopology::Tags(XdmfTopology::TopologyType::Mixed, getNumberOfCells()));
 
 	// Topology DataItem
-	const int nElements = h5reader.readDataSize("/cell2vertex");
-	topology.addChild(
-		XdmfDataItem(
-			XdmfDataItem::Tags(
-				{ nElements },
-				XdmfDataItem::NumberType::Int,
-				XdmfDataItem::Format::HDF),
-				(std::stringstream() << this->meshPrefix << "-mesh.h5:/cell2vertex").str()
-		));
-	volumeGrid.addChild(topology);
+	{
+		const int nElements = h5reader.readDataSize("/cell2vertex");
+		std::stringstream ss;
+		ss << this->meshPrefix << "-mesh.h5:/cell2vertex";
+		topology.addChild(
+			XdmfDataItem(
+				XdmfDataItem::Tags(
+					{ nElements },
+					XdmfDataItem::NumberType::Int,
+					XdmfDataItem::Format::HDF),
+					ss.str()
+			));
+		volumeGrid.addChild(topology);
+	}
 
 	// Geometry and Geometry DataItem
 	XdmfGeometry geometry;
+	std::stringstream ss;
+	ss << this->meshPrefix << "-mesh.h5:/vertexPos";
 	geometry.addChild(
 		XdmfDataItem(
 			XdmfDataItem::Tags(
 				{ getNumberOfVertices(), 3 },
 				XdmfDataItem::NumberType::Float,
 				XdmfDataItem::Format::HDF),
-				(std::stringstream() << this->meshPrefix << "-mesh.h5:/vertexPos").str()
+				ss.str()
 		));
 
 	volumeGrid.addChild(geometry);
@@ -929,7 +978,9 @@ XdmfGrid Mesh::getXdmfVolumeGrid() const
 	// Attribute: cell index
 	{
 		XdmfAttribute attribute(XdmfAttribute::Tags("Cell Index", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
-		std::string bodyString = (std::stringstream() << this->meshPrefix << "-mesh.h5:/cellIndex").str();
+		std::stringstream ss;
+		ss << this->meshPrefix << "-mesh.h5:/cellIndex";
+		std::string bodyString = ss.str();
 		attribute.addChild(
 			XdmfDataItem(
 				XdmfDataItem::Tags(
@@ -943,7 +994,9 @@ XdmfGrid Mesh::getXdmfVolumeGrid() const
 	// Attribute: cell volume
 	{
 		XdmfAttribute attribute(XdmfAttribute::Tags("Cell Volume", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
-		std::string bodyString = (std::stringstream() << this->meshPrefix << "-mesh.h5:/cellVolume").str();
+		std::stringstream ss;
+        ss << this->meshPrefix << "-mesh.h5:/cellVolume";
+		std::string bodyString = ss.str();
 		attribute.addChild(
 			XdmfDataItem(
 				XdmfDataItem::Tags(

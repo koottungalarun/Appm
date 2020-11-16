@@ -116,16 +116,21 @@ void PrimalMesh::refineMesh(const int nRefinements)
 		//std::cout << f2v.transpose() << std::endl;
 		assert((f2v.array() >= 0).all());
 
-		std::ofstream file;
-		std::stringstream ss;
-		ss << "level" << level << "-coords.dat";
-		file = std::ofstream(ss.str());
-		file << vertexCoordinates.transpose() << std::endl;
-		ss = std::stringstream();
-		ss << "level" << level << "-f2v.dat";
-		file = std::ofstream(ss.str());
-		file << f2v.transpose() << std::endl;
-
+		// std::ofstream file;
+		// std::stringstream ss;
+		{
+			std::stringstream ss;
+			ss << "level" << level << "-coords.dat";
+			std::ofstream file = std::ofstream(ss.str());
+			file << vertexCoordinates.transpose() << std::endl;
+		}
+		// ss = std::stringstream();
+		{
+			std::stringstream ss;
+			ss << "level" << level << "-f2v.dat";
+			std::ofstream file = std::ofstream(ss.str());
+			file << f2v.transpose() << std::endl;
+		}
 		//if (level == 1) { break; }
 
 		const double tol = 16 * std::numeric_limits<double>::epsilon();
