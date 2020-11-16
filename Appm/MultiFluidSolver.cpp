@@ -23,7 +23,9 @@ void MultiFluidSolver::writeStates(H5Writer & writer) const
 	const int nCells = mesh->getNumberOfCells();
 
 	for (int k = 0; k < nFluids; k++) {
-		const std::string fluidTag = (std::stringstream() << "/fluid" << k << "-").str();
+		std::stringstream ss;
+		ss << "/fluid" << k << "-";
+		const std::string fluidTag = ss.str();
 		const std::string pressureTag = fluidTag + "pressure";
 		const std::string velocityTag = fluidTag + "velocity";
 		const std::string densityTag  = fluidTag + "density";
@@ -59,7 +61,9 @@ const std::string MultiFluidSolver::getXdmfOutput(const int iteration) const
 	std::stringstream ss;
 	const int nFluids = this->getNfluids();
 	for (int k = 0; k < nFluids; k++) {
-		const std::string fluidName = (std::stringstream() << "" << k).str();
+		std::stringstream ss;
+		ss << "" << k;
+		const std::string fluidName = ss.str();
 
 		ss << "<Attribute Name=\"Density " << fluidName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << mesh->getNumberOfCells() << "\""
