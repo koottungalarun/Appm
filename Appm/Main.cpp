@@ -1,8 +1,9 @@
 #include "Main.h"
 #include "Interpolation2d.h"
-#include <filesystem>
 
-namespace fs = std::experimental::filesystem;
+// This library is not available in Intel C++ Compiler 2018.1.163
+// #include <filesystem>
+// namespace fs = std::experimental::filesystem;
 //namespace fs = std::filesystem;
 
 /**
@@ -103,23 +104,23 @@ void test_Gion() {
 	file << data << std::endl;
 }
 
-void removeFiles(const fs::path folder, const std::string extension) {
-	//const std::string extension = ".h5";
-	std::cout << "Remove files with extension " << extension << std::endl;
-	auto it = fs::directory_iterator(folder);
-	auto counter = 0;
-	for (auto & p : it) {
-		const std::string filename = p.path().string();
-		const std::string ext = filename.substr(filename.size() - extension.size());
-		if (ext == extension) {
-			//std::cout << filename << std::endl;
-			const bool isRemoved = fs::remove(p.path()); // delete file
-			assert(isRemoved);
-			counter++;
-		}
-	}
-	std::cout << "Number of deleted files: " << counter << std::endl;
-}
+// void removeFiles(const fs::path folder, const std::string extension) {
+	// //const std::string extension = ".h5";
+	// std::cout << "Remove files with extension " << extension << std::endl;
+	// auto it = fs::directory_iterator(folder);
+	// auto counter = 0;
+	// for (auto & p : it) {
+		// const std::string filename = p.path().string();
+		// const std::string ext = filename.substr(filename.size() - extension.size());
+		// if (ext == extension) {
+			// //std::cout << filename << std::endl;
+			// const bool isRemoved = fs::remove(p.path()); // delete file
+			// assert(isRemoved);
+			// counter++;
+		// }
+	// }
+	// std::cout << "Number of deleted files: " << counter << std::endl;
+// }
 
 
 /**
@@ -130,9 +131,10 @@ int main() {
 	std::cout << "*    APPM             *" << std::endl;
 	std::cout << "***********************" << std::endl;
 
-	auto cwd = fs::current_path();
-	std::cout << "Current directory: " << cwd << std::endl;
-	removeFiles(cwd, ".h5");
+	// Note: not available with Intel C++ compiler 2018.1.163
+	// auto cwd = fs::current_path();
+	// std::cout << "Current directory: " << cwd << std::endl;
+	// removeFiles(cwd, ".h5");
 
 	const std::string inputFilename = "input.txt";
 

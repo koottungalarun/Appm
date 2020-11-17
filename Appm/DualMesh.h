@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+#include <iostream>
 #include "EigenAuxiliaries.h"
 #include "Mesh.h"
 #include "PrimalMesh.h"

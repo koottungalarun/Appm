@@ -3509,7 +3509,9 @@ void AppmSolver::writeXdmfDualVolume(const std::string & filename)
 * @return formatted string of output filename
 */
 std::string getOutputFilename(const int iteration) {
-	return (std::stringstream() << "appm-" << std::setfill('0') << std::setw(5) << iteration << ".h5").str();
+	std::stringstream ss;
+	ss << "appm-" << std::setfill('0') << std::setw(5) << iteration << ".h5";
+	return ss.str();
 }
 
 /**
@@ -3553,8 +3555,10 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 	const int nFaces = dualMesh.getNumberOfFaces();
 
 	for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+		std::stringstream ss;
+		ss << "/" << fluidName << "-";
 		const std::string fluidName = getSpecies(fluidIdx).getName();
-		const std::string fluidTag = (std::stringstream() << "/" << fluidName << "-").str();
+		const std::string fluidTag = ss.str();
 		const std::string pressureTag = fluidTag + "pressure";
 		const std::string velocityTag = fluidTag + "velocity";
 		const std::string densityTag = fluidTag + "density";

@@ -147,7 +147,7 @@ const int DualMesh::getAssociatedPrimalEdgeIndex(const int dualFaceIndex) const
 	assert(dualFaceIndex >= 0);
 	assert(dualFaceIndex < this->getNumberOfFaces());
 	const int result = dualFaceToPrimalEdgeList(dualFaceIndex);
-	assert(isfinite((double) result));
+	assert(std::isfinite((double) result));
 	assert(result >= 0);
 	return result;
 }
@@ -238,9 +238,10 @@ Eigen::VectorXi DualMesh::associateDualFacesWithPrimalEdges(const PrimalMesh & p
 XdmfGrid DualMesh::getXdmfSurfaceGrid() const
 {
 	XdmfGrid surfaceGrid = Mesh::getXdmfSurfaceGrid();
-
+	std::stringstream ss;
+	ss << getMeshDataFilename() << ":/faceFluidType";
 	XdmfAttribute attribute(XdmfAttribute::Tags("Face Fluid Type", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
-	std::string attributeString = (std::stringstream() << getMeshDataFilename() << ":/faceFluidType").str();
+	std::string attributeString = ss.str();
 	attribute.addChild(
 		XdmfDataItem(
 			XdmfDataItem::Tags(
@@ -257,9 +258,10 @@ XdmfGrid DualMesh::getXdmfSurfaceGrid() const
 XdmfGrid DualMesh::getXdmfVolumeGrid() const
 {
 	XdmfGrid volumeGrid = Mesh::getXdmfVolumeGrid();
-
+	std::stringstream ss;
+	ss << getMeshDataFilename() << ":/cellFluidType";
 	XdmfAttribute attribute(XdmfAttribute::Tags("Cell Fluid Type", XdmfAttribute::Type::Scalar, XdmfAttribute::Center::Cell));
-	std::string attributeString = (std::stringstream() << getMeshDataFilename() << ":/cellFluidType").str();
+	std::string attributeString = ss.str();
 	attribute.addChild(
 		XdmfDataItem(
 			XdmfDataItem::Tags(
