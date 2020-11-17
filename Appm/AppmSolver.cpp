@@ -73,7 +73,7 @@ void AppmSolver::init()
 	}
 
 	// Output file for time values at each timestep
-	this->timeFile = std::ofstream("timesteps.dat");
+	this->timeFile.open("timesteps.dat");
 
 	isStateWrittenToOutput = true;
 	//readParameters("AppmSolverParams.txt");
@@ -3555,9 +3555,9 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 	const int nFaces = dualMesh.getNumberOfFaces();
 
 	for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
+		const std::string fluidName = getSpecies(fluidIdx).getName();
 		std::stringstream ss;
 		ss << "/" << fluidName << "-";
-		const std::string fluidName = getSpecies(fluidIdx).getName();
 		const std::string fluidTag = ss.str();
 		const std::string pressureTag = fluidTag + "pressure";
 		const std::string velocityTag = fluidTag + "velocity";
@@ -3641,16 +3641,16 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 		writer.writeData(numberDensity, numberDensityTag);
 		writer.writeData(pressure, pressureTag);
 		writer.writeData(velocity, velocityTag);
-		writer.writeData(temperature, (std::stringstream() << fluidTag << "temperature").str());
-		writer.writeData(sumMassFluxes, (std::stringstream() << fluidTag << "sumMassFlux").str());
-		writer.writeData(sumMomentumFluxes, (std::stringstream() << fluidTag << "sumMomentumFlux").str());
-		writer.writeData(sumEnergyFluxes, (std::stringstream() << fluidTag << "sumEnergyFlux").str());
-		writer.writeData(frictionSource, (std::stringstream() << fluidTag << "frictionSource").str());
-		writer.writeData(speciesDiffusionVelocity, (std::stringstream() << fluidTag << "diffusionVelocity").str());
-		writer.writeData(speciesFrictionEnergySource, (std::stringstream() << fluidTag << "frictionEnergySource").str());
-		writer.writeData(fluidMassFluxImplicitTerm, (std::stringstream() << fluidTag << "massFluxImplicitTerm").str());
-		writer.writeData(speciesEnergySource, (std::stringstream() << fluidTag << "energySource").str());
-		writer.writeData(speciesMomentumSource, (std::stringstream() << fluidTag << "momentumSource").str());
+		writer.writeData(temperature, fluidTag + "temperature");
+		writer.writeData(sumMassFluxes, fluidTag + "sumMassFlux");
+		writer.writeData(sumMomentumFluxes, fluidTag + "sumMomentumFlux");
+		writer.writeData(sumEnergyFluxes, fluidTag + "sumEnergyFlux");
+		writer.writeData(frictionSource, fluidTag + "frictionSource");
+		writer.writeData(speciesDiffusionVelocity, fluidTag + "diffusionVelocity");
+		writer.writeData(speciesFrictionEnergySource, fluidTag + "frictionEnergySource");
+		writer.writeData(fluidMassFluxImplicitTerm, fluidTag + "massFluxImplicitTerm");
+		writer.writeData(speciesEnergySource, fluidTag + "energySource");
+		writer.writeData(speciesMomentumSource, fluidTag + "momentumSource");
 
 		Eigen::Matrix3Xd el_source = LorentzForce_electric.block(3 * fluidIdx, 0, 3, nCells);
 		writer.writeData(el_source, fluidTag + "LorentzForceEl");
@@ -3670,24 +3670,24 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 			Eigen::VectorXd faceFluxMass;
 			faceFluxMass = faceFluxes.row(5 * fluidIdx + 0);
 			assert(faceFluxMass.size() == nFaces);
-			writer.writeData(faceFluxMass, (std::stringstream() << fluidTag << "massFlux").str());
+			writer.writeData(faceFluxMass, fluidTag + "massFlux");
 		}
 		{
 			Eigen::MatrixXd faceFluxMomentum;
 			faceFluxMomentum = faceFluxes.block(5 * fluidIdx + 1, 0, 3, nFaces);
 			assert(faceFluxMomentum.rows() == 3);
 			assert(faceFluxMomentum.cols() == nFaces);
-			writer.writeData(faceFluxMomentum, (std::stringstream() << fluidTag << "momentumFlux").str());
+			writer.writeData(faceFluxMomentum, fluidTag + "momentumFlux");
 		}
 		{
 			Eigen::VectorXd faceFluxEnergy;
 			faceFluxEnergy = faceFluxes.row(5 * fluidIdx + 4);
 			assert(faceFluxEnergy.size() == nFaces);
-			writer.writeData(faceFluxEnergy, (std::stringstream() << fluidTag << "energyFlux").str());
+			writer.writeData(faceFluxEnergy, fluidTag + "energyFlux");
 		}
 		{
 			const Eigen::VectorXi faceTypeFluid = faceTypeFluids.col(fluidIdx);
-			writer.writeData(faceTypeFluid, (std::stringstream() << fluidTag << "faceType").str());
+			writer.writeData(faceTypeFluid, fluidTag + "faceType");
 		}
 	}
 	writer.writeData(bulkVelocity, "/bulkVelocity");
@@ -3778,7 +3778,7 @@ XdmfGrid AppmSolver::getOutputPrimalEdgeGrid(const int iteration, const double t
 			{ 2 * primalMesh.getNumberOfEdges() },
 			XdmfDataItem::NumberType::Int,
 			XdmfDataItem::Format::HDF),
-			(std::stringstream() << primalMesh.getPrefix() << "-mesh.h5:/edge2vertex").str()
+			primalMesh.getPrefix() + "-mesh.h5:/edge2vertex"
 		));
 	primalEdgeGrid.addChild(primalEdgeTopology);
 
@@ -3788,7 +3788,8 @@ XdmfGrid AppmSolver::getOutputPrimalEdgeGrid(const int iteration, const double t
 			{ primalMesh.getNumberOfVertices(), 3 },
 			XdmfDataItem::NumberType::Float,
 			XdmfDataItem::Format::HDF),
-			(std::stringstream() << primalMesh.getPrefix() << "-mesh.h5:/vertexPos").str())
+			primalMesh.getPrefix() + "-mesh.h5:/vertexPos"
+		)
 	);
 	primalEdgeGrid.addChild(primalEdgeGeometry);
 
@@ -3801,8 +3802,8 @@ XdmfGrid AppmSolver::getOutputPrimalEdgeGrid(const int iteration, const double t
 			{ primalMesh.getNumberOfEdges() },
 			XdmfDataItem::NumberType::Int,
 			XdmfDataItem::Format::HDF),
-			(std::stringstream() << primalMesh.getPrefix() << "-mesh.h5:/edgeIdx").str()
-		));
+			primalMesh.getPrefix() + "-mesh.h5:/edgeIdx")
+		);
 	primalEdgeGrid.addChild(edgeIndexAttribute);
 
 	// Attribute: Electric field E
@@ -3814,7 +3815,7 @@ XdmfGrid AppmSolver::getOutputPrimalEdgeGrid(const int iteration, const double t
 			{ primalMesh.getNumberOfEdges(), 3 },
 			XdmfDataItem::NumberType::Float,
 			XdmfDataItem::Format::HDF),
-			(std::stringstream() << dataFilename << ":/E").str()
+			dataFilename + ":/E"
 		));
 	primalEdgeGrid.addChild(efieldAttribute);
 	return primalEdgeGrid;
@@ -3836,7 +3837,7 @@ XdmfGrid AppmSolver::getOutputPrimalSurfaceGrid(const int iteration, const doubl
 			{ nElements },
 			XdmfDataItem::NumberType::Int,
 			XdmfDataItem::Format::HDF),
-			(std::stringstream() << primalMesh.getPrefix() << "-mesh.h5:/face2vertex").str()
+			primalMesh.getPrefix() + "-mesh.h5:/face2vertex"
 		));
 	primalSurfaceGrid.addChild(topology);
 
@@ -3846,7 +3847,8 @@ XdmfGrid AppmSolver::getOutputPrimalSurfaceGrid(const int iteration, const doubl
 			{ primalMesh.getNumberOfVertices(), 3 },
 			XdmfDataItem::NumberType::Float,
 			XdmfDataItem::Format::HDF),
-			(std::stringstream() << primalMesh.getPrefix() << "-mesh.h5:/vertexPos").str())
+			primalMesh.getPrefix() + "-mesh.h5:/vertexPos"
+		)
 	);
 	primalSurfaceGrid.addChild(primalFaceGeometry);
 
@@ -3859,8 +3861,9 @@ XdmfGrid AppmSolver::getOutputPrimalSurfaceGrid(const int iteration, const doubl
 			{ primalMesh.getNumberOfFaces() },
 			XdmfDataItem::NumberType::Int,
 			XdmfDataItem::Format::HDF),
-			(std::stringstream() << primalMesh.getPrefix() << "-mesh.h5:/faceIndex").str()
-		));
+			primalMesh.getPrefix() + "-mesh.h5:/faceIndex"
+		)
+	);
 	primalSurfaceGrid.addChild(faceIndexAttribute);
 
 	// Attribute: Magnetic flux B
@@ -3872,7 +3875,7 @@ XdmfGrid AppmSolver::getOutputPrimalSurfaceGrid(const int iteration, const doubl
 			{ primalMesh.getNumberOfFaces(), 3 },
 			XdmfDataItem::NumberType::Float,
 			XdmfDataItem::Format::HDF),
-			(std::stringstream() << dataFilename << ":/B").str()
+			dataFilename + ":/B"
 		));
 	primalSurfaceGrid.addChild(BfieldAttribute);
 
@@ -3886,7 +3889,7 @@ XdmfGrid AppmSolver::getOutputPrimalSurfaceGrid(const int iteration, const doubl
 				{ primalMesh.getNumberOfVertices(), 3 },
 				XdmfDataItem::NumberType::Float,
 				XdmfDataItem::Format::HDF),
-				(std::stringstream() << dataFilename << ":/Bcc").str()
+				dataFilename + ":/Bcc"
 			));
 		primalSurfaceGrid.addChild(attribute);
 
@@ -3905,7 +3908,7 @@ XdmfGrid AppmSolver::getOutputDualEdgeGrid(const int iteration, const double tim
 			{ 2 * dualMesh.getNumberOfEdges() },
 			XdmfDataItem::NumberType::Int,
 			XdmfDataItem::Format::HDF),
-			(std::stringstream() << dualMesh.getPrefix() << "-mesh.h5:/edge2vertex").str()
+			dualMesh.getPrefix() + "-mesh.h5:/edge2vertex"
 		));
 	grid.addChild(topology);
 
@@ -3915,7 +3918,8 @@ XdmfGrid AppmSolver::getOutputDualEdgeGrid(const int iteration, const double tim
 			{ dualMesh.getNumberOfVertices(), 3 },
 			XdmfDataItem::NumberType::Float,
 			XdmfDataItem::Format::HDF),
-			(std::stringstream() << dualMesh.getPrefix() << "-mesh.h5:/vertexPos").str())
+			dualMesh.getPrefix() + "-mesh.h5:/vertexPos"
+		)
 	);
 	grid.addChild(geometry);
 
@@ -3929,7 +3933,7 @@ XdmfGrid AppmSolver::getOutputDualEdgeGrid(const int iteration, const double tim
 				{ dualMesh.getNumberOfEdges() },
 				XdmfDataItem::NumberType::Int,
 				XdmfDataItem::Format::HDF),
-				(std::stringstream() << dualMesh.getPrefix() << "-mesh.h5:/edgeIdx").str()
+				dualMesh.getPrefix() + "-mesh.h5:/edgeIdx"
 			));
 		grid.addChild(attribute);
 	}
@@ -3944,7 +3948,7 @@ XdmfGrid AppmSolver::getOutputDualEdgeGrid(const int iteration, const double tim
 				{ dualMesh.getNumberOfEdges(), 3 },
 				XdmfDataItem::NumberType::Float,
 				XdmfDataItem::Format::HDF),
-				(std::stringstream() << dataFilename << ":/H").str()
+				dataFilename + ":/H"
 			));
 		grid.addChild(attribute);
 	}
@@ -3968,7 +3972,7 @@ XdmfGrid AppmSolver::getOutputDualSurfaceGrid(const int iteration, const double 
 			{ nElements },
 			XdmfDataItem::NumberType::Int,
 			XdmfDataItem::Format::HDF),
-			(std::stringstream() << dualMesh.getPrefix() << "-mesh.h5:/face2vertex").str()
+			dualMesh.getPrefix() + "-mesh.h5:/face2vertex"
 		));
 	grid.addChild(topology);
 
@@ -3978,7 +3982,8 @@ XdmfGrid AppmSolver::getOutputDualSurfaceGrid(const int iteration, const double 
 			{ dualMesh.getNumberOfVertices(), 3 },
 			XdmfDataItem::NumberType::Float,
 			XdmfDataItem::Format::HDF),
-			(std::stringstream() << dualMesh.getPrefix() << "-mesh.h5:/vertexPos").str())
+			dualMesh.getPrefix() + "-mesh.h5:/vertexPos"
+		)
 	);
 	grid.addChild(geometry);
 
@@ -3991,7 +3996,7 @@ XdmfGrid AppmSolver::getOutputDualSurfaceGrid(const int iteration, const double 
 			{ dualMesh.getNumberOfFaces() },
 			XdmfDataItem::NumberType::Int,
 			XdmfDataItem::Format::HDF),
-			(std::stringstream() << dualMesh.getPrefix() << "-mesh.h5:/faceIndex").str()
+			dualMesh.getPrefix() + "-mesh.h5:/faceIndex"
 		));
 	grid.addChild(faceIndexAttribute);
 
@@ -4020,7 +4025,7 @@ XdmfGrid AppmSolver::getOutputDualSurfaceGrid(const int iteration, const double 
 				{ dualMesh.getNumberOfFaces(), 3 },
 				XdmfDataItem::NumberType::Float,
 				XdmfDataItem::Format::HDF),
-				(std::stringstream() << dataFilename << ":/J").str()
+				dataFilename + ":/J"
 			));
 		grid.addChild(attribute);
 	}
@@ -4046,7 +4051,7 @@ XdmfGrid AppmSolver::getOutputDualVolumeGrid(const int iteration, const double t
 			{ nElements },
 			XdmfDataItem::NumberType::Int,
 			XdmfDataItem::Format::HDF),
-			(std::stringstream() << datafilename << ":/cell2vertex").str()
+			datafilename + ":/cell2vertex"
 		));
 	grid.addChild(topology);
 
@@ -4056,7 +4061,8 @@ XdmfGrid AppmSolver::getOutputDualVolumeGrid(const int iteration, const double t
 			{ dualMesh.getNumberOfVertices(), 3 },
 			XdmfDataItem::NumberType::Float,
 			XdmfDataItem::Format::HDF),
-			(std::stringstream() << datafilename << ":/vertexPos").str())
+			datafilename + ":/vertexPos"
+		)
 	);
 	grid.addChild(geometry);
 
@@ -4069,7 +4075,7 @@ XdmfGrid AppmSolver::getOutputDualVolumeGrid(const int iteration, const double t
 			{ dualMesh.getNumberOfCells() },
 			XdmfDataItem::NumberType::Int,
 			XdmfDataItem::Format::HDF),
-			(std::stringstream() << datafilename << ":/cellIndex").str()
+			datafilename + ":/cellIndex"
 		));
 	grid.addChild(cellIndexAttribute);
 
@@ -4083,7 +4089,7 @@ XdmfGrid AppmSolver::getOutputDualVolumeGrid(const int iteration, const double t
 				{ dualMesh.getNumberOfVertices(), 3 },
 				XdmfDataItem::NumberType::Float,
 				XdmfDataItem::Format::HDF),
-				(std::stringstream() << dataFilename << ":/Bcc").str()
+				dataFilename + ":/Bcc"
 			));
 		grid.addChild(attribute);
 	}
@@ -4097,7 +4103,7 @@ XdmfGrid AppmSolver::getOutputDualVolumeGrid(const int iteration, const double t
 			{ dualMesh.getNumberOfCells() },
 			XdmfDataItem::NumberType::Float,
 			XdmfDataItem::Format::HDF),
-			(std::stringstream() << dataFilename << ":/density").str()
+			dataFilename + ":/density"
 		));
 	grid.addChild(densityAttribute);
 
@@ -4110,7 +4116,7 @@ XdmfGrid AppmSolver::getOutputDualVolumeGrid(const int iteration, const double t
 			{ dualMesh.getNumberOfCells() },
 			XdmfDataItem::NumberType::Float,
 			XdmfDataItem::Format::HDF),
-			(std::stringstream() << dataFilename << ":/pressure").str()
+			dataFilename + ":/pressure"
 		));
 	grid.addChild(pressureAttribute);
 
@@ -4123,7 +4129,7 @@ XdmfGrid AppmSolver::getOutputDualVolumeGrid(const int iteration, const double t
 			{ dualMesh.getNumberOfCells(), 3 },
 			XdmfDataItem::NumberType::Float,
 			XdmfDataItem::Format::HDF),
-			(std::stringstream() << dataFilename << ":/velocity").str()
+			dataFilename + ":/velocity"
 		));
 	grid.addChild(velocityAttribute);
 
@@ -4509,8 +4515,8 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 
 	for (int fidx = 0; fidx < getNFluids(); fidx++) {
 		const std::string speciesName = getSpecies(fidx).getName();
-		std::string attributeName = (std::stringstream() << speciesName <<" Face Type").str();
-		std::string dataName = (std::stringstream() << speciesName <<"-faceType").str();
+		std::string attributeName = speciesName + " Face Type";
+		std::string dataName = speciesName + "-faceType";
 		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 			<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
@@ -4518,7 +4524,7 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
-		attributeName = (std::stringstream() << speciesName << " Face Mass Flux").str();
+		attributeName = speciesName + " Face Mass Flux";
 		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
@@ -4526,7 +4532,7 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
-		attributeName = (std::stringstream() << speciesName << " Face Momentum Flux").str();
+		attributeName = speciesName + " Face Momentum Flux";
 		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Vector\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << " 3\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
@@ -4534,7 +4540,7 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
-		attributeName = (std::stringstream() << speciesName << " Face Energy Flux").str();
+		attributeName = speciesName + " Face Energy Flux";
 		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
@@ -4542,7 +4548,7 @@ const std::string AppmSolver::xdmf_GridDualFaces(const int iteration) const
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 
-		attributeName = (std::stringstream() << speciesName << " Implicit Mass Flux Term").str();
+		attributeName = speciesName + " Implicit Mass Flux Term";
 		ss << "<Attribute Name=\"" << attributeName << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfFaces() << "\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
@@ -4676,7 +4682,7 @@ const std::string AppmSolver::fluidXdmfOutput(const std::string & datafilename) 
 	const int nCells = dualMesh.getNumberOfCells();
 	for (int k = 0; k < nFluids; k++) {
 		const std::string speciesName = getSpecies(k).getName();
-		const std::string fluidName = (std::stringstream() << speciesName).str();
+		const std::string fluidName = speciesName;
 
 		ss << "<Attribute Name=\"" << fluidName << " density" << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << nCells << "\""
