@@ -57,9 +57,9 @@ namespace Eigen {
 		const std::string datanameCols = dataname + "_colIdx";
 		const std::string datanameValues = dataname + "_values";
 
-		h5writer.writeData(rows, datanameRows);
-		h5writer.writeData(cols, datanameCols);
-		h5writer.writeData(values, datanameValues);
+		h5writer.writeDataInt(rows, datanameRows);
+		h5writer.writeDataInt(cols, datanameCols);
+		h5writer.writeDataDouble(values, datanameValues);
 	}
 
 	/**

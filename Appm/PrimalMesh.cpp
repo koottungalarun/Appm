@@ -1018,6 +1018,7 @@ void PrimalMesh::sortCells()
 
 void PrimalMesh::validateParameters()
 {
+	//return;
 	//std::cout << "Primal mesh parameters: " << std::endl;
 	//std::cout << params << std::endl;
 	assert(params.getAxialLayers() >= 0);

@@ -3542,10 +3542,10 @@ void AppmSolver::writeOutput(const int iteration, const double time)
 
 	Eigen::VectorXd timeVec(1);
 	timeVec(0) = time;
-	h5writer.writeData(timeVec, "/time");
+	h5writer.writeDataDouble(timeVec, "/time");
 	Eigen::VectorXi iterVec(1);
 	iterVec(0) = iteration;
-	h5writer.writeData(iterVec, "/iteration");
+	h5writer.writeDataInt(iterVec, "/iteration");
 }
 
 void AppmSolver::writeFluidStates(H5Writer & writer)
@@ -3637,31 +3637,31 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 			temperature(i) = T;
 		}
 
-		writer.writeData(density, densityTag);
-		writer.writeData(numberDensity, numberDensityTag);
-		writer.writeData(pressure, pressureTag);
-		writer.writeData(velocity, velocityTag);
-		writer.writeData(temperature, fluidTag + "temperature");
-		writer.writeData(sumMassFluxes, fluidTag + "sumMassFlux");
-		writer.writeData(sumMomentumFluxes, fluidTag + "sumMomentumFlux");
-		writer.writeData(sumEnergyFluxes, fluidTag + "sumEnergyFlux");
-		writer.writeData(frictionSource, fluidTag + "frictionSource");
-		writer.writeData(speciesDiffusionVelocity, fluidTag + "diffusionVelocity");
-		writer.writeData(speciesFrictionEnergySource, fluidTag + "frictionEnergySource");
-		writer.writeData(fluidMassFluxImplicitTerm, fluidTag + "massFluxImplicitTerm");
-		writer.writeData(speciesEnergySource, fluidTag + "energySource");
-		writer.writeData(speciesMomentumSource, fluidTag + "momentumSource");
+		writer.writeDataDouble(density, densityTag);
+		writer.writeDataDouble(numberDensity, numberDensityTag);
+		writer.writeDataDouble(pressure, pressureTag);
+		writer.writeDataDouble(velocity, velocityTag);
+		writer.writeDataDouble(temperature, fluidTag + "temperature");
+		writer.writeDataDouble(sumMassFluxes, fluidTag + "sumMassFlux");
+		writer.writeDataDouble(sumMomentumFluxes, fluidTag + "sumMomentumFlux");
+		writer.writeDataDouble(sumEnergyFluxes, fluidTag + "sumEnergyFlux");
+		writer.writeDataDouble(frictionSource, fluidTag + "frictionSource");
+		writer.writeDataDouble(speciesDiffusionVelocity, fluidTag + "diffusionVelocity");
+		writer.writeDataDouble(speciesFrictionEnergySource, fluidTag + "frictionEnergySource");
+		writer.writeDataDouble(fluidMassFluxImplicitTerm, fluidTag + "massFluxImplicitTerm");
+		writer.writeDataDouble(speciesEnergySource, fluidTag + "energySource");
+		writer.writeDataDouble(speciesMomentumSource, fluidTag + "momentumSource");
 
 		Eigen::Matrix3Xd el_source = LorentzForce_electric.block(3 * fluidIdx, 0, 3, nCells);
-		writer.writeData(el_source, fluidTag + "LorentzForceEl");
+		writer.writeDataDouble(el_source, fluidTag + "LorentzForceEl");
 		Eigen::Matrix3Xd mag_source = LorentzForce_magnetic.block(3 * fluidIdx, 0, 3, nCells);
-		writer.writeData(mag_source, fluidTag + "LorentzForceMag");
+		writer.writeDataDouble(mag_source, fluidTag + "LorentzForceMag");
 
 
 		if (isStateWrittenToOutput) {
-			writer.writeData(qN, stateN);
-			writer.writeData(qU, stateU);
-			writer.writeData(qE, stateE);
+			writer.writeDataDouble(qN, stateN);
+			writer.writeDataDouble(qU, stateU);
+			writer.writeDataDouble(qE, stateE);
 		}
 	
 		assert(faceFluxes.cols() == nFaces);
@@ -3670,36 +3670,36 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 			Eigen::VectorXd faceFluxMass;
 			faceFluxMass = faceFluxes.row(5 * fluidIdx + 0);
 			assert(faceFluxMass.size() == nFaces);
-			writer.writeData(faceFluxMass, fluidTag + "massFlux");
+			writer.writeDataDouble(faceFluxMass, fluidTag + "massFlux");
 		}
 		{
 			Eigen::MatrixXd faceFluxMomentum;
 			faceFluxMomentum = faceFluxes.block(5 * fluidIdx + 1, 0, 3, nFaces);
 			assert(faceFluxMomentum.rows() == 3);
 			assert(faceFluxMomentum.cols() == nFaces);
-			writer.writeData(faceFluxMomentum, fluidTag + "momentumFlux");
+			writer.writeDataDouble(faceFluxMomentum, fluidTag + "momentumFlux");
 		}
 		{
 			Eigen::VectorXd faceFluxEnergy;
 			faceFluxEnergy = faceFluxes.row(5 * fluidIdx + 4);
 			assert(faceFluxEnergy.size() == nFaces);
-			writer.writeData(faceFluxEnergy, fluidTag + "energyFlux");
+			writer.writeDataDouble(faceFluxEnergy, fluidTag + "energyFlux");
 		}
 		{
 			const Eigen::VectorXi faceTypeFluid = faceTypeFluids.col(fluidIdx);
-			writer.writeData(faceTypeFluid, fluidTag + "faceType");
+			writer.writeDataInt(faceTypeFluid, fluidTag + "faceType");
 		}
 	}
-	writer.writeData(bulkVelocity, "/bulkVelocity");
-	writer.writeData(faceFluxesImExRusanov, "/faceFluxesImExRusanov");
+	writer.writeDataDouble(bulkVelocity, "/bulkVelocity");
+	writer.writeDataDouble(faceFluxesImExRusanov, "/faceFluxesImExRusanov");
 }
 
 void AppmSolver::writeMaxwellStates(H5Writer & writer)
 {
-	writer.writeData(maxwellState, "/x");
+	writer.writeDataDouble(maxwellState, "/x");
 
 	assert(B_h.size() > 0);
-	writer.writeData(B_h, "/bvec");
+	writer.writeDataDouble(B_h, "/bvec");
 
 	const int nPrimalFaces = primalMesh.getNumberOfFaces();
 	Eigen::Matrix3Xd B(3, nPrimalFaces);
@@ -3709,10 +3709,10 @@ void AppmSolver::writeMaxwellStates(H5Writer & writer)
 		const double fA = face->getArea();
 		B.col(i) = (B_h(i) / fA) * fn;
 	}
-	writer.writeData(B, "/B");
+	writer.writeDataDouble(B, "/B");
 
 	assert(E_h.size() > 0);
-	writer.writeData(E_h, "/evec");
+	writer.writeDataDouble(E_h, "/evec");
 
 	const int nPrimalEdges = primalMesh.getNumberOfEdges();
 	Eigen::Matrix3Xd E(3, nPrimalEdges);
@@ -3720,9 +3720,9 @@ void AppmSolver::writeMaxwellStates(H5Writer & writer)
 		const Edge * edge = primalMesh.getEdge(i);
 		E.col(i) = E_h(i) / edge->getLength() * edge->getDirection().normalized();
 	}
-	writer.writeData(E, "/E");
+	writer.writeDataDouble(E, "/E");
 
-	writer.writeData(E_cc, "/Ecc");
+	writer.writeDataDouble(E_cc, "/Ecc");
 
 	assert(J_h.size() > 0);
 	assert(J_h.size() == dualMesh.getNumberOfFaces());
@@ -3736,7 +3736,7 @@ void AppmSolver::writeMaxwellStates(H5Writer & writer)
 		const Eigen::Vector3d fn = face->getNormal().normalized();
 		currentDensity.col(i) = J_h(i) / fA * fn;
 	}
-	writer.writeData(currentDensity, "/CurrentDensity");
+	writer.writeDataDouble(currentDensity, "/CurrentDensity");
 
 
 	assert(dualMesh.getNumberOfFaces() == J_h_aux.size());
@@ -3748,22 +3748,22 @@ void AppmSolver::writeMaxwellStates(H5Writer & writer)
 		const Eigen::Vector3d fn = face->getNormal().normalized();
 		J_h_aux_vector.col(i) = J_h_aux(i) / fA * fn;
 	}
-	writer.writeData(J_h_aux_vector, "/j_h_aux_vector");
-	writer.writeData(J_h_aux, "/J_h_aux");
-	writer.writeData(J_h, "/J_h");
+	writer.writeDataDouble(J_h_aux_vector, "/j_h_aux_vector");
+	writer.writeDataDouble(J_h_aux, "/J_h_aux");
+	writer.writeDataDouble(J_h, "/J_h");
 
 	Jcc = getCurrentDensityAtCellCenter();
-	writer.writeData(Jcc, "/Jcc");
-	writer.writeData(Jaux_cc, "/Jaux_cc");
+	writer.writeDataDouble(Jcc, "/Jcc");
+	writer.writeDataDouble(Jaux_cc, "/Jaux_cc");
 
 	// Interpolated values of B-field to primal vertices
-	writer.writeData(B_vertex, "/Bcc");
+	writer.writeDataDouble(B_vertex, "/Bcc");
 	const int nCells = dualMesh.getNumberOfCells();
 	Eigen::VectorXd Bcc_mag(nCells);
 	for (int i = 0; i < nCells; i++) {
 		Bcc_mag(i) = B_vertex.col(i).norm();
 	}
-	writer.writeData(Bcc_mag, "/Bcc_mag");
+	writer.writeDataDouble(Bcc_mag, "/Bcc_mag");
 
 }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+//#include <type_traits>
 #include "H5Cpp.h"
 #include <iostream>
 #include <string>
@@ -41,6 +42,14 @@ private:
 template<typename T, int cols, int rows>
 inline void H5Writer::writeData(const Eigen::Matrix<T, cols, rows>& matrix, const std::string & dataname)
 {
+	//if constexpr (std::is_same_v(T, int)) {
+	//	writeDataInt(matrix, dataname);
+	//	return;
+	//}
+	//if constexpr (std::is_same_v(T, double)) {
+	//	writeDataDouble(matrix, dataname);
+	//	return;
+	//}
 	std::cout << "Generic function for Eigen matrices; do nothing" << std::endl;
 }
 

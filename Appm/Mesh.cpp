@@ -79,25 +79,25 @@ void Mesh::writeToFile()
 		//file = std::ofstream(this->meshPrefix + "-vertices.dat");
 		//file << positions.transpose() << std::endl;
 
-		h5writer.writeData(positions, "/vertexPos");
+		h5writer.writeDataDouble(positions, "/vertexPos");
 		Eigen::VectorXi vertexIdx(nVertices);
 		for (int i = 0; i < nVertices; i++) {
 			vertexIdx(i) = getVertex(i)->getIndex();
 		}
-		h5writer.writeData(vertexIdx, "/vertexIdx");
+		h5writer.writeDataInt(vertexIdx, "/vertexIdx");
 
 		Eigen::VectorXi isBoundaryVertex(nVertices);
 		for (int i = 0; i < nVertices; i++) {
 			isBoundaryVertex(i) = getVertex(i)->isBoundary();
 		}
-		h5writer.writeData(isBoundaryVertex, "/isBoundaryVertex");
+		h5writer.writeDataInt(isBoundaryVertex, "/isBoundaryVertex");
 
 		//Eigen::VectorXi vertexType(nVertices);
 		//for (int i = 0; i < nVertices; i++) {
 		//	vertexType(i) = static_cast<int>(getVertex(i)->getType());
 		//}
 		Eigen::VectorXi vertexType = getVertexTypes();
-		h5writer.writeData(vertexType, "/vertexType");
+		h5writer.writeDataInt(vertexType, "/vertexType");
 	}
 
 	const int nEdges = getNumberOfEdges();
@@ -106,20 +106,20 @@ void Mesh::writeToFile()
 		for (int i = 0; i < nEdges; i++) {
 			edgeLength(i) = getEdge(i)->getLength();
 		}
-		h5writer.writeData(edgeLength, "/edgeLength");
+		h5writer.writeDataDouble(edgeLength, "/edgeLength");
 
 		Eigen::Matrix2Xi edge2Vertex(2, nEdges);
 		for (int i = 0; i < nEdges; i++) {
 			edge2Vertex(0, i) = getEdge(i)->getVertexA()->getIndex();
 			edge2Vertex(1, i) = getEdge(i)->getVertexB()->getIndex();
 		}
-		h5writer.writeData(edge2Vertex, "/edge2vertex");
+		h5writer.writeDataInt(edge2Vertex, "/edge2vertex");
 
 		Eigen::VectorXi edgeIdx(nEdges);
 		for (int i = 0; i < nEdges; i++) {
 			edgeIdx(i) = getEdge(i)->getIndex();
 		}
-		h5writer.writeData(edgeIdx, "/edgeIdx");
+		h5writer.writeDataInt(edgeIdx, "/edgeIdx");
 
 		Eigen::VectorXi edgeType(nEdges);
 		for (int i = 0; i < nEdges; i++) {
@@ -129,7 +129,7 @@ void Mesh::writeToFile()
 			const int nBoundaryVertices = isBoundaryA + isBoundaryB;
 			edgeType(i) = nBoundaryVertices;
 		}
-		h5writer.writeData(edgeType, "/edgeType");
+		h5writer.writeDataInt(edgeType, "/edgeType");
 	}
 
 	const int nFaces = getNumberOfFaces();
@@ -155,7 +155,7 @@ void Mesh::writeToFile()
 			file << f2v.transpose() << std::endl;
 		}
 		else {
-			h5writer.writeData(f2v, "/f2v");
+			h5writer.writeDataInt(f2v, "/f2v");
 		}
 
 		Eigen::Matrix3Xd fc(3, nFaces);
@@ -173,13 +173,13 @@ void Mesh::writeToFile()
 			faceArea(i) = getFace(i)->getArea();
 			faceType(i) = static_cast<int>(getFace(i)->getType());
 		}
-		h5writer.writeData(fc, "/faceCenter");
-		h5writer.writeData(faceIdx, "/faceIndex");
-		h5writer.writeData(faceBoundary, "/isFaceBoundary");
-		h5writer.writeData(fn, "/faceNormal");
+		h5writer.writeDataDouble(fc, "/faceCenter");
+		h5writer.writeDataInt(faceIdx, "/faceIndex");
+		h5writer.writeDataInt(faceBoundary, "/isFaceBoundary");
+		h5writer.writeDataDouble(fn, "/faceNormal");
 		assert((faceArea.array() > 0).all());
-		h5writer.writeData(faceArea, "/faceArea");
-		h5writer.writeData(faceType, "/faceFluidType");
+		h5writer.writeDataDouble(faceArea, "/faceArea");
+		h5writer.writeDataInt(faceType, "/faceFluidType");
 
 		const std::vector<int> face2vertexIdx = getXdmfTopology_face2vertexIndices();
 		h5writer.writeData(face2vertexIdx, "/face2vertex");
@@ -193,14 +193,14 @@ void Mesh::writeToFile()
 			cellCenters.col(i) = getCell(i)->getCenter();
 			cellType(i) = static_cast<int>(getCell(i)->getType());
 		}
-		h5writer.writeData(cellCenters, "/cellCenter");
-		h5writer.writeData(cellType, "/cellFluidType");
+		h5writer.writeDataDouble(cellCenters, "/cellCenter");
+		h5writer.writeDataInt(cellType, "/cellFluidType");
 
 		Eigen::VectorXi cellIdx(nCells);
 		for (int i = 0; i < nCells; i++) {
 			cellIdx(i) = getCell(i)->getIndex();
 		}
-		h5writer.writeData(cellIdx, "/cellIndex");
+		h5writer.writeDataInt(cellIdx, "/cellIndex");
 
 		const std::vector<int> c2vIdx = getXdmfTopology_cell2vertexIndices();
 		h5writer.writeData(c2vIdx, "/cell2vertex");
@@ -209,7 +209,7 @@ void Mesh::writeToFile()
 		for (int i = 0; i < nCells; i++) {
 			cellVolume(i) = getCell(i)->getVolume();
 		}
-		h5writer.writeData(cellVolume, "/cellVolume");
+		h5writer.writeDataDouble(cellVolume, "/cellVolume");
 	}
 }
 
