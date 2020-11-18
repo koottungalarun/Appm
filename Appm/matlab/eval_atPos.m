@@ -175,5 +175,13 @@ title('E_z at center')
 xlabel('t')
 ylabel('E_z')
 
+%%
+figure(5)
+plot(time, I_tot)
+grid on
+title('Species total current across xy plane')
+xlabel('t')
+ylabel('J_*')
+legend(fluidNames)
 
 
