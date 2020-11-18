@@ -21,6 +21,7 @@ public:
 	const double getVolume() const;
 	const std::vector<Face*> getFaceList() const;
 	bool hasFace(const Face * face) const;
+	double getArea(const Eigen::Vector3d & projDir) const;
 	const int getOrientation(const Face * face) const;
 
 	const Eigen::Vector3d & getCenter() const;

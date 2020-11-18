@@ -78,6 +78,31 @@ bool Cell::hasFace(const Face * face) const
 	}
 	return false;
 }
+/** 
+* Get projected area of this cell in given direction. 
+* Note that we count only positive face areas! 
+* If we counted all face areas, we would sum up to zero because the face cells are closed.
+*
+* For instance we get the projection in z-direction by counting the face are of that cell that lies 
+* in positive z-direction.
+
+* @return projected area
+*/
+double Cell::getArea(const Eigen::Vector3d & projDir) const
+{
+	assert(projDir.allFinite());
+	double area = 0;
+	const Eigen::Vector3d cc = center;
+	for (auto face : faceList) {
+		const double fA = face->getArea();
+		const Eigen::Vector3d fc = face->getCenter();
+		const double projCosine = (fc - cc).dot(projDir);
+		if (projCosine > 0) {
+			area += fA * projCosine;
+		}
+	}
+	return area;
+}
 
 const int Cell::getOrientation(const Face * face) const
 {
