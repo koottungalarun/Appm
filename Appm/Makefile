@@ -46,7 +46,7 @@ EIGEN_INC= -I/home/HSR/rfuchs/git/eigen-3.3.7/
 # -w             Enable diagnostics for errors, disable warnings
 # -O0, -O1, -O2  Optimization flags
 # -inline-forceinline    highly recommended by EIGEN if Intel compiler is used
-CFLAGS=-std=c++17 -w -O0 -inline-forceinline 
+CFLAGS=-std=c++17 -w -O2 -inline-forceinline 
 
 # Help on Makefile:
 # https://stackoverflow.com/questions/53136024/makefile-to-compile-all-c-files-without-needing-to-specify-them/53138757

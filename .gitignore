@@ -278,3 +278,6 @@ __pycache__/
 *.mat
 *.eps
 *.html
+
+*.o
+
