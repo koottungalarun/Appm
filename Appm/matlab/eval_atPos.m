@@ -56,6 +56,8 @@ info = h5info(filename);
 
 i = 0;
 iterMax = length(filenameList);
+iterMax = min(100, iterMax);
+warning('iterMax is limited')
 for idx = 1 : iterMax
 %     i = i + 100;
 %     filename = sprintf('appm-%05d.h5', i);
@@ -82,6 +84,15 @@ for idx = 1 : iterMax
         
         datasetName = sprintf('/%s-%s', fluidNames(j), 'temperature');
         T(idx,j) = h5read(filename, datasetName, start, count);
+        
+        if j == 1
+            datasetName = '/Ecc';
+            temp = h5read(filename, datasetName);
+            E(1:3,idx) = temp(:,idx0);
+            
+        end
+        
+        
 
         % Vector data
         vecData.start = [3 idx0];
@@ -154,5 +165,13 @@ for i = 1 : 3
         title('Number density')
     end
 end
+
+figure(4)
+plot(time, E(3,:))
+grid on
+title('E_z at center')
+xlabel('t')
+ylabel('E_z')
+
 
 

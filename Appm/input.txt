@@ -16,8 +16,8 @@
 ######################
 ### MESH
 ######################
-mesh: mesh-coarse-test.txt
-# mesh: mesh-coarse.txt
+# mesh: mesh-coarse-test.txt
+mesh: mesh-coarse.txt
 # mesh: mesh-medium.txt
 # mesh: mesh-fine.txt
 #
@@ -34,7 +34,7 @@ initEfield: 0 0 0
 maxTime: 50
 maxIterations: 0
 timestepSizeFactor: 1
-outputFrequency: 1
+outputFrequency: 0
 #
 ### numerics
 #

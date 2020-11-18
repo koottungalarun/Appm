@@ -160,6 +160,39 @@ const int DualMesh::getNumberFluidCells() const
 	return nFluidCells;
 }
 
+/**
+* 
+* @return list of fluid cells in cross section with xy-plane
+*/
+std::vector<Cell*> DualMesh::getCrossSectionCells()
+{
+	std::vector<Cell*> list;
+	const int nCells = cellList.size();
+	Eigen::VectorXd distToXYPlane(nCells);
+	distToXYPlane.setConstant(std::numeric_limits<double>::max());
+	
+	// get distance of cells to xy-plane
+	for (auto cell : cellList) {
+		const int idx = cell->getIndex();
+		Eigen::Vector3d cc = cell->getCenter();
+		distToXYPlane(idx) = abs(cc(2)); // abs(cc.dot(Eigen::Vector3d::UnitZ()));
+	}
+	const double minDist = distToXYPlane.minCoeff();
+	std::cout << "minDist = " << minDist << std::endl;
+
+	// get cells with smallest distance (i.e., less than minDist * (1 + tol))
+	const double tol = 16 * std::numeric_limits<double>::epsilon();
+	for (auto cell : cellList) {
+		const int idx = cell->getIndex();
+		const bool isFluidCell = cell->getType() == Cell::Type::FLUID;
+		const bool isCloseToXYPlane = distToXYPlane(idx) < ((1 + tol) * minDist);
+		if (isCloseToXYPlane && isFluidCell) {
+			list.push_back(cell);
+		}
+	}
+	return list;
+}
+
 Eigen::VectorXi DualMesh::associateDualFacesWithPrimalEdges(const PrimalMesh & primal)
 {
 	std::cout << "Associate dual faces and primal edges" << std::endl;

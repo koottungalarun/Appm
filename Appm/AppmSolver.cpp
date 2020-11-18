@@ -88,6 +88,9 @@ void AppmSolver::init()
 	if (dualMesh.getNumberOfCells() != primalMesh.getNumberOfVertices()) {
 		std::cout << "Number of dual cells is not equal to primal vertices" << std::endl;
 	}
+	dualFluidCellsCrossSection = dualMesh.getCrossSectionCells();
+	assert(dualFluidCellsCrossSection.size() > 0);
+
 
 	init_multiFluid();
 	
@@ -381,6 +384,10 @@ void AppmSolver::run()
 		std::cout << "**********************************************************" << std::endl;
 		std::cout << "**********************************************************" << std::endl;
 		writeOutput(iteration, time);
+		writeXdmf(filename_surfaceData);
+		writeXdmfDualVolume(filename_volumeData);
+	}
+	if (iteration == 0) {
 		writeXdmf(filename_surfaceData);
 		writeXdmfDualVolume(filename_volumeData);
 	}
@@ -701,6 +708,33 @@ const Eigen::VectorXd AppmSolver::getState(const int cIdx, const int fluidx) con
 //	ss << "=======================" << std::endl;
 //	return ss.str();
 //}
+
+/**
+* @return total current through xy-plane cross section, per species
+*/
+Eigen::VectorXd AppmSolver::getTotalCurrentBySpecies(const Eigen::Vector3d & projDir)
+{
+	assert(dualFluidCellsCrossSection.size() > 0);
+	const int nFluids = getNFluids();
+	assert(nFluids > 0);
+	Eigen::VectorXd speciesTotalCurrent = Eigen::VectorXd(nFluids);
+	speciesTotalCurrent.setZero();
+
+	for (auto cell : dualFluidCellsCrossSection) {
+		const int cIdx = cell->getIndex();
+		const double dA = cell->getArea(projDir);
+
+		for (int fluidx = 0; fluidx < nFluids; fluidx++) {
+			const Eigen::VectorXd state = getState(cIdx, fluidx);
+			assert(state.size() == 5);
+			const Eigen::Vector3d fluidMomentum = state.segment(1, 3); 
+
+			const double cellSpeciesCurrent = fluidMomentum.dot(projDir) * dA;
+			speciesTotalCurrent(fluidx) += cellSpeciesCurrent;
+		}
+	}
+	return speciesTotalCurrent;
+}
 
 void AppmSolver::init_maxwellStates()
 {
@@ -3546,6 +3580,18 @@ void AppmSolver::writeOutput(const int iteration, const double time)
 	Eigen::VectorXi iterVec(1);
 	iterVec(0) = iteration;
 	h5writer.writeDataInt(iterVec, "/iteration");
+
+	// Add indicator to identify cells that lie on cross section with xy-plane
+	if (iteration == 0) {
+		Eigen::VectorXi isCrossSectionCell(nDualCells);
+		isCrossSectionCell.setZero();
+		for (auto cell : dualFluidCellsCrossSection) {
+			const int idx = cell->getIndex();
+			isCrossSectionCell(idx) = 1;
+		}
+		std::cout << "Number of cross section cells: " << isCrossSectionCell.sum() << std::endl;
+		h5writer.writeDataInt(isCrossSectionCell, "/isCrossSectionCell");
+	}
 }
 
 void AppmSolver::writeFluidStates(H5Writer & writer)
@@ -3636,7 +3682,7 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 			const double T = p / n;
 			temperature(i) = T;
 		}
-
+		
 		writer.writeDataDouble(density, densityTag);
 		writer.writeDataDouble(numberDensity, numberDensityTag);
 		writer.writeDataDouble(pressure, pressureTag);
@@ -3656,7 +3702,6 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 		writer.writeDataDouble(el_source, fluidTag + "LorentzForceEl");
 		Eigen::Matrix3Xd mag_source = LorentzForce_magnetic.block(3 * fluidIdx, 0, 3, nCells);
 		writer.writeDataDouble(mag_source, fluidTag + "LorentzForceMag");
-
 
 		if (isStateWrittenToOutput) {
 			writer.writeDataDouble(qN, stateN);
@@ -3690,6 +3735,11 @@ void AppmSolver::writeFluidStates(H5Writer & writer)
 			writer.writeDataInt(faceTypeFluid, fluidTag + "faceType");
 		}
 	}
+
+	Eigen::VectorXd speciesCurrent_zDir = getTotalCurrentBySpecies(Eigen::Vector3d::UnitZ());
+	assert(speciesCurrent_zDir.size() == nFluids);
+	writer.writeDataDouble(speciesCurrent_zDir, "/speciesTotalCurrent");
+
 	writer.writeDataDouble(bulkVelocity, "/bulkVelocity");
 	writer.writeDataDouble(faceFluxesImExRusanov, "/faceFluxesImExRusanov");
 }
@@ -4664,6 +4714,15 @@ const std::string AppmSolver::xdmf_GridDualCells(const int iteration) const
 	ss << datafilename << ":/" << "bulkVelocity" << std::endl;
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
+
+	if (iteration == 0) {
+		ss << "<Attribute Name=\"" << "isCrossSection" << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << "\""
+			<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
+		ss << datafilename << ":/" << "isCrossSectionCell" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+	}
 
 
 	ss << fluidXdmfOutput(datafilename) << std::endl;

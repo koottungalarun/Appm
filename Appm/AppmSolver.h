@@ -234,6 +234,9 @@ private:
 
 	Eigen::MatrixXd faceFluxesImExRusanov;
 
+	std::vector<Cell*> dualFluidCellsCrossSection;
+	Eigen::VectorXd getTotalCurrentBySpecies(const Eigen::Vector3d & projDir);
+
 	//std::string printSolverParameters() const;
 
 	// Isentropic expansion coefficient, aka ratio of heat capacities

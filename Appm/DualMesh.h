@@ -19,6 +19,8 @@ public:
 
 	const int getNumberFluidCells() const;
 
+	std::vector<Cell*> getCrossSectionCells();
+
 protected:
 
 	XdmfGrid getXdmfSurfaceGrid() const;
