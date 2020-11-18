@@ -200,6 +200,7 @@ void Main::setInputFilename(const std::string & filename)
 void Main::readInputFile()
 {
 	assert(inputFilename.size() > 0);
+	std::cout << "Read input file: " << this->inputFilename << std::endl;
 	std::ifstream file(this->inputFilename);
 	if (!file.is_open()) {
 		std::cout << "File could not be opened: " << inputFilename << std::endl;

@@ -18,6 +18,7 @@ PrimalMesh::PrimalMesh(const PrimalMeshParams & p)
 	: PrimalMesh()
 {
 	this->params = p;
+	std::cout << this->params << std::endl;
 }
 
 
