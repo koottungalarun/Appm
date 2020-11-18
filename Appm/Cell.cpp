@@ -91,12 +91,20 @@ bool Cell::hasFace(const Face * face) const
 double Cell::getArea(const Eigen::Vector3d & projDir) const
 {
 	assert(projDir.allFinite());
+	const bool showOutput = false;// this->getIndex() == 218;
+
 	double area = 0;
 	const Eigen::Vector3d cc = center;
+	if (showOutput) {
+		std::cout << "cell index: " << this->getIndex() << std::endl;
+		std::cout << "cell center: " << cc.transpose() << std::endl;
+	}
+
+	const Eigen::Vector3d projDirNormalized = projDir.normalized();
 	for (auto face : faceList) {
 		const double fA = face->getArea();
 		const Eigen::Vector3d fc = face->getCenter();
-		const double projCosine = (fc - cc).dot(projDir);
+		const double projCosine = (fc - cc).normalized().dot(projDirNormalized);
 		if (projCosine > 0) {
 			area += fA * projCosine;
 		}

@@ -31,10 +31,10 @@ initFluidState: INIT_FILE
 initEfield: 0 0 0
 #
 ### Simulation controls
-maxTime: 50
-maxIterations: 0
+maxTime: 10
+maxIterations: 10000
 timestepSizeFactor: 1
-outputFrequency: 0
+outputFrequency: 20
 #
 ### numerics
 #

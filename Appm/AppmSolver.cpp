@@ -723,15 +723,27 @@ Eigen::VectorXd AppmSolver::getTotalCurrentBySpecies(const Eigen::Vector3d & pro
 	for (auto cell : dualFluidCellsCrossSection) {
 		const int cIdx = cell->getIndex();
 		const double dA = cell->getArea(projDir);
+		const double dV = cell->getVolume();
+
+		if (cIdx == 218) {
+			std::cout << "cidx: " << cIdx;
+			std::cout << "\tdA: " << dA;
+			std::cout << "\tdV: " << dV;
+			std::cout << std::endl;
+		}
 
 		for (int fluidx = 0; fluidx < nFluids; fluidx++) {
 			const Eigen::VectorXd state = getState(cIdx, fluidx);
 			assert(state.size() == 5);
 			const Eigen::Vector3d fluidMomentum = state.segment(1, 3); 
 
-			const double cellSpeciesCurrent = fluidMomentum.dot(projDir) * dA;
+			double cellSpeciesCurrent = 0;
+			cellSpeciesCurrent = fluidMomentum.dot(projDir) * dA;
 			speciesTotalCurrent(fluidx) += cellSpeciesCurrent;
 		}
+	}
+	for (int fluidx = 0; fluidx < nFluids; fluidx++) {
+		speciesTotalCurrent(fluidx) *= getSpecies(fluidx).getCharge();
 	}
 	return speciesTotalCurrent;
 }
