@@ -5294,6 +5294,9 @@ void AppmSolver::readVoltageBCtable(const std::string & filename)
 	assert(filename.size() > 0);
 	std::cout << "Read voltage bc from file: " << filename << std::endl;
 	std::ifstream file(filename);
+	if (!file.is_open()) {
+		std::cout << "File is not open: " << filename << std::endl;
+	}
 	assert(file.is_open());
 	while( std::getline(file, line)) {
 		if (line.size() == 0 || line.front() == '#') {
