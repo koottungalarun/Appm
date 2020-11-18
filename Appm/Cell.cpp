@@ -178,8 +178,8 @@ bool Cell::validateCellGeometry() const
 		//const double y = posVec(1);
 		//const double z = posVec(2);
 		const double tol = 2*std::numeric_limits<double>::epsilon();
-		bool isParallel = posVec.segment(0, 2).norm() <= tol && (abs(posVec(2)) > tol);
-		bool isPerpendicular = posVec.segment(0, 2).norm() > tol && (abs(posVec(2)) <= tol);
+		bool isParallel = posVec.segment(0, 2).norm() <= tol && (std::fabs(posVec(2)) > tol);
+		bool isPerpendicular = posVec.segment(0, 2).norm() > tol && (std::fabs(posVec(2)) <= tol);
 		isValid &= isParallel ^ isPerpendicular;// boolean xor operator (^)
 	}
 	if (!isValid) {
@@ -363,7 +363,7 @@ Eigen::Vector3d Cell::computeCellCenter() const
 				std::cout << posVec.transpose() << std::endl;
 			}
 
-			if (abs(posVec(2)) <= tol) {
+			if (std::fabs(posVec(2)) <= tol) {
 				isValid &= posVec.segment(0, 2).norm() > tol;
 			}
 			else {

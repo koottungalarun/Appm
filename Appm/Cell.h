@@ -1,4 +1,6 @@
 #pragma once
+
+#include <cmath>
 #include "GeometryItem.h"
 
 #include "Face.h"

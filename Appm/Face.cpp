@@ -485,7 +485,10 @@ const Eigen::Vector3d Face::getCircumCenter() const
 	By.col(2) = D.col(3);
 	
 	const double a = D.rightCols(3).determinant();
-	assert(abs(a) > 0);
+	if (!(std::fabs(a) > 0)) {
+		std::cout << "a = " << a << std::endl;
+	}
+	assert(std::fabs(a) > 0);
 	const double bx = -1 * Bx.determinant();
 	const double by =      By.determinant();
 	return Eigen::Vector3d(-bx / (2*a), -by / (2*a), z);

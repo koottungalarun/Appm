@@ -175,7 +175,7 @@ std::vector<Cell*> DualMesh::getCrossSectionCells()
 	for (auto cell : cellList) {
 		const int idx = cell->getIndex();
 		Eigen::Vector3d cc = cell->getCenter();
-		distToXYPlane(idx) = abs(cc(2)); // abs(cc.dot(Eigen::Vector3d::UnitZ()));
+		distToXYPlane(idx) = std::fabs(cc(2)); // abs(cc.dot(Eigen::Vector3d::UnitZ()));
 	}
 	const double minDist = distToXYPlane.minCoeff();
 	std::cout << "minDist = " << minDist << std::endl;
@@ -251,7 +251,7 @@ Eigen::VectorXi DualMesh::associateDualFacesWithPrimalEdges(const PrimalMesh & p
 		const int edgeIdx = indexMap(i);
 		const Eigen::Vector3d fn = this->getFace(i)->getNormal().normalized();
 		const Eigen::Vector3d edgeDir = primal.getEdge(edgeIdx)->getDirection().normalized();
-		temp(i) = abs(edgeDir.dot(fn));
+		temp(i) = std::fabs(edgeDir.dot(fn));
 	}
 	std::cout << "Smallest value of dot-product (edgeDir,faceNormal): " << temp.minCoeff() << std::endl;
 	if (temp.minCoeff() < 0.9) {
@@ -497,7 +497,7 @@ void DualMesh::init_dualEdges(const PrimalMesh & primal)
 			assert(adjCells.size() == 1);
 			const Cell * cell = adjCells[0];
 			const int orientation = cell->getOrientation(face);
-			assert(abs(orientation) == 1);
+			assert(std::abs(orientation) == 1);
 			if (orientation > 0) {
 				idxA = cell->getIndex();
 				idxB = primalFaceToDualVertex.coeff(face->getIndex());

@@ -1894,7 +1894,7 @@ const Eigen::Vector3d AppmSolver::getFluidState(const int cellIdx, const int flu
 	assert(fluidIdx < this->getNFluids());
 	Eigen::Vector3d fn = faceNormal.normalized();
 	const double tol = 4 * std::numeric_limits<double>::epsilon();
-	assert(abs(fn.norm() - 1) <= tol); // normal vector should be of unit length
+	assert(std::fabs(fn.norm() - 1) <= tol); // normal vector should be of unit length
 	const Eigen::VectorXd state = fluidStates.col(cellIdx).segment(5 * fluidIdx, 5);
 	return Eigen::Vector3d(state(0), state.segment(1,3).dot(fn), state(4));
 }
@@ -2170,10 +2170,10 @@ void AppmSolver::setImplicitMassFluxTerms(const double dt)
 					const int s_kj = cell->getOrientation(cellFace);
 					const Eigen::Vector3d nj = cellFace->getNormal().normalized();
 					double ni_dot_nj = ni.dot(nj);
-					if (abs(ni_dot_nj) < 1e-10) {
+					if (std::fabs(ni_dot_nj) < 1e-10) {
 						ni_dot_nj = 0; // truncate small values
 					}
-					bool isValid = abs(ni_dot_nj) <= (1 + 2 * std::numeric_limits<double>::epsilon());
+					bool isValid = std::fabs(ni_dot_nj) <= (1 + 2 * std::numeric_limits<double>::epsilon());
 					if (!isValid) {
 						std::cout << "ni_dot_nj: " << ni_dot_nj << std::endl;
 						std::cout << std::endl;
@@ -5197,14 +5197,14 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 								const int s_kj = cell->getOrientation(face);
 								const int j = face->getIndex();
 								double nj_dot_ni = nj.dot(ni); // angle between face i and face j
-								if (abs(nj_dot_ni) < 1e-10) {
+								if (std::fabs(nj_dot_ni) < 1e-10) {
 									nj_dot_ni = 0; // Truncate small angles
 								}
 
 								// Explicit advection of fluid flux
 								const Eigen::Vector3d fj = faceFluxes.col(j).segment(5 * fluidIdx + 1, 3); // (directional) momentum flux at face j, times face area
 								const double temp = numSchemeFactor * q * Ai * -dt * 1 / Vk * s_kj * fj.dot(ni);
-								c(i) += abs(temp); // accumulator to guard against truncation error
+								c(i) += std::abs(temp); // accumulator to guard against truncation error
 								Jaux(i) += temp;
 
 								// Implicit electric Lorentz force (electric field)

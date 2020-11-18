@@ -140,7 +140,7 @@ void PrimalMesh::refineMesh(const int nRefinements)
 		const double tol = 16 * std::numeric_limits<double>::epsilon();
 		const double zPosMax = vertexCoordinates.row(2).maxCoeff();
 		const double zPosMin = vertexCoordinates.row(2).minCoeff();
-		assert(abs(zPosMax - zPosMin) < tol);
+		assert(std::fabs(zPosMax - zPosMin) < tol);
 
 		// clear mesh elements
 		for (auto v : vertexList) {
@@ -1042,8 +1042,8 @@ void PrimalMesh::check_zCoord(const double z0)
 	const double zminValue = vertexCoordinates.row(2).minCoeff();
 
 	const double tol = 16 * std::numeric_limits<double>::epsilon();
-	assert(abs(zmaxValue - z0) < tol);
-	assert(abs(zminValue - z0) < tol);
+	assert(std::fabs(zmaxValue - z0) < tol);
+	assert(std::fabs(zminValue - z0) < tol);
 }
 
 PrimalMesh::PrimalMeshParams::PrimalMeshParams()

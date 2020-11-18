@@ -200,9 +200,9 @@ bool Edge::validate() const
 
 	if (edgeDir(2) != 0) {
 		const double tol = std::numeric_limits<double>::epsilon();
-		isValid = (edgeDir.segment(0,2).norm() == 0) && (abs(abs(edgeDir(2)) - 1) <= tol);
+		isValid = (edgeDir.segment(0,2).norm() == 0) && (std::fabs(std::fabs(edgeDir(2)) - 1) <= tol);
 		if (!isValid) {
-			std::cout << "zvalue: " << std::scientific << abs(edgeDir(2)) - 1 << std::endl;
+			std::cout << "zvalue: " << std::scientific << std::fabs(edgeDir(2)) - 1 << std::endl;
 		}
 	}
 	else {
