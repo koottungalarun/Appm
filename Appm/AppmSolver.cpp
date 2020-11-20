@@ -5627,7 +5627,7 @@ const bool AppmSolver::SolverParameters::getMaxwellCurrentDefined() const
 
 const AppmSolver::MaxwellSolverType AppmSolver::SolverParameters::getMaxwellSolverType() const
 {
-	return AppmSolver::MaxwellSolverType::PardisoLU;
+	return AppmSolver::MaxwellSolverType::BiCGStab;
 }
 
 void AppmSolver::SolverParameters::setOutputFrequency(const int n)
