@@ -27,26 +27,26 @@ mesh: mesh-coarse.txt
 ### SOLVER
 ######################
 ### Initial conditions
-initFluidState: UNIFORM
+initFluidState: INIT_FILE
 initEfield: 0 0 0
 #
 ### Simulation controls
 maxTime: 5
 maxIterations: 1000
 timestepSizeFactor: 1e-0
-timestepSizeMax: 0.1
+timestepSizeMax: 1
 outputFrequency: 1
 #
 ### numerics
 #
 ### coupling
-isFluidEnabled: 0
-isMassfluxImplicit: 0
-isLorentzForceEnabled: 0
+isFluidEnabled: 1
+isMassfluxImplicit: 1
+isLorentzForceEnabled: 1
 isMaxwellEnabled: 1
-isEulerSourcesImplicit: 0
+isEulerSourcesImplicit: 1
 isMaxwellCurrentDefined: 0
-voltageBCfilename: voltBC_jump1.csv
+voltageBCfilename: voltBCtable.csv
 
 #
 #
@@ -54,16 +54,16 @@ voltageBCfilename: voltBC_jump1.csv
 ### SPECIES
 ######################
 # Format: Symbol, name, massRatio, charge
-# species: e, Electron, 1e-3, -1
-# species: Ar+, Ion, 0.999, 1
+species: e, Electron, 1e-3, -1
+species: Ar+, Ion, 0.999, 1
 species: Ar, Argon, 1, 0
 #
 #
 ######################
 ### REACTIONS
 ######################
-# elastic-collision: Ar-Ar+
-# elastic-collision: e-Ar
-# inelastic-collision: e-Ar
+elastic-collision: Ar-Ar+
+elastic-collision: e-Ar
+inelastic-collision: e-Ar
 
 
