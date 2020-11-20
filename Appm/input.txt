@@ -31,7 +31,7 @@ initFluidState: UNIFORM
 initEfield: 0 0 0
 #
 ### Simulation controls
-maxTime: 3
+maxTime: 5
 maxIterations: 1000
 timestepSizeFactor: 1e-0
 timestepSizeMax: 0.1

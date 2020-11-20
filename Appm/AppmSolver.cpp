@@ -280,7 +280,7 @@ void AppmSolver::run()
 			// Affine-linear function for implicit-consistent formulation of current density J_h = Msigma * E_h + Jaux
 			Eigen::SparseMatrix<double> Msigma;
 			Msigma = get_Msigma_spd(J_h_aux, dt, time);
-			Msigma.setZero();
+			// Msigma.setZero();
 
 			// Maxwell equations
 			if (solverParams.getMaxwellEnabled()) {
