@@ -34,7 +34,7 @@ echo $MKLROOT
 export LD_LIBRARY_PATH=$HDF_INSTALL/lib:$MKLROOT/lib/intel64;
 
 echo "START"
-./appm
+./appm > logfile.log
 wait 
 echo "ENDING"
 echo
