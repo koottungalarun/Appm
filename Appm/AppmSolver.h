@@ -83,8 +83,8 @@ public:
 		const AppmSolver::FluidInitType getFluidInitType() const;
 		void setInitEfield(const Eigen::Vector3d & efield);
 		const Eigen::Vector3d getInitEfield() const;
-		void setApParameter(const double lambdaSquare);
-		const double getApParameter() const;
+		//void setApParameter(const double lambdaSquare);
+		//const double getApParameter() const;
 		void setEulerSourcesImplicit(const bool b);
 		const bool getEulerSourcesImplicit() const;
 		const double getTimestepSizeFactor() const;
@@ -94,7 +94,7 @@ public:
 
 		friend std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters & obj);
 	private:
-		double lambdaSq = 1;
+		//double lambdaSq = 1;
 		int maxIterations = 0;
 		double maxTime = 0;
 		double timestepSizeFactor = 1;
@@ -105,6 +105,7 @@ public:
 		bool isMassFluxSchemeImplicit = true;
 		bool isLorentzForceEnabled = false;
 		bool isEulerSourcesImplicit = false;
+		bool isMaxwellCurrentDefined = false;
 
 		bool isMaxwellEnabled = false;
 		MaxwellSolverType maxwellSolverType = MaxwellSolverType::BiCGStab;		

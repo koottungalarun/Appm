@@ -168,7 +168,8 @@ void AppmSolver::run()
 	const std::string filename_surfaceData = "appm.xdmf";
 	const std::string filename_volumeData = "appm-volume.xdmf";
 
-	
+	std::cout << "lambda^2: " << scalingParameters.getScaledDebyeLengthSquared() << std::endl;
+
 	if (primalMesh.getNumberOfCells() == 0) {
 		std::cout << "Primal mesh has no cells" << std::endl;
 		return;
@@ -279,6 +280,7 @@ void AppmSolver::run()
 			// Affine-linear function for implicit-consistent formulation of current density J_h = Msigma * E_h + Jaux
 			Eigen::SparseMatrix<double> Msigma;
 			Msigma = get_Msigma_spd(J_h_aux, dt, time);
+			Msigma.setZero();
 
 			// Maxwell equations
 			if (solverParams.getMaxwellEnabled()) {
@@ -813,7 +815,8 @@ void AppmSolver::init_maxwellStates()
 	//Eigen::sparseMatrixToFile(P, "P.dat");
 	Eigen::sparseMatrixToFile(P, "/P", h5writer);
 
-	const double lambdaSq = solverParams.getApParameter();
+	const double lambdaSq = scalingParameters.getScaledDebyeLengthSquared();
+	std::cout << "Setup Maxwell eq with lambda^2 = " << lambdaSq << std::endl;
 	M1 = lambdaSq * Q.transpose() * Meps * Q;
 	M1.makeCompressed();
 
@@ -3594,7 +3597,7 @@ void AppmSolver::writeOutput(const int iteration, const double time)
 	h5writer.writeDataInt(iterVec, "/iteration");
 
 	// Add indicator to identify cells that lie on cross section with xy-plane
-	if (iteration == 0) {
+	if (false && iteration == 0) {
 		Eigen::VectorXi isCrossSectionCell(nDualCells);
 		isCrossSectionCell.setZero();
 		for (auto cell : dualFluidCellsCrossSection) {
@@ -4727,7 +4730,7 @@ const std::string AppmSolver::xdmf_GridDualCells(const int iteration) const
 	ss << "</DataItem>" << std::endl;
 	ss << "</Attribute>" << std::endl;
 
-	if (iteration == 0) {
+	if (false && iteration == 0) {
 		ss << "<Attribute Name=\"" << "isCrossSection" << "\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
 		ss << "<DataItem Dimensions=\"" << dualMesh.getNumberOfCells() << "\""
 			<< " DataType=\"Int\" Precision=\"4\" Format=\"HDF\">" << std::endl;
@@ -5116,9 +5119,9 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 	if (solverParams.getMaxwellCurrentDefined()) {
 		// Define a uniform current density for those faces being normal to z-axis
 		const double t0 = 2;
-		const double tscale = 0.5;
+		const double tscale = 0.1;
 		const double currentDensity = 0.5 * (1 + tanh((time + dt - t0) / tscale)); // current density at implicit timestep t + dt
-		const double radius = 0.5;
+		const double radius = 1;
 		const double tol = 2 * std::numeric_limits<double>::epsilon();
 
 		for (int i = 0; i < nPrimalEdges; i++) {
@@ -5310,16 +5313,24 @@ void AppmSolver::readVoltageBCtable(const std::string & filename)
 		voltage.push_back(phi);
 	}
 	// add additional data point if input data is shorter than maxTime
-	if (time.back() > this->solverParams.getMaxTime()) {
-		time.push_back(this->solverParams.getMaxIterations());
+	if (time.back() < this->solverParams.getMaxTime()) {
+		time.push_back(this->solverParams.getMaxTime());
 		voltage.push_back(voltage.back());
 	}
-	const bool isPrintData = false;
+	// Check that time is monotonic increasing
+	bool isPrintData = false;
+	for (int i = 0; i < time.size()-1; i++) {
+		if (time[i] >= time[i + 1]) {
+			isPrintData = true;
+			std::cout << "Time is not monotonic increasing" << std::endl;
+		}
+	}
 	if (isPrintData) {
 		std::cout << "Data: " << std::endl;
 		for (int i = 0; i < time.size(); i++) {
 			std::cout << time[i] << "\t" << voltage[i] << std::endl;
 		}
+		exit(-1);
 	}
 	this->voltageBCtable = new InterpolationTable(time, voltage);
 }
@@ -5562,6 +5573,13 @@ const bool AppmSolver::SolverParameters::getMaxwellEnabled() const
 	return this->isMaxwellEnabled;
 }
 
+void AppmSolver::SolverParameters::setMaxTimestepSize(const double dtMax)
+{
+	assert(dtMax > 0);
+	assert(std::isfinite(dtMax));
+	this->timestepSizeMax = dtMax;
+}
+
 const double AppmSolver::SolverParameters::getMaxTimestepSize() const
 {
 	return this->timestepSizeMax;
@@ -5597,14 +5615,19 @@ const bool AppmSolver::SolverParameters::getMassfluxSchemeImplicit() const
 	return this->isMassFluxSchemeImplicit;
 }
 
+void AppmSolver::SolverParameters::setMaxwellCurrentDefined(const bool b)
+{
+	this->isMaxwellCurrentDefined = b;
+}
+
 const bool AppmSolver::SolverParameters::getMaxwellCurrentDefined() const
 {
-	return false;
+	return this->isMaxwellCurrentDefined;
 }
 
 const AppmSolver::MaxwellSolverType AppmSolver::SolverParameters::getMaxwellSolverType() const
 {
-	return AppmSolver::MaxwellSolverType::BiCGStab;
+	return AppmSolver::MaxwellSolverType::PardisoLU;
 }
 
 void AppmSolver::SolverParameters::setOutputFrequency(const int n)
@@ -5668,17 +5691,17 @@ const Eigen::Vector3d AppmSolver::SolverParameters::getInitEfield() const
 	return this->initEfield;
 }
 
-void AppmSolver::SolverParameters::setApParameter(const double lambdaSquare)
-{
-	assert(lambdaSquare > 0);
-	assert(lambdaSquare <= 1.0);
-	this->lambdaSq = lambdaSquare;
-}
-
-const double AppmSolver::SolverParameters::getApParameter() const
-{
-	return this->lambdaSq;
-}
+//void AppmSolver::SolverParameters::setApParameter(const double lambdaSquare)
+//{
+//	assert(lambdaSquare > 0);
+//	assert(lambdaSquare <= 1.0);
+//	this->lambdaSq = lambdaSquare;
+//}
+//
+//const double AppmSolver::SolverParameters::getApParameter() const
+//{
+//	return this->lambdaSq;
+//}
 
 void AppmSolver::SolverParameters::setEulerSourcesImplicit(const bool b)
 {
@@ -5727,9 +5750,10 @@ std::ostream & operator<<(std::ostream & os, const AppmSolver::SolverParameters 
 	os << "isMassfluxSchemeImplicit: " << obj.isMassFluxSchemeImplicit << std::endl;
 	os << "isMaxwellEnabled: " << obj.isMaxwellEnabled << std::endl;
 	os << "maxwellSolverType: " << obj.maxwellSolverType << std::endl;
-	os << "AP parameter: " << obj.lambdaSq << std::endl;
+	//os << "AP parameter: " << obj.lambdaSq << std::endl;
 	os << "isEulerSourcesImplicit: " << obj.isEulerSourcesImplicit << std::endl;
 	os << "voltageBCfilename: " << obj.voltageBCfilename << std::endl;
+	os << "isMaxwellCurrentDefined: " << obj.isMaxwellCurrentDefined << std::endl;
 	os << "=======================" << std::endl;
 	return os;
 }

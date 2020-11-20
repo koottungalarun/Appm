@@ -302,6 +302,17 @@ void Main::readInputFile()
 		if (tag == "voltageBCfilename") {
 			solverParameters.setVoltageBCfilename(trim(value));
 		}
+		if (tag == "isMaxwellCurrentDefined") {
+			bool b = false;
+			std::istringstream(value) >> b;
+			solverParameters.setMaxwellCurrentDefined(b);
+		}
+		if (tag == "timestepSizeMax") {
+			double dtMax = 1;
+			std::stringstream ss(value);
+			ss >> dtMax;
+			solverParameters.setMaxTimestepSize(dtMax);
+		}
 
 	}
 

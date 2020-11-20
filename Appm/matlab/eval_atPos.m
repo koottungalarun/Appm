@@ -8,7 +8,9 @@ x0 = [0 0 0]; % find cell with center closest to this position
 dualMesh = readMesh('dual');
 x = dualMesh.cellCenter - x0;
 dist = vecnorm(x')';
-[d,idx0] = min(dist); % idx0 is the cell index
+[~,idx0] = min(dist); % idx0 is the cell index
+
+
 
 %% get list of output files and sort by their timestamps
 filenameList = dir('appm-*.h5');
@@ -89,7 +91,8 @@ for idx = 1 : iterMax
             datasetName = '/Ecc';
             temp = h5read(filename, datasetName);
             E(1:3,idx) = temp(:,idx0);
-            
+            temp = h5read(filename, '/Bcc');
+            B(1:3,idx) = temp(:,idx1);
             I_tot(1:3, idx) = h5read(filename, '/speciesTotalCurrent');
             
         end
@@ -183,5 +186,6 @@ title('Species total current across xy plane')
 xlabel('t')
 ylabel('J_*')
 legend(fluidNames)
+
 
 

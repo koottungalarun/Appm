@@ -16,8 +16,8 @@
 ######################
 ### MESH
 ######################
-mesh: mesh-coarse-test.txt
-# mesh: mesh-coarse.txt
+# mesh: mesh-coarse-test.txt
+mesh: mesh-coarse.txt
 # mesh: mesh-medium.txt
 # mesh: mesh-fine.txt
 #
@@ -27,40 +27,43 @@ mesh: mesh-coarse-test.txt
 ### SOLVER
 ######################
 ### Initial conditions
-initFluidState: INIT_FILE
+initFluidState: UNIFORM
 initEfield: 0 0 0
 #
 ### Simulation controls
-maxTime: 10
-maxIterations: 0
-timestepSizeFactor: 1
-outputFrequency: 20
+maxTime: 3
+maxIterations: 1000
+timestepSizeFactor: 1e-0
+timestepSizeMax: 0.1
+outputFrequency: 1
 #
 ### numerics
 #
 ### coupling
-isFluidEnabled: 1
-isMassfluxImplicit: 1
-isLorentzForceEnabled: 1
+isFluidEnabled: 0
+isMassfluxImplicit: 0
+isLorentzForceEnabled: 0
 isMaxwellEnabled: 1
-isEulerSourcesImplicit: 1
-voltageBCfilename: voltBCtable.csv
+isEulerSourcesImplicit: 0
+isMaxwellCurrentDefined: 0
+voltageBCfilename: voltBC_jump1.csv
+
 #
 #
 ######################
 ### SPECIES
 ######################
 # Format: Symbol, name, massRatio, charge
-species: e, Electron, 1e-3, -1
-species: Ar+, Ion, 0.999, 1
+# species: e, Electron, 1e-3, -1
+# species: Ar+, Ion, 0.999, 1
 species: Ar, Argon, 1, 0
 #
 #
 ######################
 ### REACTIONS
 ######################
-elastic-collision: Ar-Ar+
-elastic-collision: e-Ar
-inelastic-collision: e-Ar
+# elastic-collision: Ar-Ar+
+# elastic-collision: e-Ar
+# inelastic-collision: e-Ar
 
 

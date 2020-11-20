@@ -71,8 +71,9 @@ ScalingParameters::ScalingParameters(const std::string & filename)
 		}
 	}
 	// TODO Show error message if input has unexpected format
-
-	applyIdealGasLaw();
+	if (lambdaSq < 0) {
+		applyIdealGasLaw();
+	}
 	compute();
 	std::cout << *this << std::endl;
 }
@@ -84,6 +85,7 @@ ScalingParameters::~ScalingParameters()
 void ScalingParameters::applyIdealGasLaw()
 {
 	assert(n0 <= 0 && p0 > 0 && T0 > 0);
+	std::cout << "Apply ideal gas law to scaling parameters" << std::endl;
 	const double kB = PhysicsConstants::instance().kB();
 	n0 = p0 / (kB * T0);
 	assert(n0 > 0 && p0 > 0 && T0 > 0);
