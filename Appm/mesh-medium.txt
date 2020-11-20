@@ -1,0 +1,7 @@
+axialLayers: 100
+refinements: 3
+outerLayers: 4
+outerRadius: 1.5
+zMax: 5
+terminalRadius: 2
+
