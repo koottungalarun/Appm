@@ -91,8 +91,6 @@ for idx = 1 : iterMax
             datasetName = '/Ecc';
             temp = h5read(filename, datasetName);
             E(1:3,idx) = temp(:,idx0);
-            temp = h5read(filename, '/Bcc');
-            B(1:3,idx) = temp(:,idx1);
             I_tot(1:3, idx) = h5read(filename, '/speciesTotalCurrent');
             
         end
