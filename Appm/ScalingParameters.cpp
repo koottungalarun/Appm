@@ -73,6 +73,7 @@ ScalingParameters::ScalingParameters(const std::string & filename)
 	// TODO Show error message if input has unexpected format
 	if (lambdaSq <= 0) {
 		applyIdealGasLaw();
+		lambdaSq = 1;
 	}
 	compute();
 	std::cout << *this << std::endl;
@@ -100,7 +101,7 @@ void ScalingParameters::applyIdealGasLaw()
 void ScalingParameters::compute()
 {
 
-	assert(undefinedScales() == 1);
+	assert(undefinedScales() <= 1);
 	PhysicsConstants & pc = PhysicsConstants::instance();
 	const double eps0 = pc.eps0();
 	const double kB = pc.kB();

@@ -1,6 +1,6 @@
 % Evaluate magnetic field
 
-% foldername = 'data/validation/emag_case2_lambdaSq_1e-2';
+% foldername = 'data/validation/emag_case2_medium_lambdaSq_1e-1';
 % mkdir(foldername)
 % save(strcat(foldername, '/matlab.mat'))
 % copyfile('*.txt', foldername)
