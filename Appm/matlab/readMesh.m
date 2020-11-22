@@ -36,11 +36,16 @@ mesh.cellType = readDataset(filename, 'cellFluidType');
 
 % filename = strcat(prefix, '-f2e.dat');
 % if exist(filename, 'file')
+isMatlabOlderThanR2020a = string(version('-Release')) < "2020a";
     dataname = '/f2e';
     r = h5read(filename, strcat(dataname, '_rowIdx'));
     c = h5read(filename, strcat(dataname, '_colIdx'));
     v = h5read(filename, strcat(dataname, '_values'));
-    mesh.f2e = sparse(r+1,c+1,v);
+    if isMatlabOlderThanR2020a
+        mesh.f2e = sparse(double(r+1),double(c+1),v);
+    else
+        mesh.f2e = sparse(r+1,c+1,v);
+    end
 % end
 
 % filename = strcat(prefix, '-e2v.dat');
@@ -49,7 +54,11 @@ mesh.cellType = readDataset(filename, 'cellFluidType');
     r = h5read(filename, strcat(dataname, '_rowIdx'));
     c = h5read(filename, strcat(dataname, '_colIdx'));
     v = h5read(filename, strcat(dataname, '_values'));
-    mesh.e2v = sparse(r+1,c+1,v);
+    if isMatlabOlderThanR2020a
+        mesh.e2v = sparse(double(r+1),double(c+1),v);
+    else
+        mesh.e2v = sparse(r+1,c+1,v);
+    end
 % end
 
 % filename = strcat(prefix, '-c2f.dat');
@@ -58,7 +67,11 @@ mesh.cellType = readDataset(filename, 'cellFluidType');
     r = h5read(filename, strcat(dataname, '_rowIdx'));
     c = h5read(filename, strcat(dataname, '_colIdx'));
     v = h5read(filename, strcat(dataname, '_values'));
-    mesh.c2f = sparse(r+1,c+1,v);
+    if isMatlabOlderThanR2020a
+        mesh.c2f = sparse(double(r+1),double(c+1),v);
+    else
+        mesh.c2f = sparse(r+1,c+1,v);
+    end
 % end
 
 filename = strcat(prefix, '-f2v.dat');
