@@ -75,8 +75,8 @@ for idx = 1 : iterMax
         start = [idx0 1];
         count = [1 Inf];
 
-        datasetName = sprintf('/%s-%s', fluidNames(j), 'stateE');
-        stateE(idx,j) = h5read(filename, datasetName, start, count);
+%         datasetName = sprintf('/%s-%s', fluidNames(j), 'stateE');
+%         stateE(idx,j) = h5read(filename, datasetName, start, count);
         
         datasetName = sprintf('/%s-%s', fluidNames(j), 'pressure');
         p(idx,j) = h5read(filename, datasetName, start, count);
