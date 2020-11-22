@@ -32,7 +32,7 @@ initEfield: 0 0 0
 #
 ### Simulation controls
 maxTime: 5
-maxIterations: 1000000
+maxIterations: 0
 timestepSizeFactor: 1e-0
 timestepSizeMax: 1
 outputFrequency: 50

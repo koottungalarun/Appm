@@ -71,7 +71,7 @@ ScalingParameters::ScalingParameters(const std::string & filename)
 		}
 	}
 	// TODO Show error message if input has unexpected format
-	if (lambdaSq < 0) {
+	if (lambdaSq <= 0) {
 		applyIdealGasLaw();
 	}
 	compute();
