@@ -2,7 +2,7 @@
 
 const int ScalingParameters::undefinedScales()
 {
-	return (x0 <= 0) + (T0 <= 0) + (n0 <= 0) + (lambdaSq <= 0);
+	return (x0 <= 0) + (T0 <= 0) + (n0 <= 0) + (lambdaSq < 0);
 }
 
 ScalingParameters::ScalingParameters()
@@ -10,6 +10,8 @@ ScalingParameters::ScalingParameters()
 	setLengthScale(1.0);
 	setTemperatureScale(10e3);
 	setScaledDebyeLength(1e-4);
+	setPressureScale(10135);
+	applyIdealGasLaw();
 	compute();
 }
 
@@ -71,9 +73,11 @@ ScalingParameters::ScalingParameters(const std::string & filename)
 		}
 	}
 	// TODO Show error message if input has unexpected format
-	if (lambdaSq <= 0) {
-		applyIdealGasLaw();
+	if (lambdaSq < 0) {
+		std::cout << "error: lambda^2 is negative" << std::endl;
+		assert(lambdaSq >= 0);
 	}
+	applyIdealGasLaw();
 	compute();
 	std::cout << *this << std::endl;
 }
@@ -100,7 +104,7 @@ void ScalingParameters::applyIdealGasLaw()
 void ScalingParameters::compute()
 {
 
-	assert(undefinedScales() == 1);
+	//assert(undefinedScales() == 1);
 	PhysicsConstants & pc = PhysicsConstants::instance();
 	const double eps0 = pc.eps0();
 	const double kB = pc.kB();
@@ -125,7 +129,7 @@ void ScalingParameters::compute()
 		assert(T0 > 0);
 		n0 = a * T0 / (lambdaSq * pow(x0, 2));
 	}
-	if (lambdaSq <= 0) {
+	if (lambdaSq < 0) {
 		assert(T0 > 0);
 		assert(x0 > 0);
 		assert(n0 > 0);
@@ -154,7 +158,7 @@ void ScalingParameters::setLengthScale(const double x)
 
 void ScalingParameters::setScaledDebyeLength(const double lambdasq)
 {
-	assert(lambdasq > 0);
+	assert(lambdasq >= 0);
 	this->lambdaSq = lambdasq;
 }
 

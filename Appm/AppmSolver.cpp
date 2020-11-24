@@ -280,6 +280,10 @@ void AppmSolver::run()
 			// Affine-linear function for implicit-consistent formulation of current density J_h = Msigma * E_h + Jaux
 			Eigen::SparseMatrix<double> Msigma;
 			Msigma = get_Msigma_spd(J_h_aux, dt, time);
+
+			std::stringstream ss;
+			ss << "Msigma-" << iteration << ".dat";
+			Eigen::sparseMatrixToFile(Msigma, ss.str());
 			// Msigma.setZero();
 
 			// Maxwell equations
@@ -5228,6 +5232,11 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 							//}
 						}
 						else { // is not fluid cell
+							const double solidConductivity = 1e-6;
+							const double Li = primalMesh.getEdge(i)->getLength();
+							const double Ai = dualMesh.getFace(i)->getArea();
+							const double value = solidConductivity * Ai / Li;
+							triplets.push_back(T(i, i, solidConductivity));
 						} // end if cellType != Fluid
 					}
 				} // end if isMassFluxSchemeImplicit
@@ -5264,7 +5273,6 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 	Eigen::SparseMatrix<double> Msigma(nDualFaces, nPrimalEdges);
 	Msigma.setFromTriplets(triplets.begin(), triplets.end());
 	Msigma.makeCompressed();
-
 	return Msigma;
 }
 
