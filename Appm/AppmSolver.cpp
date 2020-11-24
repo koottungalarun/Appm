@@ -5182,6 +5182,7 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 			const Face::Type faceType = dualFace->getType();
 			const double numSchemeFactor = (faceType == Face::Type::INTERIOR) ? 0.5 : 1;
 
+			
 			for (int fluidIdx = 0; fluidIdx < nFluids; fluidIdx++) {
 				const int q = getSpecies(fluidIdx).getCharge();
 				const double massRatio = getSpecies(fluidIdx).getMassRatio();
@@ -5243,15 +5244,31 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 							//}
 						}
 						else { // is not fluid cell
-							const double solidConductivity = 1e-0;
-							const double Li = primalMesh.getEdge(i)->getLength();
-							const double Ai = dualMesh.getFace(i)->getArea();
-							const double value = solidConductivity * Ai / Li;
-							triplets.push_back(T(i, i, solidConductivity));
+							// --- this is not the correct place to introduce a finite  conductivity 
+							//const double solidConductivity = 0;
+							//const double Li = primalMesh.getEdge(i)->getLength();
+							//const double Ai = dualMesh.getFace(i)->getArea();
+							//const double value = solidConductivity * Ai / Li;
+							//triplets.push_back(T(i, i, solidConductivity));
 						} // end if cellType != Fluid
 					}
 				} // end if isMassFluxSchemeImplicit
 			}
+
+			// Add finite electric conductivity at primal edges (or dual faces) that have no fluid flux. 
+			if (faceType == Face::Type::DEFAULT || faceType == Face::Type::WALL) {
+				// exclude primal edges that lie on the domain boundary; there we have the boundary condition and the electric field is given by the vertex gradients
+				if (primalMesh.getEdge(i)->getType() != Edge::Type::Boundary) {
+					const double Ai = dualMesh.getFace(i)->getArea();
+					const double Li = primalMesh.getEdge(i)->getLength();
+					const double solidConductivity = 1e-6;
+					const int orientation = (dualMesh.getFace(i)->getNormal().normalized().dot(primalMesh.getEdge(i)->getDirection().normalized()) > 0) ? 1 : -1;
+					const double value = solidConductivity * Ai / Li * orientation;
+					triplets.push_back(T(i, i, value));
+					Jaux(i) = J_h_previous(i);
+				}
+			}
+
 		}
 
 		// guard against truncation errors
