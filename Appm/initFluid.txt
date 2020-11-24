@@ -3,15 +3,15 @@
 #
 Electron: 
 n: 5e-3
-T: 1.5
+T: 1.0
 u: 0
 
 Ion:
 n: 5e-3
-T: 1.5
+T: 1.0
 u: 0
 
 Argon:
 n: 1
-T: 1.5
+T: 1.0
 u: 0

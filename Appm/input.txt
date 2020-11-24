@@ -31,8 +31,8 @@ initFluidState: INIT_FILE
 initEfield: 0 0 0
 #
 ### Simulation controls
-maxTime: 5
-maxIterations: 1
+maxTime: 1.0
+maxIterations: 200
 timestepSizeFactor: 1e-0
 timestepSizeMax: 0.01
 outputFrequency: 1
@@ -40,11 +40,11 @@ outputFrequency: 1
 ### numerics
 #
 ### coupling
-isFluidEnabled: 1
-isMassfluxImplicit: 1
-isLorentzForceEnabled: 1
+isFluidEnabled: 0
+isMassfluxImplicit: 0
+isLorentzForceEnabled: 0
 isMaxwellEnabled: 1
-isEulerSourcesImplicit: 1
+isEulerSourcesImplicit: 0
 isMaxwellCurrentDefined: 0
 voltageBCfilename: voltBCtable.csv
 

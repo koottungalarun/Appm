@@ -3785,12 +3785,14 @@ void AppmSolver::writeMaxwellStates(H5Writer & writer)
 
 	const int nPrimalEdges = primalMesh.getNumberOfEdges();
 	Eigen::Matrix3Xd E(3, nPrimalEdges);
+	Eigen::VectorXd Eabs(nPrimalEdges);
 	for (int i = 0; i < nPrimalEdges; i++) {
 		const Edge * edge = primalMesh.getEdge(i);
 		E.col(i) = E_h(i) / edge->getLength() * edge->getDirection().normalized();
+		Eabs(i) = E.col(i).norm();
 	}
 	writer.writeDataDouble(E, "/E");
-
+	writer.writeDataDouble(Eabs, "/Eabs");
 	writer.writeDataDouble(E_cc, "/Ecc");
 
 	assert(J_h.size() > 0);
@@ -4420,6 +4422,15 @@ const std::string AppmSolver::xdmf_GridPrimalEdges(const int iteration) const
 		ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfEdges() << " 3\""
 			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
 		ss << dataFilename << ":/E" << std::endl;
+		ss << "</DataItem>" << std::endl;
+		ss << "</Attribute>" << std::endl;
+	}
+	if (isWriteEfield) {
+		const std::string dataFilename = getOutputFilename(iteration);
+		ss << "<Attribute Name=\"Electric field abs\" AttributeType=\"Scalar\" Center=\"Cell\">" << std::endl;
+		ss << "<DataItem Dimensions=\"" << primalMesh.getNumberOfEdges() << " 1\""
+			<< " DataType=\"Float\" Precision=\"8\" Format=\"HDF\">" << std::endl;
+		ss << dataFilename << ":/Eabs" << std::endl;
 		ss << "</DataItem>" << std::endl;
 		ss << "</Attribute>" << std::endl;
 	}
@@ -5232,7 +5243,7 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 							//}
 						}
 						else { // is not fluid cell
-							const double solidConductivity = 1e-6;
+							const double solidConductivity = 1e-0;
 							const double Li = primalMesh.getEdge(i)->getLength();
 							const double Ai = dualMesh.getFace(i)->getArea();
 							const double value = solidConductivity * Ai / Li;
@@ -5263,7 +5274,10 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 	else
 	{
 		for (int i = 0; i < nPrimalEdges; i++) {
-			const double elCond = 1;
+			double radialPos = primalMesh.getEdge(i)->getHalfwayPosition().segment(0, 2).norm();
+			const double elCondOutside = 1;
+			const double elCondInside = 1;
+			double elCond = (radialPos > 1) ? elCondOutside : elCondInside;
 			const double dL = primalMesh.getEdge(i)->getLength();
 			const double dA = dualMesh.getFace(i)->getArea();
 			const double value = elCond * dA / dL;
