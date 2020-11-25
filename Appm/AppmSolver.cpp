@@ -281,9 +281,9 @@ void AppmSolver::run()
 			Eigen::SparseMatrix<double> Msigma;
 			Msigma = get_Msigma_spd(J_h_aux, dt, time);
 
-			std::stringstream ss;
-			ss << "Msigma-" << iteration << ".dat";
-			Eigen::sparseMatrixToFile(Msigma, ss.str());
+			//std::stringstream ss;
+			//ss << "Msigma-" << iteration << ".dat";
+			//Eigen::sparseMatrixToFile(Msigma, ss.str());
 			// Msigma.setZero();
 
 			// Maxwell equations
@@ -5258,7 +5258,10 @@ Eigen::SparseMatrix<double> AppmSolver::get_Msigma_spd(Eigen::VectorXd & Jaux, c
 			// Add finite electric conductivity at primal edges (or dual faces) that have no fluid flux. 
 			if (faceType == Face::Type::DEFAULT || faceType == Face::Type::WALL) {
 				// exclude primal edges that lie on the domain boundary; there we have the boundary condition and the electric field is given by the vertex gradients
-				if (primalMesh.getEdge(i)->getType() != Edge::Type::Boundary) {
+				const bool isBoundaryEdge = primalMesh.getEdge(i)->getType() == Edge::Type::Boundary;
+				const bool isBoundaryNormalEdge = primalMesh.getEdge(i)->getType() == Edge::Type::InteriorToBoundary;
+
+				if (!isBoundaryEdge) {
 					const double Ai = dualMesh.getFace(i)->getArea();
 					const double Li = primalMesh.getEdge(i)->getLength();
 					const double solidConductivity = 1e-6;
